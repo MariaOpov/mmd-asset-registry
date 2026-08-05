@@ -3,7 +3,17 @@
 from typing import Final
 
 
-SCHEMA_VERSION: Final[str] = "0.2"
+LATEST_SCHEMA_VERSION: Final[str] = "0.3"
+
+SUPPORTED_SCHEMA_VERSIONS: Final[frozenset[str]] = frozenset(
+    {
+        "0.2",
+        "0.3",
+    }
+)
+
+# Compatibility alias for callers that previously imported SCHEMA_VERSION.
+SCHEMA_VERSION: Final[str] = LATEST_SCHEMA_VERSION
 
 VALID_MODES: Final[frozenset[str]] = frozenset(
     {

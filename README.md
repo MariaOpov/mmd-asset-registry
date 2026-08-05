@@ -1,7 +1,8 @@
 # MMD Asset & License Registry
 
 A lightweight Python registry for tracking MMD asset provenance, creator
-credits, local source files, and known usage restrictions.
+credits, local source files, SHA-256 integrity, PMX/PMD header metadata, and
+known usage restrictions.
 
 The project is designed as a validation gate before assets enter an automated
 MMD, Blender, or anime video pipeline.
@@ -9,9 +10,13 @@ MMD, Blender, or anime video pipeline.
 ## Current version
 
 ```text
-Tool version: 0.2.0
-Registry schema: 0.2
+Tool version: 0.3.0
+Latest registry schema: 0.3
+Supported registry schemas: 0.2, 0.3
 ```
+
+Schema `0.2` remains supported for backward compatibility. Integrity and model
+header inspection are applied only to schema `0.3`.
 
 ## Why this project exists
 
@@ -26,89 +31,44 @@ files:
 - What credit should appear in a published video
 - Whether editing, redistribution, or commercial use has known restrictions
 - Whether the local asset file still exists
+- Whether the local file still matches the registered copy
+- Whether a `.pmx` or `.pmd` file has a readable MMD model header
 - Which pipeline character uses the asset
 
 This registry keeps that information in one structured YAML file and validates
 it before a pipeline continues.
 
 The registry does not automatically determine legal permission. It records
-known information, missing information, and known restrictions.
+known information, missing information, known restrictions, file integrity,
+and limited technical metadata.
 
-## Version 0.2 features
+## Version 0.3 features
 
-Version 0.2 provides:
+Version 0.3 provides:
 
-- Schema 0.2 validation
+- Schema `0.3` registry validation
+- Backward-compatible schema `0.2` validation
+- Streaming SHA-256 calculation
+- Registered hash verification
+- File-size reporting
+- Safe PMX `2.0` and `2.1` header inspection
+- Safe PMD `1.0` header inspection
+- PMX UTF-8 and UTF-16LE model-name decoding
+- PMD CP932 model-name decoding
+- Invalid signature, unsupported version, truncation, and extension mismatch
+  detection
+- Bounded reads for untrusted model-name lengths
 - Creator and source provenance tracking
 - Automatic Markdown credit generation
 - Private, publish, and commercial validation modes
-- Required-field validation
-- Allowed-value validation
-- Local source-file validation
-- Duplicate asset ID detection
 - Portable JSON reports
+- Dedicated `validate`, `hash`, and `inspect` CLI commands
+- Legacy validation command compatibility
 - Structured info, warning, and error messages
-- Exit codes for automation and CI
+- Exit codes for shell automation and CI
+- Programmatically generated binary test fixtures
 - Automated unit tests
-- GitHub Actions validation
-
-## Validation modes
-
-### Private mode
-
-Used for local MMD, Blender, and pipeline testing.
-
-```bash
-python check_assets.py --mode private
-```
-
-Private mode allows incomplete provenance and credit information while still
-reporting warnings and informational messages.
-
-Typical behavior:
-
-- Missing source file: error
-- Duplicate ID: error
-- Unknown creator: warning
-- Missing required credit text: warning
-- Unclear editing rule: information
-- Unclear commercial-use rule: does not block private testing
-
-### Publish mode
-
-Used before publishing a public video.
-
-```bash
-python check_assets.py --mode publish
-```
-
-Publish mode requires complete credit text when an asset declares that credit
-is required.
-
-Typical behavior:
-
-- Missing required credit text: error
-- Missing creator: warning
-- Missing original source page: warning
-- Unclear editing rule: warning
-
-### Commercial mode
-
-Used before monetized videos, commissions, advertisements, or other commercial
-output.
-
-```bash
-python check_assets.py --mode commercial
-```
-
-Commercial mode adds commercial-use checks.
-
-Typical behavior:
-
-- Commercial use prohibited: error
-- Commercial-use rule unclear: error
-- Commercial use conditional: warning
-- Missing required credit text: error
+- Expanded GitHub Actions validation
 
 ## Installation
 
@@ -130,21 +90,9 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
-## Basic usage
+## Command overview
 
-Run private validation:
-
-```bash
-python check_assets.py
-```
-
-Equivalent command:
-
-```bash
-python -m mmd_registry.cli
-```
-
-Show command-line help:
+Show top-level help:
 
 ```bash
 python check_assets.py --help
@@ -156,12 +104,107 @@ Show the tool version:
 python check_assets.py --version
 ```
 
-## Generate reports
+Available commands:
 
-Generate a JSON validation report:
+```text
+validate  Validate an asset registry
+hash      Calculate or verify a file SHA-256 hash
+inspect   Inspect a PMX or PMD model header
+```
+
+## Validate a registry
+
+Explicit command syntax:
+
+```bash
+python check_assets.py validate --mode private
+```
+
+Legacy syntax remains supported:
 
 ```bash
 python check_assets.py --mode private
+```
+
+Running without arguments also performs private validation:
+
+```bash
+python check_assets.py
+```
+
+Equivalent module command:
+
+```bash
+python -m mmd_registry.cli validate --mode private
+```
+
+### Private mode
+
+Used for local MMD, Blender, and pipeline testing.
+
+```bash
+python check_assets.py validate --mode private
+```
+
+Private mode allows incomplete provenance and credit information while still
+reporting warnings and informational messages.
+
+Typical behavior:
+
+- Missing source file: error
+- Duplicate asset ID: error
+- SHA-256 mismatch: error
+- Invalid non-placeholder PMX/PMD header: error
+- Invalid placeholder/review model header: warning
+- Unknown creator: warning
+- Missing required credit text: warning
+- Unclear editing rule: information
+- Unclear commercial-use rule: does not block private testing
+
+### Publish mode
+
+Used before publishing a public video.
+
+```bash
+python check_assets.py validate --mode publish
+```
+
+Publish mode requires complete required credit information and does not allow
+an invalid placeholder model header to pass as a warning.
+
+Typical behavior:
+
+- Missing required credit text: error
+- Invalid placeholder PMX/PMD header: error
+- Missing creator: warning
+- Missing original source page: warning
+- Unclear editing rule: warning
+
+### Commercial mode
+
+Used before monetized videos, commissions, advertisements, or other commercial
+output.
+
+```bash
+python check_assets.py validate --mode commercial
+```
+
+Commercial mode adds commercial-use checks.
+
+Typical behavior:
+
+- Commercial use prohibited: error
+- Commercial-use rule unclear: error
+- Commercial use conditional: warning
+- Missing required credit text: error
+- Invalid placeholder PMX/PMD header: error
+
+## Generate validation reports
+
+A JSON report is generated by default:
+
+```bash
+python check_assets.py validate --mode private
 ```
 
 Default output:
@@ -170,24 +213,35 @@ Default output:
 reports/validation_report.json
 ```
 
-Disable JSON report generation:
+Disable report generation:
 
 ```bash
-python check_assets.py --mode private --no-report
+python check_assets.py validate --mode private --no-report
 ```
 
 Use a custom report path:
 
 ```bash
-python check_assets.py --report reports/custom-report.json
+python check_assets.py validate \
+  --report reports/custom-report.json
 ```
+
+Legacy syntax is also valid:
+
+```bash
+python check_assets.py \
+  --mode private \
+  --report reports/custom-report.json
+```
+
+Generated reports are ignored by Git.
 
 ## Generate asset credits
 
-Generate the default credit file:
+Generate the default Markdown credit file:
 
 ```bash
-python check_assets.py --mode private --credits
+python check_assets.py validate --mode private --credits
 ```
 
 Default output:
@@ -199,7 +253,8 @@ reports/CREDITS.md
 Use a custom output path:
 
 ```bash
-python check_assets.py --credits output/ASSET_CREDITS.md
+python check_assets.py validate \
+  --credits output/ASSET_CREDITS.md
 ```
 
 Assets with complete credit information are listed under `Credits`.
@@ -207,14 +262,126 @@ Assets with complete credit information are listed under `Credits`.
 Assets that require credit but have incomplete credit information are listed
 under `Incomplete Credit Information`.
 
-Generated reports and generated credits are ignored by Git.
+Generated credit files are ignored by Git.
 
-## Registry schema
+## Calculate SHA-256
 
-Example schema 0.2 asset:
+Calculate a file hash:
+
+```bash
+python check_assets.py hash path/to/model.pmx
+```
+
+Example output:
+
+```text
+File: path/to/model.pmx
+Algorithm: sha256
+SHA-256: 0123456789abcdef...
+Size bytes: 123456
+Status: not_recorded
+```
+
+Verify an expected hash:
+
+```bash
+python check_assets.py hash path/to/model.pmx \
+  --expected 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+Possible hash statuses:
+
+```text
+matched
+mismatched
+not_recorded
+invalid_expected
+```
+
+Machine-readable output:
+
+```bash
+python check_assets.py hash path/to/model.pmx --json
+```
+
+Example JSON:
+
+```json
+{
+  "path": "path/to/model.pmx",
+  "algorithm": "sha256",
+  "expected": null,
+  "actual": "0123456789abcdef...",
+  "status": "not_recorded",
+  "size_bytes": 123456
+}
+```
+
+Hashing reads the file in chunks rather than loading the complete file into
+memory.
+
+## Inspect a PMX or PMD header
+
+Inspect a model file:
+
+```bash
+python check_assets.py inspect path/to/model.pmx
+```
+
+Example output:
+
+```text
+File: path/to/model.pmx
+Status: ok
+Format: PMX
+Magic: PMX
+Version: 2.1
+Encoding: utf-8
+Model name: Example Model
+```
+
+Machine-readable output:
+
+```bash
+python check_assets.py inspect path/to/model.pmx --json
+```
+
+Example JSON:
+
+```json
+{
+  "path": "path/to/model.pmx",
+  "status": "ok",
+  "detected_format": "pmx",
+  "magic": "PMX ",
+  "version": 2.1,
+  "model_name": "Example Model",
+  "encoding": "utf-8",
+  "errors": [],
+  "warnings": []
+}
+```
+
+The inspector currently supports:
+
+```text
+PMX 2.0
+PMX 2.1
+PMD 1.0
+```
+
+The inspector reads only the model header and first model-name field. It does
+not parse full geometry, bones, morphs, materials, physics, or textures.
+
+The inspector safely reports malformed input as result errors rather than
+allowing malformed files to crash the caller.
+
+## Registry schema 0.3
+
+Example schema `0.3` asset:
 
 ```yaml
-registry_version: "0.2"
+registry_version: "0.3"
 
 assets:
   - id: example_character
@@ -223,6 +390,9 @@ assets:
     pipeline_character: ExampleCharacter
 
     source_path: sample_assets/example/model.pmx
+
+    integrity:
+      sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
     creator:
       name: Example Creator
@@ -249,8 +419,112 @@ assets:
       - character
       - example
 
-    notes: Example schema 0.2 asset.
+    notes: Example schema 0.3 asset.
 ```
+
+### Integrity field
+
+Schema `0.3` supports:
+
+```yaml
+integrity:
+  sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+The registered digest must be exactly 64 hexadecimal characters.
+
+Validation behavior:
+
+- Matching hash: passes
+- Mismatched hash: error
+- Invalid registered hash: error
+- Missing registered hash: informational message
+- Missing source file: error
+
+`size_bytes` is calculated during validation and written to reports. It is not
+required in `assets.yaml`.
+
+### Schema 0.2 compatibility
+
+Schema `0.2` remains accepted:
+
+```yaml
+registry_version: "0.2"
+```
+
+For schema `0.2`:
+
+- Existing provenance, credit, status, and usage-rule checks still run
+- Integrity verification is not applied
+- PMX/PMD header inspection is not applied
+- JSON reports use `integrity: null`
+- JSON reports use `inspection: null`
+
+A registry-level informational message indicates that schema `0.2` is being
+used for backward compatibility.
+
+## Model header validation policy
+
+For schema `0.3`, existing `.pmx` and `.pmd` source files are inspected.
+
+A model is treated as a placeholder/review asset when at least one of the
+following is true:
+
+- `status` is `review`
+- A tag is `placeholder`
+- The asset notes contain the word `placeholder`
+
+If inspection fails:
+
+- Private mode + placeholder/review asset: asset warning
+- Publish mode: asset error
+- Commercial mode: asset error
+- Non-placeholder asset in any mode: asset error
+
+The inspection result itself still reports `status: error` in JSON when the
+file header is invalid. The containing asset may be downgraded to `warning`
+only under the private placeholder policy.
+
+This distinction preserves technical truth while allowing unfinished local
+placeholder assets during development.
+
+## JSON report asset structure
+
+Schema `0.3` report entries include source path, file size, integrity, and
+inspection metadata:
+
+```json
+{
+  "id": "example_character",
+  "status": "ok",
+  "source_path": "sample_assets/example/model.pmx",
+  "file": {
+    "size_bytes": 123456
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "expected": "0123456789abcdef...",
+    "actual": "0123456789abcdef...",
+    "status": "matched"
+  },
+  "inspection": {
+    "status": "ok",
+    "detected_format": "pmx",
+    "magic": "PMX ",
+    "version": 2.1,
+    "model_name": "Example Model",
+    "encoding": "utf-8",
+    "errors": [],
+    "warnings": []
+  },
+  "errors": [],
+  "warnings": [],
+  "infos": []
+}
+```
+
+Registered source paths are kept portable when they are inside the project
+directory.
 
 ## Asset types
 
@@ -284,7 +558,7 @@ archived
 Meaning:
 
 - `ready` — Asset is available for its intended pipeline use
-- `review` — Provenance, credit, or usage information remains incomplete
+- `review` — Provenance, credit, usage, or technical information is incomplete
 - `blocked` — Validator rejects the asset
 - `archived` — Asset is retained but produces a warning
 
@@ -310,6 +584,7 @@ Example terminal output:
 ```text
 [INFO] flavia: Asset is still under review.
 [WARNING] flavia: Creator name has not been recorded.
+[WARNING] flavia: Placeholder model header inspection failed: File is too short to contain an MMD model signature.
 [ERROR] flavia: Credit is required, but credit.text is missing.
 ```
 
@@ -333,15 +608,26 @@ Informational messages do not change an asset from `ok` to `warning`.
 
 ## Exit codes
 
+General CLI exit codes:
+
 ```text
-0 = Validation completed without errors
-1 = Registry or asset validation failed
-2 = Registry file could not be loaded
+0 = Command completed successfully
+1 = Validation failed, hash mismatched, expected hash was invalid,
+    or inspected model contained errors
+2 = Required input path or registry file could not be used
 3 = Unexpected internal error
 ```
 
+Examples:
+
+- Validation with warnings but no errors: `0`
+- SHA-256 matched: `0`
+- SHA-256 mismatched: `1`
+- Invalid PMX/PMD header: `1`
+- Missing file passed to `hash` or `inspect`: `2`
+
 These exit codes allow shell scripts, pipelines, and GitHub Actions to stop
-when validation fails.
+when a required condition fails.
 
 ## Automated tests
 
@@ -351,17 +637,31 @@ Run all tests:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite covers:
+Version `0.3.0` includes 56 unit tests covering:
 
-- Valid private registry
-- Missing source file
-- Missing publish credit
-- Unclear commercial permission
-- Duplicate asset IDs
+- CLI backward compatibility
+- Explicit CLI subcommands
+- SHA-256 streaming and verification
+- Invalid hash formats
+- PMX UTF-8 and UTF-16LE headers
+- PMD CP932 headers
+- Unsupported versions
+- Invalid signatures
+- Truncated headers
+- Oversized model-name lengths
+- Extension/content mismatches
+- Schema `0.2` compatibility
+- Schema `0.3` integrity validation
+- Placeholder inspection policy
 - Portable JSON report paths
+- Integrity and inspection report metadata
 - JSON report writing
 - Credit Markdown generation
 - Incomplete credit reporting
+- Validation modes and usage restrictions
+
+The PMX and PMD test files are generated programmatically during tests. The
+repository does not need copyrighted model fixtures for header-parser tests.
 
 ## GitHub Actions
 
@@ -380,7 +680,10 @@ It performs:
 3. Dependency installation
 4. Python source compilation
 5. Automated tests
-6. Private-mode registry validation
+6. Tool-version check
+7. Private registry validation using legacy syntax
+8. Private registry validation using the explicit `validate` command
+9. Registered placeholder SHA-256 verification
 
 ## Project structure
 
@@ -395,6 +698,8 @@ mmd-asset-registry/
 │   ├── __init__.py
 │   ├── cli.py
 │   ├── constants.py
+│   ├── hashing.py
+│   ├── model_inspection.py
 │   ├── reporting.py
 │   └── validator.py
 ├── reports/
@@ -402,6 +707,10 @@ mmd-asset-registry/
 ├── sample_assets/
 ├── tests/
 │   ├── __init__.py
+│   ├── mmd_fixtures.py
+│   ├── test_cli.py
+│   ├── test_hashing.py
+│   ├── test_model_inspection.py
 │   ├── test_reporting.py
 │   └── test_validator.py
 ├── assets.yaml
@@ -410,12 +719,14 @@ mmd-asset-registry/
 └── requirements.txt
 ```
 
-## Not included in version 0.2
+## Current limitations
 
-Version 0.2 does not:
+Version `0.3.0` does not:
 
-- Parse PMX or PMD contents
-- Inspect bones, morphs, materials, or textures
+- Parse PMX or PMD beyond the header and first model name
+- Inspect vertices, materials, bones, morphs, rigid bodies, or physics
+- Detect missing texture files
+- Scan model dependencies
 - Import assets into Blender
 - Integrate directly with `mmd_tools`
 - Download assets
@@ -427,11 +738,14 @@ Version 0.2 does not:
 
 ## Roadmap
 
-Possible version 0.3 features:
+Possible future work:
 
-- PMX and PMD header inspection
-- File SHA-256 integrity checks
-- Missing texture detection
-- Asset dependency scanning
+- Texture and dependency scanning
+- PMX/PMD section-count inspection
+- Bone, material, and morph summaries
+- Registry update commands
+- Safe automatic hash registration
 - Pipeline-readable asset selection
-- More extensive fixture-based tests
+- Batch hash and inspection commands
+- A desktop editor for registry and model metadata
+- Deeper MMD model editing workflows without requiring PMX Editor

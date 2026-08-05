@@ -1,4 +1,4 @@
-registry_version: "0.2"
+registry_version: "0.3"
 
 assets:
   - id: demo_mannequin
@@ -7,6 +7,9 @@ assets:
     pipeline_character: demo_mannequin
 
     source_path: sample_assets/demo_mannequin/model.pmx
+
+    integrity:
+      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
     creator:
       name: Project-generated placeholder
@@ -44,6 +47,9 @@ assets:
     pipeline_character: Flavia
 
     source_path: sample_assets/flavia/model.pmx
+
+    integrity:
+      sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
     creator:
       name: unknown

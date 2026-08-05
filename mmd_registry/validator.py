@@ -7,8 +7,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mmd_registry.hashing import Sha256CheckResult, check_file_sha256
+from mmd_registry.model_inspection import (
+    ModelInspectionResult,
+    inspect_model_header,
+)
+
 from mmd_registry.constants import (
-    SCHEMA_VERSION,
+    LATEST_SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     UNKNOWN_TEXT_VALUES,
     VALID_ASSET_TYPES,
     VALID_MODES,
@@ -25,6 +32,9 @@ class AssetValidationResult:
     """Validation result for one asset."""
 
     asset_id: str
+    source_path: str | None = None
+    integrity: Sha256CheckResult | None = None
+    inspection: ModelInspectionResult | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     infos: list[str] = field(default_factory=list)
@@ -42,9 +52,31 @@ class AssetValidationResult:
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
 
+        file_data: dict[str, int | None] = {
+            "size_bytes": None,
+        }
+        integrity_data: dict[str, str | int | None] | None = None
+        inspection_data: dict[str, Any] | None = None
+
+        if self.integrity is not None:
+            file_data["size_bytes"] = self.integrity.size_bytes
+            integrity_data = {
+                "algorithm": self.integrity.algorithm,
+                "expected": self.integrity.expected,
+                "actual": self.integrity.actual,
+                "status": self.integrity.status,
+            }
+
+        if self.inspection is not None:
+            inspection_data = self.inspection.to_dict()
+
         return {
             "id": self.asset_id,
             "status": self.status,
+            "source_path": self.source_path,
+            "file": file_data,
+            "integrity": integrity_data,
+            "inspection": inspection_data,
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "infos": list(self.infos),
@@ -164,6 +196,102 @@ def _resolve_source_path(
     return project_root / path
 
 
+def _validate_integrity(
+    asset: dict[str, Any],
+    source_file: Path,
+    result: AssetValidationResult,
+) -> None:
+    """Validate optional SHA-256 integrity metadata for one source file."""
+
+    integrity = asset.get("integrity")
+
+    try:
+        if integrity is None:
+            result.integrity = check_file_sha256(source_file)
+            result.infos.append("SHA-256 hash has not been recorded.")
+            return
+
+        if not isinstance(integrity, dict):
+            result.integrity = check_file_sha256(source_file, integrity)
+            result.errors.append("integrity must be a YAML object.")
+            return
+
+        result.integrity = check_file_sha256(
+            source_file,
+            integrity.get("sha256"),
+        )
+    except OSError as error:
+        result.errors.append(f"Unable to calculate SHA-256: {error}")
+        return
+
+    if result.integrity.status == "not_recorded":
+        result.infos.append("SHA-256 hash has not been recorded.")
+    elif result.integrity.status == "invalid_expected":
+        result.errors.append(
+            "integrity.sha256 must be a 64-character hexadecimal string or null."
+        )
+    elif result.integrity.status == "mismatched":
+        result.errors.append(
+            "SHA-256 mismatch: registered hash does not match the source file."
+        )
+
+
+def _is_placeholder_asset(asset: dict[str, Any]) -> bool:
+    """Return True for an explicitly unfinished placeholder asset."""
+
+    status = _non_empty_string(asset.get("status"))
+
+    if status == "review":
+        return True
+
+    tags = asset.get("tags")
+
+    if isinstance(tags, list):
+        for tag in tags:
+            normalized_tag = _non_empty_string(tag)
+
+            if normalized_tag is not None and normalized_tag.lower() == "placeholder":
+                return True
+
+    notes = _non_empty_string(asset.get("notes"))
+
+    return notes is not None and "placeholder" in notes.lower()
+
+
+def _validate_model_inspection(
+    asset: dict[str, Any],
+    source_file: Path,
+    mode: str,
+    result: AssetValidationResult,
+) -> None:
+    """Inspect PMX/PMD headers and apply controlled placeholder policy."""
+
+    if source_file.suffix.lower() not in {".pmx", ".pmd"}:
+        return
+
+    result.inspection = inspect_model_header(source_file)
+
+    for warning in result.inspection.warnings:
+        result.warnings.append(f"Model header inspection warning: {warning}")
+
+    if not result.inspection.errors:
+        return
+
+    is_zero_byte_placeholder = (
+        result.integrity is not None
+        and result.integrity.size_bytes == 0
+        and _is_placeholder_asset(asset)
+    )
+
+    for error in result.inspection.errors:
+        if mode == "private" and is_zero_byte_placeholder:
+            result.warnings.append(
+                f"Placeholder model header inspection failed: {error}"
+            )
+        else:
+            result.errors.append(f"Model header inspection failed: {error}")
+
+
 def _validate_usage_value(
     usage_rules: dict[str, Any],
     field_name: str,
@@ -193,6 +321,7 @@ def validate_asset(
     index: int,
     project_root: Path,
     mode: str = "private",
+    registry_version: str | None = LATEST_SCHEMA_VERSION,
 ) -> AssetValidationResult:
     """Validate one asset using the selected usage mode."""
 
@@ -242,6 +371,7 @@ def validate_asset(
         result.errors.append("pipeline_character must be a string or null.")
 
     source_path = _non_empty_string(asset.get("source_path"))
+    result.source_path = source_path
 
     if source_path is None:
         result.errors.append("source_path must be a non-empty string.")
@@ -252,6 +382,18 @@ def validate_asset(
             result.errors.append(f"Source file not found: {resolved_path}")
         elif not resolved_path.is_file():
             result.errors.append(f"source_path is not a file: {resolved_path}")
+        elif registry_version == LATEST_SCHEMA_VERSION:
+            _validate_integrity(
+                asset=asset,
+                source_file=resolved_path,
+                result=result,
+            )
+            _validate_model_inspection(
+                asset=asset,
+                source_file=resolved_path,
+                mode=mode,
+                result=result,
+            )
 
     status = _non_empty_string(asset.get("status"))
 
@@ -415,7 +557,7 @@ def validate_registry(
     project_root: Path,
     mode: str = "private",
 ) -> RegistryValidationResult:
-    """Validate a complete schema 0.2 registry."""
+    """Validate a complete registry using a supported schema version."""
 
     if mode not in VALID_MODES:
         raise ValueError(f"Unsupported validation mode: {mode}")
@@ -431,10 +573,16 @@ def validate_registry(
 
     if registry_version is None:
         result.registry_errors.append("registry_version must be a non-empty string.")
-    elif registry_version != SCHEMA_VERSION:
+    elif registry_version not in SUPPORTED_SCHEMA_VERSIONS:
+        supported_versions = ", ".join(sorted(SUPPORTED_SCHEMA_VERSIONS))
         result.registry_errors.append(
             f"Unsupported registry_version '{registry_version}'. "
-            f"Expected '{SCHEMA_VERSION}'."
+            f"Supported versions: {supported_versions}."
+        )
+    elif registry_version != LATEST_SCHEMA_VERSION:
+        result.registry_infos.append(
+            f"Registry schema {registry_version} is supported for backward "
+            f"compatibility; latest is {LATEST_SCHEMA_VERSION}."
         )
 
     assets = registry.get("assets")
@@ -455,6 +603,7 @@ def validate_registry(
             index=index,
             project_root=project_root,
             mode=mode,
+            registry_version=registry_version,
         )
 
         if asset_result.asset_id in seen_ids:

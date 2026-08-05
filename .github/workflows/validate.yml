@@ -30,10 +30,23 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile Python source
-        run: python -m compileall mmd_registry tests
+        run: python -m compileall mmd_registry tests check_assets.py
 
       - name: Run automated tests
         run: python -m unittest discover -s tests -v
 
-      - name: Validate registry in private mode
+      - name: Check reported version
+        run: python check_assets.py --version
+
+      - name: Validate registry with legacy syntax
         run: python check_assets.py --mode private --no-report
+
+      - name: Validate registry with explicit command
+        run: python check_assets.py validate --mode private --no-report
+
+      - name: Verify registered placeholder hash
+        run: >
+          python check_assets.py hash
+          sample_assets/demo_mannequin/model.pmx
+          --expected
+          e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

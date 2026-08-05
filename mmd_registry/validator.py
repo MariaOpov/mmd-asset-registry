@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from mmd_registry.hashing import Sha256CheckResult, check_file_sha256
+from mmd_registry.model_inspection import (
+    ModelInspectionResult,
+    inspect_model_header,
+)
 
 from mmd_registry.constants import (
     LATEST_SCHEMA_VERSION,
@@ -30,6 +34,7 @@ class AssetValidationResult:
     asset_id: str
     source_path: str | None = None
     integrity: Sha256CheckResult | None = None
+    inspection: ModelInspectionResult | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     infos: list[str] = field(default_factory=list)
@@ -51,6 +56,7 @@ class AssetValidationResult:
             "size_bytes": None,
         }
         integrity_data: dict[str, str | int | None] | None = None
+        inspection_data: dict[str, Any] | None = None
 
         if self.integrity is not None:
             file_data["size_bytes"] = self.integrity.size_bytes
@@ -61,12 +67,16 @@ class AssetValidationResult:
                 "status": self.integrity.status,
             }
 
+        if self.inspection is not None:
+            inspection_data = self.inspection.to_dict()
+
         return {
             "id": self.asset_id,
             "status": self.status,
             "source_path": self.source_path,
             "file": file_data,
             "integrity": integrity_data,
+            "inspection": inspection_data,
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "infos": list(self.infos),
@@ -226,6 +236,62 @@ def _validate_integrity(
         )
 
 
+def _is_placeholder_asset(asset: dict[str, Any]) -> bool:
+    """Return True for an explicitly unfinished placeholder asset."""
+
+    status = _non_empty_string(asset.get("status"))
+
+    if status == "review":
+        return True
+
+    tags = asset.get("tags")
+
+    if isinstance(tags, list):
+        for tag in tags:
+            normalized_tag = _non_empty_string(tag)
+
+            if normalized_tag is not None and normalized_tag.lower() == "placeholder":
+                return True
+
+    notes = _non_empty_string(asset.get("notes"))
+
+    return notes is not None and "placeholder" in notes.lower()
+
+
+def _validate_model_inspection(
+    asset: dict[str, Any],
+    source_file: Path,
+    mode: str,
+    result: AssetValidationResult,
+) -> None:
+    """Inspect PMX/PMD headers and apply controlled placeholder policy."""
+
+    if source_file.suffix.lower() not in {".pmx", ".pmd"}:
+        return
+
+    result.inspection = inspect_model_header(source_file)
+
+    for warning in result.inspection.warnings:
+        result.warnings.append(f"Model header inspection warning: {warning}")
+
+    if not result.inspection.errors:
+        return
+
+    is_zero_byte_placeholder = (
+        result.integrity is not None
+        and result.integrity.size_bytes == 0
+        and _is_placeholder_asset(asset)
+    )
+
+    for error in result.inspection.errors:
+        if mode == "private" and is_zero_byte_placeholder:
+            result.warnings.append(
+                f"Placeholder model header inspection failed: {error}"
+            )
+        else:
+            result.errors.append(f"Model header inspection failed: {error}")
+
+
 def _validate_usage_value(
     usage_rules: dict[str, Any],
     field_name: str,
@@ -320,6 +386,12 @@ def validate_asset(
             _validate_integrity(
                 asset=asset,
                 source_file=resolved_path,
+                result=result,
+            )
+            _validate_model_inspection(
+                asset=asset,
+                source_file=resolved_path,
+                mode=mode,
                 result=result,
             )
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from mmd_registry.validator import validate_registry
+from tests.mmd_fixtures import build_minimal_pmx_header
 
 
 class RegistryValidatorTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class RegistryValidatorTests(unittest.TestCase):
         self.project_root = Path(self.temp_directory.name)
 
         model_file = self.project_root / "model.pmx"
-        model_file.write_bytes(b"placeholder")
+        model_file.write_bytes(build_minimal_pmx_header("Validator Fixture"))
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
@@ -221,7 +222,18 @@ class RegistryValidatorTests(unittest.TestCase):
         self.assertEqual(asset_result.integrity.status, "matched")
         self.assertEqual(asset_result.integrity.expected, expected_sha256)
         self.assertEqual(asset_result.integrity.actual, expected_sha256)
-        self.assertEqual(asset_result.integrity.size_bytes, len(b"placeholder"))
+        self.assertEqual(
+            asset_result.integrity.size_bytes,
+            model_file.stat().st_size,
+        )
+        self.assertIsNotNone(asset_result.inspection)
+        assert asset_result.inspection is not None
+        self.assertEqual(asset_result.inspection.status, "ok")
+        self.assertEqual(asset_result.inspection.detected_format, "pmx")
+        self.assertEqual(
+            asset_result.inspection.model_name,
+            "Validator Fixture",
+        )
 
     def test_schema_0_3_mismatched_sha256_is_error(self) -> None:
         asset = self.make_asset()
@@ -306,6 +318,82 @@ class RegistryValidatorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "passed")
         self.assertIsNone(result.assets[0].integrity)
+        self.assertIsNone(result.assets[0].inspection)
+
+    def test_private_zero_byte_placeholder_is_warning(self) -> None:
+        model_file = self.project_root / "model.pmx"
+        model_file.write_bytes(b"")
+        asset = self.make_asset()
+        asset["tags"].append("placeholder")
+        asset["integrity"] = {
+            "sha256": hashlib.sha256(b"").hexdigest(),
+        }
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+            mode="private",
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "passed_with_warnings")
+        self.assertEqual(asset_result.errors, [])
+        self.assertIsNotNone(asset_result.inspection)
+        assert asset_result.inspection is not None
+        self.assertEqual(asset_result.inspection.status, "error")
+        self.assertTrue(
+            any(
+                message.startswith("Placeholder model header inspection failed:")
+                for message in asset_result.warnings
+            )
+        )
+
+    def test_publish_zero_byte_placeholder_is_error(self) -> None:
+        model_file = self.project_root / "model.pmx"
+        model_file.write_bytes(b"")
+        asset = self.make_asset()
+        asset["tags"].append("placeholder")
+        asset["integrity"] = {
+            "sha256": hashlib.sha256(b"").hexdigest(),
+        }
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+            mode="publish",
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "failed")
+        self.assertTrue(
+            any(
+                message.startswith("Model header inspection failed:")
+                for message in asset_result.errors
+            )
+        )
+
+    def test_private_invalid_non_placeholder_model_is_error(self) -> None:
+        model_file = self.project_root / "model.pmx"
+        model_file.write_bytes(b"not a PMX model")
+        asset = self.make_asset()
+        asset["integrity"] = {
+            "sha256": hashlib.sha256(model_file.read_bytes()).hexdigest(),
+        }
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+            mode="private",
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "failed")
+        self.assertTrue(
+            any(
+                message.startswith("Model header inspection failed:")
+                for message in asset_result.errors
+            )
+        )
 
 
 if __name__ == "__main__":

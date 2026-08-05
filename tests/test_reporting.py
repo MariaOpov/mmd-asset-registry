@@ -19,6 +19,7 @@ from mmd_registry.validator import (
     RegistryValidationResult,
     validate_registry,
 )
+from tests.mmd_fixtures import build_minimal_pmx_header
 
 
 class ReportingTests(unittest.TestCase):
@@ -118,7 +119,7 @@ class ReportingTests(unittest.TestCase):
         )
 
     def test_json_report_includes_integrity_and_file_size(self) -> None:
-        payload = b"schema 0.3 report integrity fixture"
+        payload = build_minimal_pmx_header("Report Fixture")
         model_file = self.project_root / "models" / "model.pmx"
         model_file.parent.mkdir()
         model_file.write_bytes(payload)
@@ -160,9 +161,22 @@ class ReportingTests(unittest.TestCase):
                 "status": "matched",
             },
         )
+        self.assertEqual(
+            asset_report["inspection"],
+            {
+                "status": "ok",
+                "detected_format": "pmx",
+                "magic": "PMX ",
+                "version": 2.0,
+                "model_name": "Report Fixture",
+                "encoding": "utf-8",
+                "errors": [],
+                "warnings": [],
+            },
+        )
 
     def test_json_report_makes_absolute_asset_path_portable(self) -> None:
-        payload = b"absolute path report fixture"
+        payload = build_minimal_pmx_header("Absolute Report Fixture")
         model_file = self.project_root / "models" / "absolute.pmx"
         model_file.parent.mkdir()
         model_file.write_bytes(payload)
@@ -220,6 +234,7 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(asset_report["source_path"], "models/legacy.pmx")
         self.assertEqual(asset_report["file"]["size_bytes"], None)
         self.assertIsNone(asset_report["integrity"])
+        self.assertIsNone(asset_report["inspection"])
 
     def test_credit_markdown_contains_credit_text(self) -> None:
         registry: dict[str, Any] = {

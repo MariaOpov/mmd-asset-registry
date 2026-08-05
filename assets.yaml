@@ -1,0 +1,32 @@
+registry_version: "0.1"
+
+assets:
+  - id: demo_mannequin
+    display_name: Demo Mannequin
+    pipeline_character: demo_mannequin
+    source_path: sample_assets/demo_mannequin/model.pmx
+    creator: Project-generated placeholder
+
+    license:
+      commercial_use: allowed
+      redistribution: allowed
+      modification: allowed
+
+    status: ready
+    notes: >
+      Placeholder asset used to test MMD Asset & License Registry v0.1.
+
+  - id: flavia
+    display_name: Flavia
+    pipeline_character: Flavia
+    source_path: sample_assets/flavia/model.pmx
+    creator: unknown
+
+    license:
+      commercial_use: unknown
+      redistribution: unknown
+      modification: unknown
+
+    status: review
+    notes: >
+      License information has not been verified yet.

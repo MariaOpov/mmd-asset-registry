@@ -23,6 +23,17 @@ def _display_path(path: Path, project_root: Path) -> str:
         return str(resolved_path)
 
 
+def _display_source_path(source_path: str, project_root: Path) -> str:
+    """Return a portable registered source path when possible."""
+
+    path = Path(source_path)
+
+    if not path.is_absolute():
+        return path.as_posix()
+
+    return _display_path(path, project_root)
+
+
 def build_json_report(
     result: RegistryValidationResult,
     registry_file: Path,
@@ -36,6 +47,16 @@ def build_json_report(
     if timestamp is None:
         timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
 
+    result_data = result.to_dict()
+    asset_reports = result_data["assets"]
+
+    for asset_result, asset_report in zip(result.assets, asset_reports):
+        if asset_result.source_path is not None:
+            asset_report["source_path"] = _display_source_path(
+                asset_result.source_path,
+                project_root,
+            )
+
     return {
         "tool_version": __version__,
         "generated_at": timestamp,
@@ -43,7 +64,7 @@ def build_json_report(
             registry_file,
             project_root,
         ),
-        **result.to_dict(),
+        **result_data,
     }
 
 

@@ -47,9 +47,26 @@ class AssetValidationResult:
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
 
+        file_data: dict[str, int | None] = {
+            "size_bytes": None,
+        }
+        integrity_data: dict[str, str | int | None] | None = None
+
+        if self.integrity is not None:
+            file_data["size_bytes"] = self.integrity.size_bytes
+            integrity_data = {
+                "algorithm": self.integrity.algorithm,
+                "expected": self.integrity.expected,
+                "actual": self.integrity.actual,
+                "status": self.integrity.status,
+            }
+
         return {
             "id": self.asset_id,
             "status": self.status,
+            "source_path": self.source_path,
+            "file": file_data,
+            "integrity": integrity_data,
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "infos": list(self.infos),

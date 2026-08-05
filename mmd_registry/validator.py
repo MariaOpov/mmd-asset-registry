@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from mmd_registry.constants import (
-    SCHEMA_VERSION,
+    LATEST_SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     UNKNOWN_TEXT_VALUES,
     VALID_ASSET_TYPES,
     VALID_MODES,
@@ -415,7 +416,7 @@ def validate_registry(
     project_root: Path,
     mode: str = "private",
 ) -> RegistryValidationResult:
-    """Validate a complete schema 0.2 registry."""
+    """Validate a complete registry using a supported schema version."""
 
     if mode not in VALID_MODES:
         raise ValueError(f"Unsupported validation mode: {mode}")
@@ -431,10 +432,16 @@ def validate_registry(
 
     if registry_version is None:
         result.registry_errors.append("registry_version must be a non-empty string.")
-    elif registry_version != SCHEMA_VERSION:
+    elif registry_version not in SUPPORTED_SCHEMA_VERSIONS:
+        supported_versions = ", ".join(sorted(SUPPORTED_SCHEMA_VERSIONS))
         result.registry_errors.append(
             f"Unsupported registry_version '{registry_version}'. "
-            f"Expected '{SCHEMA_VERSION}'."
+            f"Supported versions: {supported_versions}."
+        )
+    elif registry_version != LATEST_SCHEMA_VERSION:
+        result.registry_infos.append(
+            f"Registry schema {registry_version} is supported for backward "
+            f"compatibility; latest is {LATEST_SCHEMA_VERSION}."
         )
 
     assets = registry.get("assets")

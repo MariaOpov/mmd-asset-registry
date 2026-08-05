@@ -145,6 +145,62 @@ class RegistryValidatorTests(unittest.TestCase):
             result.assets[1].errors,
         )
 
+    def test_schema_0_2_remains_supported(self) -> None:
+        registry = self.make_registry([self.make_asset()])
+
+        result = validate_registry(
+            registry,
+            self.project_root,
+            mode="private",
+        )
+
+        self.assertEqual(result.status, "passed")
+        self.assertIn(
+            (
+                "Registry schema 0.2 is supported for backward "
+                "compatibility; latest is 0.3."
+            ),
+            result.registry_infos,
+        )
+
+    def test_schema_0_3_is_supported(self) -> None:
+        registry = self.make_registry([self.make_asset()])
+        registry["registry_version"] = "0.3"
+
+        result = validate_registry(
+            registry,
+            self.project_root,
+            mode="private",
+        )
+
+        self.assertEqual(result.status, "passed")
+        self.assertEqual(result.error_count, 0)
+        self.assertFalse(
+            any(
+                "backward compatibility" in message
+                for message in result.registry_infos
+            )
+        )
+
+    def test_unknown_schema_version_is_error(self) -> None:
+        registry = self.make_registry([self.make_asset()])
+        registry["registry_version"] = "9.9"
+
+        result = validate_registry(
+            registry,
+            self.project_root,
+            mode="private",
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertIn(
+            (
+                "Unsupported registry_version '9.9'. "
+                "Supported versions: 0.2, 0.3."
+            ),
+            result.registry_errors,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

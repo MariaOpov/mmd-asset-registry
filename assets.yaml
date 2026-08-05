@@ -1,32 +1,78 @@
-registry_version: "0.1"
+registry_version: "0.2"
 
 assets:
   - id: demo_mannequin
     display_name: Demo Mannequin
+    asset_type: character_model
     pipeline_character: demo_mannequin
-    source_path: sample_assets/demo_mannequin/model.pmx
-    creator: Project-generated placeholder
 
-    license:
-      commercial_use: allowed
+    source_path: sample_assets/demo_mannequin/model.pmx
+
+    creator:
+      name: Project-generated placeholder
+      profile_url: null
+
+    source:
+      page_url: null
+      downloaded_at: "2026-08-05"
+
+    credit:
+      required: false
+      text: null
+      url: null
+
+    usage_rules:
+      editing: allowed
       redistribution: allowed
-      modification: allowed
+      commercial_use: allowed
+      notes: >
+        Placeholder asset generated specifically for registry testing.
 
     status: ready
+
+    tags:
+      - character
+      - placeholder
+      - test
+
     notes: >
-      Placeholder asset used to test MMD Asset & License Registry v0.1.
+      Empty PMX placeholder used to test MMD Asset Registry behavior.
 
   - id: flavia
     display_name: Flavia
+    asset_type: character_model
     pipeline_character: Flavia
-    source_path: sample_assets/flavia/model.pmx
-    creator: unknown
 
-    license:
-      commercial_use: unknown
-      redistribution: unknown
-      modification: unknown
+    source_path: sample_assets/flavia/model.pmx
+
+    creator:
+      name: unknown
+      profile_url: null
+
+    source:
+      page_url: null
+      downloaded_at: null
+
+    credit:
+      required: true
+      text: null
+      url: null
+
+    usage_rules:
+      editing: unclear
+      redistribution: unclear
+      commercial_use: unclear
+      notes: >
+        Original creator, source page, and usage rules have not yet
+        been recorded.
 
     status: review
+
+    tags:
+      - character
+      - flavia
+      - review
+
     notes: >
-      License information has not been verified yet.
+      Local model placeholder exists, but provenance and credit
+      information remain incomplete.

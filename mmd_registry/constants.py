@@ -3,6 +3,8 @@
 from typing import Final
 
 
+SCHEMA_VERSION: Final[str] = "0.2"
+
 VALID_MODES: Final[frozenset[str]] = frozenset(
     {
         "private",

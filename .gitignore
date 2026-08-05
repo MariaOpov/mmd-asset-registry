@@ -14,3 +14,6 @@ reports/*.log
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Generated credit report
+reports/CREDITS.md

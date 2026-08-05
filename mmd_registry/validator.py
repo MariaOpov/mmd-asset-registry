@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mmd_registry.hashing import Sha256CheckResult, check_file_sha256
+
 from mmd_registry.constants import (
     LATEST_SCHEMA_VERSION,
     SUPPORTED_SCHEMA_VERSIONS,
@@ -26,6 +28,8 @@ class AssetValidationResult:
     """Validation result for one asset."""
 
     asset_id: str
+    source_path: str | None = None
+    integrity: Sha256CheckResult | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     infos: list[str] = field(default_factory=list)
@@ -165,6 +169,46 @@ def _resolve_source_path(
     return project_root / path
 
 
+def _validate_integrity(
+    asset: dict[str, Any],
+    source_file: Path,
+    result: AssetValidationResult,
+) -> None:
+    """Validate optional SHA-256 integrity metadata for one source file."""
+
+    integrity = asset.get("integrity")
+
+    try:
+        if integrity is None:
+            result.integrity = check_file_sha256(source_file)
+            result.infos.append("SHA-256 hash has not been recorded.")
+            return
+
+        if not isinstance(integrity, dict):
+            result.integrity = check_file_sha256(source_file, integrity)
+            result.errors.append("integrity must be a YAML object.")
+            return
+
+        result.integrity = check_file_sha256(
+            source_file,
+            integrity.get("sha256"),
+        )
+    except OSError as error:
+        result.errors.append(f"Unable to calculate SHA-256: {error}")
+        return
+
+    if result.integrity.status == "not_recorded":
+        result.infos.append("SHA-256 hash has not been recorded.")
+    elif result.integrity.status == "invalid_expected":
+        result.errors.append(
+            "integrity.sha256 must be a 64-character hexadecimal string or null."
+        )
+    elif result.integrity.status == "mismatched":
+        result.errors.append(
+            "SHA-256 mismatch: registered hash does not match the source file."
+        )
+
+
 def _validate_usage_value(
     usage_rules: dict[str, Any],
     field_name: str,
@@ -194,6 +238,7 @@ def validate_asset(
     index: int,
     project_root: Path,
     mode: str = "private",
+    registry_version: str | None = LATEST_SCHEMA_VERSION,
 ) -> AssetValidationResult:
     """Validate one asset using the selected usage mode."""
 
@@ -243,6 +288,7 @@ def validate_asset(
         result.errors.append("pipeline_character must be a string or null.")
 
     source_path = _non_empty_string(asset.get("source_path"))
+    result.source_path = source_path
 
     if source_path is None:
         result.errors.append("source_path must be a non-empty string.")
@@ -253,6 +299,12 @@ def validate_asset(
             result.errors.append(f"Source file not found: {resolved_path}")
         elif not resolved_path.is_file():
             result.errors.append(f"source_path is not a file: {resolved_path}")
+        elif registry_version == LATEST_SCHEMA_VERSION:
+            _validate_integrity(
+                asset=asset,
+                source_file=resolved_path,
+                result=result,
+            )
 
     status = _non_empty_string(asset.get("status"))
 
@@ -462,6 +514,7 @@ def validate_registry(
             index=index,
             project_root=project_root,
             mode=mode,
+            registry_version=registry_version,
         )
 
         if asset_result.asset_id in seen_ids:

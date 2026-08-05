@@ -1,7 +1,8 @@
-"""Tests for the schema 0.2 registry validator."""
+"""Tests for supported registry schemas and asset validation."""
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,9 +61,10 @@ class RegistryValidatorTests(unittest.TestCase):
     def make_registry(
         self,
         assets: list[dict[str, Any]],
+        registry_version: str = "0.2",
     ) -> dict[str, Any]:
         return {
-            "registry_version": "0.2",
+            "registry_version": registry_version,
             "assets": assets,
         }
 
@@ -164,8 +166,10 @@ class RegistryValidatorTests(unittest.TestCase):
         )
 
     def test_schema_0_3_is_supported(self) -> None:
-        registry = self.make_registry([self.make_asset()])
-        registry["registry_version"] = "0.3"
+        registry = self.make_registry(
+            [self.make_asset()],
+            registry_version="0.3",
+        )
 
         result = validate_registry(
             registry,
@@ -177,14 +181,15 @@ class RegistryValidatorTests(unittest.TestCase):
         self.assertEqual(result.error_count, 0)
         self.assertFalse(
             any(
-                "backward compatibility" in message
-                for message in result.registry_infos
+                "backward compatibility" in message for message in result.registry_infos
             )
         )
 
     def test_unknown_schema_version_is_error(self) -> None:
-        registry = self.make_registry([self.make_asset()])
-        registry["registry_version"] = "9.9"
+        registry = self.make_registry(
+            [self.make_asset()],
+            registry_version="9.9",
+        )
 
         result = validate_registry(
             registry,
@@ -194,12 +199,113 @@ class RegistryValidatorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "failed")
         self.assertIn(
-            (
-                "Unsupported registry_version '9.9'. "
-                "Supported versions: 0.2, 0.3."
-            ),
+            ("Unsupported registry_version '9.9'. Supported versions: 0.2, 0.3."),
             result.registry_errors,
         )
+
+    def test_schema_0_3_matching_sha256_passes(self) -> None:
+        asset = self.make_asset()
+        model_file = self.project_root / "model.pmx"
+        expected_sha256 = hashlib.sha256(model_file.read_bytes()).hexdigest()
+        asset["integrity"] = {"sha256": expected_sha256.upper()}
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "passed")
+        self.assertIsNotNone(asset_result.integrity)
+        assert asset_result.integrity is not None
+        self.assertEqual(asset_result.integrity.status, "matched")
+        self.assertEqual(asset_result.integrity.expected, expected_sha256)
+        self.assertEqual(asset_result.integrity.actual, expected_sha256)
+        self.assertEqual(asset_result.integrity.size_bytes, len(b"placeholder"))
+
+    def test_schema_0_3_mismatched_sha256_is_error(self) -> None:
+        asset = self.make_asset()
+        asset["integrity"] = {"sha256": "0" * 64}
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "failed")
+        self.assertIsNotNone(asset_result.integrity)
+        assert asset_result.integrity is not None
+        self.assertEqual(asset_result.integrity.status, "mismatched")
+        self.assertIn(
+            "SHA-256 mismatch: registered hash does not match the source file.",
+            asset_result.errors,
+        )
+
+    def test_schema_0_3_invalid_sha256_is_error(self) -> None:
+        asset = self.make_asset()
+        asset["integrity"] = {"sha256": "invalid-hash"}
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "failed")
+        self.assertIsNotNone(asset_result.integrity)
+        assert asset_result.integrity is not None
+        self.assertEqual(asset_result.integrity.status, "invalid_expected")
+        self.assertIn(
+            ("integrity.sha256 must be a 64-character hexadecimal string or null."),
+            asset_result.errors,
+        )
+
+    def test_schema_0_3_missing_sha256_is_informational(self) -> None:
+        asset = self.make_asset()
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "passed")
+        self.assertIsNotNone(asset_result.integrity)
+        assert asset_result.integrity is not None
+        self.assertEqual(asset_result.integrity.status, "not_recorded")
+        self.assertIn(
+            "SHA-256 hash has not been recorded.",
+            asset_result.infos,
+        )
+
+    def test_schema_0_3_integrity_must_be_mapping(self) -> None:
+        asset = self.make_asset()
+        asset["integrity"] = "not-a-mapping"
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.3"),
+            self.project_root,
+        )
+
+        asset_result = result.assets[0]
+        self.assertEqual(result.status, "failed")
+        self.assertIsNotNone(asset_result.integrity)
+        assert asset_result.integrity is not None
+        self.assertEqual(asset_result.integrity.status, "invalid_expected")
+        self.assertIn("integrity must be a YAML object.", asset_result.errors)
+
+    def test_schema_0_2_does_not_apply_integrity_rules(self) -> None:
+        asset = self.make_asset()
+        asset["integrity"] = {"sha256": "invalid-hash"}
+
+        result = validate_registry(
+            self.make_registry([asset], registry_version="0.2"),
+            self.project_root,
+        )
+
+        self.assertEqual(result.status, "passed")
+        self.assertIsNone(result.assets[0].integrity)
 
 
 if __name__ == "__main__":

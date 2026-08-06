@@ -845,6 +845,53 @@ def build_pmx_display_frame(
     )
 
 
+def build_pmx_rigid_body(
+    *,
+    local_name: str = "Rigid Body",
+    universal_name: str = "Rigid Body",
+    bone_index: int = -1,
+    collision_group: int = 0,
+    collision_mask: int = 0xFFFF,
+    shape: int = 0,
+    size: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    mass: float = 1.0,
+    linear_damping: float = 0.5,
+    angular_damping: float = 0.5,
+    restitution: float = 0.0,
+    friction: float = 0.5,
+    physics_mode: int = 0,
+    encoding_flag: int = 1,
+    bone_index_size: int = 1,
+) -> bytes:
+    """Build one PMX rigid-body record."""
+
+    return b"".join(
+        [
+            _encode_pmx_text(local_name, encoding_flag),
+            _encode_pmx_text(universal_name, encoding_flag),
+            _pack_pmx_index(
+                bone_index,
+                size=bone_index_size,
+                signed=True,
+            ),
+            struct.pack("<B", collision_group),
+            struct.pack("<H", collision_mask),
+            struct.pack("<B", shape),
+            struct.pack("<3f", *size),
+            struct.pack("<3f", *position),
+            struct.pack("<3f", *rotation),
+            struct.pack("<f", mass),
+            struct.pack("<f", linear_damping),
+            struct.pack("<f", angular_damping),
+            struct.pack("<f", restitution),
+            struct.pack("<f", friction),
+            struct.pack("<B", physics_mode),
+        ]
+    )
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -874,8 +921,10 @@ def build_pmx_structure(
     morph_count_override: int | None = None,
     display_frames: tuple[bytes, ...] = (),
     display_frame_count_override: int | None = None,
+    rigid_bodies: tuple[bytes, ...] = (),
+    rigid_body_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the display-frame section."""
+    """Build a PMX fixture through the rigid-body section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -962,6 +1011,13 @@ def build_pmx_structure(
     )
     display_frame_data = b"".join(display_frames)
 
+    rigid_body_count = (
+        len(rigid_bodies)
+        if rigid_body_count_override is None
+        else rigid_body_count_override
+    )
+    rigid_body_data = b"".join(rigid_bodies)
+
     return b"".join(
         [
             header,
@@ -1000,5 +1056,10 @@ def build_pmx_structure(
                 display_frame_count,
             ),
             display_frame_data,
+            struct.pack(
+                "<i",
+                rigid_body_count,
+            ),
+            rigid_body_data,
         ]
     )

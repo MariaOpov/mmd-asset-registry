@@ -42,6 +42,7 @@ MAX_PMX_TOTAL_MORPH_OFFSET_COUNT: Final[int] = 5_000_000
 MAX_PMX_DISPLAY_FRAME_COUNT: Final[int] = 100_000
 MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 1_000_000
 MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 5_000_000
+MAX_PMX_RIGID_BODY_COUNT: Final[int] = 200_000
 
 PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
 PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
@@ -444,6 +445,52 @@ class PmxDisplayFrame:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PmxRigidBody:
+    """Structural metadata extracted from one PMX rigid body."""
+
+    local_name: str
+    universal_name: str
+    bone_index: int
+    collision_group: int
+    collision_mask: int
+    shape: int
+    shape_name: str
+    size: tuple[float, float, float]
+    position: tuple[float, float, float]
+    rotation: tuple[float, float, float]
+    mass: float
+    linear_damping: float
+    angular_damping: float
+    restitution: float
+    friction: float
+    physics_mode: int
+    physics_mode_name: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "bone_index": self.bone_index,
+            "collision_group": self.collision_group,
+            "collision_mask": self.collision_mask,
+            "shape": self.shape,
+            "shape_name": self.shape_name,
+            "size": list(self.size),
+            "position": list(self.position),
+            "rotation": list(self.rotation),
+            "mass": self.mass,
+            "linear_damping": self.linear_damping,
+            "angular_damping": self.angular_damping,
+            "restitution": self.restitution,
+            "friction": self.friction,
+            "physics_mode": self.physics_mode,
+            "physics_mode_name": self.physics_mode_name,
+        }
+
+
 @dataclass(slots=True)
 class PmxHeaderScanResult:
     """Result of scanning PMX header, model information, and early sections."""
@@ -469,6 +516,8 @@ class PmxHeaderScanResult:
     morphs: list[PmxMorph] = field(default_factory=list)
     display_frame_count: int | None = None
     display_frames: list[PmxDisplayFrame] = field(default_factory=list)
+    rigid_body_count: int | None = None
+    rigid_bodies: list[PmxRigidBody] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -518,6 +567,8 @@ class PmxHeaderScanResult:
             "display_frames": [
                 display_frame.to_dict() for display_frame in self.display_frames
             ],
+            "rigid_body_count": self.rigid_body_count,
+            "rigid_bodies": [rigid_body.to_dict() for rigid_body in self.rigid_bodies],
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
             "errors": list(self.errors),
@@ -2803,6 +2854,380 @@ def _scan_pmx_display_frames(
     result.display_frames = display_frames
 
 
+def _minimum_pmx_rigid_body_size(
+    index_sizes: PmxIndexSizes,
+) -> int:
+    """Return the fixed minimum size of one PMX rigid-body record."""
+
+    text_length_fields = 8
+    bone_index_size = index_sizes.bone
+    collision_group_size = 1
+    collision_mask_size = 2
+    shape_size = 1
+    vector_fields_size = 36
+    physical_scalar_fields_size = 20
+    physics_mode_size = 1
+
+    return (
+        text_length_fields
+        + bone_index_size
+        + collision_group_size
+        + collision_mask_size
+        + shape_size
+        + vector_fields_size
+        + physical_scalar_fields_size
+        + physics_mode_size
+    )
+
+
+def _validate_pmx_finite_scalar(
+    value: float,
+    *,
+    section: str,
+    record_index: int,
+    label: str,
+    offset: int,
+    nonnegative: bool,
+) -> None:
+    """Validate one finite PMX rigid-body scalar."""
+
+    if not math.isfinite(value):
+        _raise_pmx_error(
+            section=section,
+            record_index=record_index,
+            offset=offset,
+            operation=f"validating {label}",
+            reason=f"{label} must be finite.",
+        )
+
+    if nonnegative and value < 0.0:
+        _raise_pmx_error(
+            section=section,
+            record_index=record_index,
+            offset=offset,
+            operation=f"validating {label}",
+            reason=f"{label} cannot be negative: {value}.",
+        )
+
+
+def _validate_pmx_finite_vec3(
+    value: tuple[float, float, float],
+    *,
+    section: str,
+    record_index: int,
+    label: str,
+    offset: int,
+    nonnegative: bool,
+) -> None:
+    """Validate one finite PMX rigid-body vec3."""
+
+    component_names = ("x", "y", "z")
+
+    for component_index, component in enumerate(value):
+        component_label = f"{label} {component_names[component_index]}"
+        _validate_pmx_finite_scalar(
+            component,
+            section=section,
+            record_index=record_index,
+            label=component_label,
+            offset=offset + component_index * 4,
+            nonnegative=nonnegative,
+        )
+
+
+def _decode_pmx_rigid_body_shape(
+    value: int,
+    *,
+    record_index: int,
+    offset: int,
+) -> str:
+    """Validate and decode one PMX rigid-body shape value."""
+
+    shape_names = {
+        0: "sphere",
+        1: "box",
+        2: "capsule",
+    }
+
+    try:
+        return shape_names[value]
+    except KeyError:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation="validating rigid-body shape",
+            reason=(
+                f"invalid rigid-body shape {value}; expected "
+                "0 for sphere, 1 for box, or 2 for capsule."
+            ),
+        )
+
+
+def _decode_pmx_rigid_body_physics_mode(
+    value: int,
+    *,
+    record_index: int,
+    offset: int,
+) -> str:
+    """Validate and decode one PMX rigid-body physics mode."""
+
+    mode_names = {
+        0: "bone_follow",
+        1: "physics",
+        2: "physics_with_bone_alignment",
+    }
+
+    try:
+        return mode_names[value]
+    except KeyError:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation="validating rigid-body physics mode",
+            reason=(
+                f"invalid physics mode {value}; expected a value from 0 through 2."
+            ),
+        )
+
+
+def _read_pmx_rigid_body(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    record_index: int,
+) -> PmxRigidBody:
+    """Read and validate one PMX rigid-body record."""
+
+    if result.encoding is None:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading rigid body",
+            reason="PMX text encoding is unavailable.",
+        )
+
+    if result.index_sizes is None or result.bone_count is None:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading rigid body",
+            reason="PMX index sizes or bone count are unavailable.",
+        )
+
+    require_even_length = result.encoding == "utf-16-le"
+
+    with reader.context("rigid_bodies", record_index=record_index):
+        local_name = reader.read_length_prefixed_text(
+            "local rigid-body name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+        universal_name = reader.read_length_prefixed_text(
+            "universal rigid-body name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+
+        bone_index_offset = reader.offset
+        bone_index = reader.read_index(
+            result.index_sizes.bone,
+            signed=True,
+            label="rigid-body bone index",
+        )
+        _validate_pmx_bone_index(
+            bone_index,
+            bone_count=result.bone_count,
+            section="rigid_bodies",
+            record_index=record_index,
+            label="rigid-body bone index",
+            offset=bone_index_offset,
+            allow_sentinel=True,
+        )
+
+        collision_group_offset = reader.offset
+        collision_group = reader.read_uint8("rigid-body collision group")
+        if collision_group > 15:
+            _raise_pmx_error(
+                section="rigid_bodies",
+                record_index=record_index,
+                offset=collision_group_offset,
+                operation="validating rigid-body collision group",
+                reason=(
+                    f"collision group {collision_group} is invalid; "
+                    "expected a value from 0 through 15."
+                ),
+            )
+
+        collision_mask = _read_pmx_uint16(
+            reader,
+            "rigid-body collision mask",
+        )
+
+        shape_offset = reader.offset
+        shape = reader.read_uint8("rigid-body shape")
+        shape_name = _decode_pmx_rigid_body_shape(
+            shape,
+            record_index=record_index,
+            offset=shape_offset,
+        )
+
+        size_offset = reader.offset
+        size = _read_pmx_vec3(reader, "rigid-body size")
+        _validate_pmx_finite_vec3(
+            size,
+            section="rigid_bodies",
+            record_index=record_index,
+            label="rigid-body size",
+            offset=size_offset,
+            nonnegative=True,
+        )
+
+        position_offset = reader.offset
+        position = _read_pmx_vec3(reader, "rigid-body position")
+        _validate_pmx_finite_vec3(
+            position,
+            section="rigid_bodies",
+            record_index=record_index,
+            label="rigid-body position",
+            offset=position_offset,
+            nonnegative=False,
+        )
+
+        rotation_offset = reader.offset
+        rotation = _read_pmx_vec3(reader, "rigid-body rotation")
+        _validate_pmx_finite_vec3(
+            rotation,
+            section="rigid_bodies",
+            record_index=record_index,
+            label="rigid-body rotation",
+            offset=rotation_offset,
+            nonnegative=False,
+        )
+
+        scalar_fields: list[tuple[str, float, int]] = []
+        for scalar_label in (
+            "rigid-body mass",
+            "rigid-body linear damping",
+            "rigid-body angular damping",
+            "rigid-body restitution",
+            "rigid-body friction",
+        ):
+            scalar_offset = reader.offset
+            scalar_value = reader.read_float32(scalar_label)
+            _validate_pmx_finite_scalar(
+                scalar_value,
+                section="rigid_bodies",
+                record_index=record_index,
+                label=scalar_label,
+                offset=scalar_offset,
+                nonnegative=True,
+            )
+            scalar_fields.append((scalar_label, scalar_value, scalar_offset))
+
+        physics_mode_offset = reader.offset
+        physics_mode = reader.read_uint8("rigid-body physics mode")
+        physics_mode_name = _decode_pmx_rigid_body_physics_mode(
+            physics_mode,
+            record_index=record_index,
+            offset=physics_mode_offset,
+        )
+
+    return PmxRigidBody(
+        local_name=local_name,
+        universal_name=universal_name,
+        bone_index=bone_index,
+        collision_group=collision_group,
+        collision_mask=collision_mask,
+        shape=shape,
+        shape_name=shape_name,
+        size=size,
+        position=position,
+        rotation=rotation,
+        mass=scalar_fields[0][1],
+        linear_damping=scalar_fields[1][1],
+        angular_damping=scalar_fields[2][1],
+        restitution=scalar_fields[3][1],
+        friction=scalar_fields[4][1],
+        physics_mode=physics_mode,
+        physics_mode_name=physics_mode_name,
+    )
+
+
+def _validate_pmx_impulse_rigid_body_references(
+    result: PmxHeaderScanResult,
+    *,
+    offset: int,
+) -> None:
+    """Validate impulse-morph references after rigid bodies are known."""
+
+    if result.rigid_body_count is None:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            offset=offset,
+            operation="validating impulse morph references",
+            reason="PMX rigid-body count is unavailable.",
+        )
+
+    for morph_index, morph in enumerate(result.morphs):
+        for offset_index, morph_offset in enumerate(morph.offsets):
+            if not isinstance(morph_offset, PmxImpulseMorphOffset):
+                continue
+
+            _validate_pmx_index_range(
+                morph_offset.rigid_body_index,
+                count=result.rigid_body_count,
+                section=f"morphs[{morph_index}].offsets",
+                record_index=offset_index,
+                label="impulse morph rigid-body index",
+                offset=offset,
+                allow_sentinel=False,
+            )
+
+
+def _scan_pmx_rigid_bodies(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Read PMX rigid bodies and resolve impulse-morph references."""
+
+    if result.index_sizes is None:
+        _raise_pmx_error(
+            section="rigid_bodies",
+            offset=reader.offset,
+            operation="starting rigid-body scan",
+            reason="PMX index sizes are unavailable.",
+        )
+
+    count_offset = reader.offset
+    with reader.context("rigid_bodies"):
+        rigid_body_count = reader.read_bounded_count(
+            "rigid-body count",
+            max_count=MAX_PMX_RIGID_BODY_COUNT,
+            minimum_item_size=_minimum_pmx_rigid_body_size(result.index_sizes),
+        )
+
+    result.rigid_body_count = rigid_body_count
+    result.rigid_bodies = [
+        _read_pmx_rigid_body(
+            reader,
+            result,
+            record_index=record_index,
+        )
+        for record_index in range(rigid_body_count)
+    ]
+
+    _validate_pmx_impulse_rigid_body_references(
+        result,
+        offset=count_offset,
+    )
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -2954,7 +3379,7 @@ def scan_pmx_header(
 def scan_pmx_structure(
     file_path: str | Path,
 ) -> PmxHeaderScanResult:
-    """Scan PMX header through the display-frame section."""
+    """Scan PMX header through the rigid-body section."""
 
     path = Path(file_path)
     result = PmxHeaderScanResult()
@@ -2993,6 +3418,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_display_frames(
+                    reader,
+                    result,
+                )
+                _scan_pmx_rigid_bodies(
                     reader,
                     result,
                 )

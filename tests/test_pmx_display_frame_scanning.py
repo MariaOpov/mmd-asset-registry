@@ -244,7 +244,7 @@ class PmxDisplayFrameScanningTests(unittest.TestCase):
         cases = (
             ("negative", -1),
             ("over_limit", MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT + 1),
-            ("impossible", 1),
+            ("impossible", 3),
         )
 
         for label, count in cases:
@@ -392,7 +392,7 @@ class PmxDisplayFrameScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_element.pmx",
-            fixture_data[:-1],
+            fixture_data[:-5],
         )
 
         result = scan_pmx_structure(fixture)

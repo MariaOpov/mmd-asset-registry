@@ -20,6 +20,7 @@ from tests.mmd_fixtures import (
     build_pmx_impulse_morph_offset,
     build_pmx_material_morph_offset,
     build_pmx_morph,
+    build_pmx_rigid_body,
     build_pmx_structure,
     build_pmx_uv_morph_offset,
     build_pmx_vertex_morph_offset,
@@ -187,7 +188,11 @@ class PmxMorphScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "pmx21_morphs.pmx",
-            build_pmx_structure(version=2.1, morphs=morphs),
+            build_pmx_structure(
+                version=2.1,
+                morphs=morphs,
+                rigid_bodies=(build_pmx_rigid_body(),),
+            ),
         )
 
         result = scan_pmx_structure(fixture)
@@ -487,7 +492,7 @@ class PmxMorphScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_morph.pmx",
-            fixture_data[:-5],
+            fixture_data[:-9],
         )
 
         result = scan_pmx_structure(fixture)

@@ -542,6 +542,252 @@ def build_pmx_bone(
     return b"".join(parts)
 
 
+def build_pmx_group_morph_offset(
+    *,
+    morph_index: int = 0,
+    weight: float = 1.0,
+    morph_index_size: int = 1,
+) -> bytes:
+    """Build one PMX group-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                morph_index,
+                size=morph_index_size,
+                signed=True,
+            ),
+            struct.pack("<f", weight),
+        ]
+    )
+
+
+def build_pmx_vertex_morph_offset(
+    *,
+    vertex_index: int = 0,
+    translation: tuple[float, float, float] = (
+        0.1,
+        0.2,
+        0.3,
+    ),
+    vertex_index_size: int = 1,
+) -> bytes:
+    """Build one PMX vertex-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                vertex_index,
+                size=vertex_index_size,
+                signed=False,
+            ),
+            struct.pack("<3f", *translation),
+        ]
+    )
+
+
+def build_pmx_bone_morph_offset(
+    *,
+    bone_index: int = 0,
+    translation: tuple[float, float, float] = (
+        0.1,
+        0.2,
+        0.3,
+    ),
+    rotation: tuple[float, float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ),
+    bone_index_size: int = 1,
+) -> bytes:
+    """Build one PMX bone-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                bone_index,
+                size=bone_index_size,
+                signed=True,
+            ),
+            struct.pack("<3f", *translation),
+            struct.pack("<4f", *rotation),
+        ]
+    )
+
+
+def build_pmx_uv_morph_offset(
+    *,
+    vertex_index: int = 0,
+    uv_offset: tuple[float, float, float, float] = (
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+    ),
+    vertex_index_size: int = 1,
+) -> bytes:
+    """Build one PMX UV-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                vertex_index,
+                size=vertex_index_size,
+                signed=False,
+            ),
+            struct.pack("<4f", *uv_offset),
+        ]
+    )
+
+
+def build_pmx_material_morph_offset(
+    *,
+    material_index: int = 0,
+    operation: int = 1,
+    diffuse: tuple[float, float, float, float] = (
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ),
+    specular: tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+    ),
+    specular_strength: float = 0.0,
+    ambient: tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+    ),
+    edge_color: tuple[float, float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ),
+    edge_scale: float = 0.0,
+    texture_tint: tuple[float, float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ),
+    sphere_tint: tuple[float, float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ),
+    toon_tint: tuple[float, float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ),
+    material_index_size: int = 1,
+) -> bytes:
+    """Build one PMX material-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                material_index,
+                size=material_index_size,
+                signed=True,
+            ),
+            struct.pack("<B", operation),
+            struct.pack("<4f", *diffuse),
+            struct.pack("<3f", *specular),
+            struct.pack("<f", specular_strength),
+            struct.pack("<3f", *ambient),
+            struct.pack("<4f", *edge_color),
+            struct.pack("<f", edge_scale),
+            struct.pack("<4f", *texture_tint),
+            struct.pack("<4f", *sphere_tint),
+            struct.pack("<4f", *toon_tint),
+        ]
+    )
+
+
+def build_pmx_flip_morph_offset(
+    *,
+    morph_index: int = 0,
+    weight: float = 1.0,
+    morph_index_size: int = 1,
+) -> bytes:
+    """Build one PMX 2.1 flip-morph offset."""
+
+    return build_pmx_group_morph_offset(
+        morph_index=morph_index,
+        weight=weight,
+        morph_index_size=morph_index_size,
+    )
+
+
+def build_pmx_impulse_morph_offset(
+    *,
+    rigid_body_index: int = 0,
+    local_flag: int = 0,
+    velocity: tuple[float, float, float] = (
+        1.0,
+        2.0,
+        3.0,
+    ),
+    angular_torque: tuple[float, float, float] = (
+        4.0,
+        5.0,
+        6.0,
+    ),
+    rigid_body_index_size: int = 1,
+) -> bytes:
+    """Build one PMX 2.1 impulse-morph offset."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                rigid_body_index,
+                size=rigid_body_index_size,
+                signed=True,
+            ),
+            struct.pack("<B", local_flag),
+            struct.pack("<3f", *velocity),
+            struct.pack("<3f", *angular_torque),
+        ]
+    )
+
+
+def build_pmx_morph(
+    *,
+    local_name: str = "Morph",
+    universal_name: str = "Morph",
+    panel: int = 4,
+    morph_type: int = 1,
+    offsets: tuple[bytes, ...] = (),
+    encoding_flag: int = 1,
+    offset_count_override: int | None = None,
+) -> bytes:
+    """Build one PMX morph record from prebuilt offsets."""
+
+    offset_count = (
+        len(offsets) if offset_count_override is None else offset_count_override
+    )
+
+    return b"".join(
+        [
+            _encode_pmx_text(local_name, encoding_flag),
+            _encode_pmx_text(universal_name, encoding_flag),
+            struct.pack("<B", panel),
+            struct.pack("<B", morph_type),
+            struct.pack("<i", offset_count),
+            b"".join(offsets),
+        ]
+    )
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -567,8 +813,10 @@ def build_pmx_structure(
     material_count_override: int | None = None,
     bones: tuple[bytes, ...] = (),
     bone_count_override: int | None = None,
+    morphs: tuple[bytes, ...] = (),
+    morph_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the bone section."""
+    """Build a PMX fixture through the morph section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -645,6 +893,9 @@ def build_pmx_structure(
     bone_count = len(bones) if bone_count_override is None else bone_count_override
     bone_data = b"".join(bones)
 
+    morph_count = len(morphs) if morph_count_override is None else morph_count_override
+    morph_data = b"".join(morphs)
+
     return b"".join(
         [
             header,
@@ -673,5 +924,10 @@ def build_pmx_structure(
                 bone_count,
             ),
             bone_data,
+            struct.pack(
+                "<i",
+                morph_count,
+            ),
+            morph_data,
         ]
     )

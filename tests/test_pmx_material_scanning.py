@@ -440,7 +440,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_material.pmx",
-            fixture_data[:-5],
+            fixture_data[:-9],
         )
 
         result = scan_pmx_structure(fixture)

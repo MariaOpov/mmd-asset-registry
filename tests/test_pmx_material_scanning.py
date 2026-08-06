@@ -22,9 +22,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.temp_directory = tempfile.TemporaryDirectory()
-        self.project_root = Path(
-            self.temp_directory.name
-        )
+        self.project_root = Path(self.temp_directory.name)
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
@@ -246,10 +244,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertTrue(
-            any(
-                "material sphere texture index" in error
-                for error in result.errors
-            )
+            any("material sphere texture index" in error for error in result.errors)
         )
 
     def test_rejects_invalid_sphere_mode(self) -> None:
@@ -269,10 +264,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertTrue(
-            any(
-                "invalid sphere mode 4" in error
-                for error in result.errors
-            )
+            any("invalid sphere mode 4" in error for error in result.errors)
         )
 
     def test_rejects_invalid_toon_reference_mode(self) -> None:
@@ -292,10 +284,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertTrue(
-            any(
-                "invalid toon reference mode 2" in error
-                for error in result.errors
-            )
+            any("invalid toon reference mode 2" in error for error in result.errors)
         )
 
     def test_rejects_invalid_shared_toon_index(self) -> None:
@@ -316,10 +305,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertTrue(
-            any(
-                "invalid shared toon index 10" in error
-                for error in result.errors
-            )
+            any("invalid shared toon index 10" in error for error in result.errors)
         )
 
     def test_rejects_out_of_range_toon_texture_index(
@@ -343,10 +329,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
 
         self.assertEqual(result.status, "error")
         self.assertTrue(
-            any(
-                "material toon texture index" in error
-                for error in result.errors
-            )
+            any("material toon texture index" in error for error in result.errors)
         )
 
     def test_rejects_non_triangle_material_surface_count(
@@ -369,8 +352,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertTrue(
             any(
-                "materials[0]" in error
-                and "must be divisible by 3" in error
+                "materials[0]" in error and "must be divisible by 3" in error
                 for error in result.errors
             )
         )
@@ -419,8 +401,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertTrue(
             any(
-                "cumulative material surface index count 6"
-                in error
+                "cumulative material surface index count 6" in error
                 for error in result.errors
             )
         )
@@ -434,9 +415,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
                 deform_types=(),
                 surface_indices=(),
                 materials=(),
-                material_count_override=(
-                    MAX_PMX_MATERIAL_COUNT + 1
-                ),
+                material_count_override=(MAX_PMX_MATERIAL_COUNT + 1),
             ),
         )
 
@@ -445,8 +424,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertTrue(
             any(
-                "material count" in error
-                and "exceeds the safety limit" in error
+                "material count" in error and "exceeds the safety limit" in error
                 for error in result.errors
             )
         )
@@ -462,7 +440,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_material.pmx",
-            fixture_data[:-1],
+            fixture_data[:-5],
         )
 
         result = scan_pmx_structure(fixture)
@@ -470,8 +448,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertTrue(
             any(
-                "materials[0]" in error
-                and "material surface index count" in error
+                "materials[0]" in error and "material surface index count" in error
                 for error in result.errors
             )
         )
@@ -503,9 +480,7 @@ class PmxMaterialScanningTests(unittest.TestCase):
             "Body",
         )
         self.assertEqual(
-            payload["materials"][0][
-                "toon_reference_mode"
-            ],
+            payload["materials"][0]["toon_reference_mode"],
             "shared",
         )
         self.assertIn(

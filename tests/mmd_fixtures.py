@@ -349,6 +349,199 @@ def build_pmx_material(
     return b"".join(parts)
 
 
+def build_pmx_ik_link(
+    *,
+    bone_index: int = 0,
+    angle_limit_flag: int = 0,
+    lower_limit: tuple[float, float, float] = (
+        -0.5,
+        -0.5,
+        -0.5,
+    ),
+    upper_limit: tuple[float, float, float] = (
+        0.5,
+        0.5,
+        0.5,
+    ),
+    bone_index_size: int = 1,
+) -> bytes:
+    """Build one PMX IK-link record."""
+
+    parts = [
+        _pack_pmx_index(
+            bone_index,
+            size=bone_index_size,
+            signed=True,
+        ),
+        struct.pack("<B", angle_limit_flag),
+    ]
+
+    if angle_limit_flag == 1:
+        parts.extend(
+            [
+                struct.pack("<3f", *lower_limit),
+                struct.pack("<3f", *upper_limit),
+            ]
+        )
+
+    return b"".join(parts)
+
+
+def build_pmx_bone(
+    *,
+    local_name: str = "Bone",
+    universal_name: str = "Bone",
+    position: tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+    ),
+    parent_bone_index: int = -1,
+    transform_layer: int = 0,
+    tail_bone_index: int | None = None,
+    tail_offset: tuple[float, float, float] = (
+        0.0,
+        1.0,
+        0.0,
+    ),
+    inherit_rotation: bool = False,
+    inherit_translation: bool = False,
+    inherit_parent_bone_index: int = -1,
+    inherit_weight: float = 0.0,
+    fixed_axis: tuple[float, float, float] | None = None,
+    local_axes: tuple[
+        tuple[float, float, float],
+        tuple[float, float, float],
+    ]
+    | None = None,
+    external_parent_key: int | None = None,
+    ik_target_bone_index: int | None = None,
+    ik_loop_count: int = 1,
+    ik_angle_limit: float = 0.5,
+    ik_links: tuple[bytes, ...] = (),
+    ik_link_count_override: int | None = None,
+    extra_flags: int = 0,
+    flags_override: int | None = None,
+    encoding_flag: int = 1,
+    bone_index_size: int = 1,
+) -> bytes:
+    """Build one PMX bone record with flag-controlled fields."""
+
+    if flags_override is None:
+        flags = extra_flags
+
+        if tail_bone_index is not None:
+            flags |= 0x0001
+        if inherit_rotation:
+            flags |= 0x0100
+        if inherit_translation:
+            flags |= 0x0200
+        if fixed_axis is not None:
+            flags |= 0x0400
+        if local_axes is not None:
+            flags |= 0x0800
+        if external_parent_key is not None:
+            flags |= 0x2000
+        if ik_target_bone_index is not None:
+            flags |= 0x0020
+    else:
+        flags = flags_override
+
+    parts = [
+        _encode_pmx_text(
+            local_name,
+            encoding_flag,
+        ),
+        _encode_pmx_text(
+            universal_name,
+            encoding_flag,
+        ),
+        struct.pack("<3f", *position),
+        _pack_pmx_index(
+            parent_bone_index,
+            size=bone_index_size,
+            signed=True,
+        ),
+        struct.pack("<i", transform_layer),
+        struct.pack("<H", flags),
+    ]
+
+    if flags & 0x0001:
+        parts.append(
+            _pack_pmx_index(
+                (-1 if tail_bone_index is None else tail_bone_index),
+                size=bone_index_size,
+                signed=True,
+            )
+        )
+    else:
+        parts.append(struct.pack("<3f", *tail_offset))
+
+    if flags & (0x0100 | 0x0200):
+        parts.extend(
+            [
+                _pack_pmx_index(
+                    inherit_parent_bone_index,
+                    size=bone_index_size,
+                    signed=True,
+                ),
+                struct.pack("<f", inherit_weight),
+            ]
+        )
+
+    if flags & 0x0400:
+        axis = (1.0, 0.0, 0.0) if fixed_axis is None else fixed_axis
+        parts.append(struct.pack("<3f", *axis))
+
+    if flags & 0x0800:
+        axes = (
+            (
+                (1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0),
+            )
+            if local_axes is None
+            else local_axes
+        )
+        parts.extend(
+            [
+                struct.pack("<3f", *axes[0]),
+                struct.pack("<3f", *axes[1]),
+            ]
+        )
+
+    if flags & 0x2000:
+        parts.append(
+            struct.pack(
+                "<i",
+                (0 if external_parent_key is None else external_parent_key),
+            )
+        )
+
+    if flags & 0x0020:
+        parts.extend(
+            [
+                _pack_pmx_index(
+                    (-1 if ik_target_bone_index is None else ik_target_bone_index),
+                    size=bone_index_size,
+                    signed=True,
+                ),
+                struct.pack("<i", ik_loop_count),
+                struct.pack("<f", ik_angle_limit),
+                struct.pack(
+                    "<i",
+                    (
+                        len(ik_links)
+                        if ik_link_count_override is None
+                        else ik_link_count_override
+                    ),
+                ),
+                b"".join(ik_links),
+            ]
+        )
+
+    return b"".join(parts)
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -372,8 +565,10 @@ def build_pmx_structure(
     texture_count_override: int | None = None,
     materials: tuple[bytes, ...] | None = None,
     material_count_override: int | None = None,
+    bones: tuple[bytes, ...] = (),
+    bone_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the material section."""
+    """Build a PMX fixture through the bone section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -447,6 +642,9 @@ def build_pmx_structure(
     )
     material_data = b"".join(material_records)
 
+    bone_count = len(bones) if bone_count_override is None else bone_count_override
+    bone_data = b"".join(bones)
+
     return b"".join(
         [
             header,
@@ -470,5 +668,10 @@ def build_pmx_structure(
                 material_count,
             ),
             material_data,
+            struct.pack(
+                "<i",
+                bone_count,
+            ),
+            bone_data,
         ]
     )

@@ -202,7 +202,7 @@ class PmxTextureScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_texture.pmx",
-            fixture_data[:-5],
+            fixture_data[:-9],
         )
 
         result = scan_pmx_structure(fixture)
@@ -226,10 +226,11 @@ class PmxTextureScanningTests(unittest.TestCase):
         )
         fixture_data = b"".join(
             [
-                fixture_data[:-8],
+                fixture_data[:-12],
                 struct.pack("<i", 1),
                 struct.pack("<i", 1),
                 b"\xff",
+                struct.pack("<i", 0),
                 struct.pack("<i", 0),
             ]
         )

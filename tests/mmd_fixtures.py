@@ -788,6 +788,63 @@ def build_pmx_morph(
     )
 
 
+def build_pmx_display_frame_element(
+    *,
+    target_type: int = 0,
+    target_index: int = 0,
+    bone_index_size: int = 1,
+    morph_index_size: int = 1,
+) -> bytes:
+    """Build one PMX display-frame bone or morph element."""
+
+    if target_type == 0:
+        index_size = bone_index_size
+    elif target_type == 1:
+        index_size = morph_index_size
+    else:
+        index_size = min(
+            bone_index_size,
+            morph_index_size,
+        )
+
+    return b"".join(
+        [
+            struct.pack("<B", target_type),
+            _pack_pmx_index(
+                target_index,
+                size=index_size,
+                signed=True,
+            ),
+        ]
+    )
+
+
+def build_pmx_display_frame(
+    *,
+    local_name: str = "Display Frame",
+    universal_name: str = "Display Frame",
+    special_flag: int = 0,
+    elements: tuple[bytes, ...] = (),
+    encoding_flag: int = 1,
+    element_count_override: int | None = None,
+) -> bytes:
+    """Build one PMX display-frame record."""
+
+    element_count = (
+        len(elements) if element_count_override is None else element_count_override
+    )
+
+    return b"".join(
+        [
+            _encode_pmx_text(local_name, encoding_flag),
+            _encode_pmx_text(universal_name, encoding_flag),
+            struct.pack("<B", special_flag),
+            struct.pack("<i", element_count),
+            b"".join(elements),
+        ]
+    )
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -815,8 +872,10 @@ def build_pmx_structure(
     bone_count_override: int | None = None,
     morphs: tuple[bytes, ...] = (),
     morph_count_override: int | None = None,
+    display_frames: tuple[bytes, ...] = (),
+    display_frame_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the morph section."""
+    """Build a PMX fixture through the display-frame section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -896,6 +955,13 @@ def build_pmx_structure(
     morph_count = len(morphs) if morph_count_override is None else morph_count_override
     morph_data = b"".join(morphs)
 
+    display_frame_count = (
+        len(display_frames)
+        if display_frame_count_override is None
+        else display_frame_count_override
+    )
+    display_frame_data = b"".join(display_frames)
+
     return b"".join(
         [
             header,
@@ -929,5 +995,10 @@ def build_pmx_structure(
                 morph_count,
             ),
             morph_data,
+            struct.pack(
+                "<i",
+                display_frame_count,
+            ),
+            display_frame_data,
         ]
     )

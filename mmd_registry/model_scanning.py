@@ -39,6 +39,9 @@ MAX_PMX_TOTAL_IK_LINK_COUNT: Final[int] = 1_000_000
 MAX_PMX_MORPH_COUNT: Final[int] = 200_000
 MAX_PMX_MORPH_OFFSET_COUNT: Final[int] = 2_000_000
 MAX_PMX_TOTAL_MORPH_OFFSET_COUNT: Final[int] = 5_000_000
+MAX_PMX_DISPLAY_FRAME_COUNT: Final[int] = 100_000
+MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 1_000_000
+MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 5_000_000
 
 PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
 PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
@@ -404,6 +407,43 @@ class PmxMorph:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PmxDisplayFrameElement:
+    """One bone or morph reference inside a PMX display frame."""
+
+    target_type: Literal["bone", "morph"]
+    target_index: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "target_type": self.target_type,
+            "target_index": self.target_index,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxDisplayFrame:
+    """Structural metadata extracted from one PMX display frame."""
+
+    local_name: str
+    universal_name: str
+    special: bool
+    elements: tuple[PmxDisplayFrameElement, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "special": self.special,
+            "element_count": len(self.elements),
+            "elements": [element.to_dict() for element in self.elements],
+        }
+
+
 @dataclass(slots=True)
 class PmxHeaderScanResult:
     """Result of scanning PMX header, model information, and early sections."""
@@ -427,6 +467,8 @@ class PmxHeaderScanResult:
     bones: list[PmxBone] = field(default_factory=list)
     morph_count: int | None = None
     morphs: list[PmxMorph] = field(default_factory=list)
+    display_frame_count: int | None = None
+    display_frames: list[PmxDisplayFrame] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -472,6 +514,10 @@ class PmxHeaderScanResult:
             "bones": [bone.to_dict() for bone in self.bones],
             "morph_count": self.morph_count,
             "morphs": [morph.to_dict() for morph in self.morphs],
+            "display_frame_count": self.display_frame_count,
+            "display_frames": [
+                display_frame.to_dict() for display_frame in self.display_frames
+            ],
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
             "errors": list(self.errors),
@@ -2483,6 +2529,280 @@ def _scan_pmx_morphs(
     result.morphs = morphs
 
 
+def _minimum_pmx_display_frame_size() -> int:
+    """Return the smallest possible PMX display-frame record size."""
+
+    text_length_fields = 8
+    special_flag_size = 1
+    element_count_size = 4
+
+    return text_length_fields + special_flag_size + element_count_size
+
+
+def _minimum_pmx_display_frame_element_size(
+    index_sizes: PmxIndexSizes,
+) -> int:
+    """Return the smallest possible PMX display-frame element size."""
+
+    target_type_size = 1
+    target_index_size = min(
+        index_sizes.bone,
+        index_sizes.morph,
+    )
+
+    return target_type_size + target_index_size
+
+
+def _validate_pmx_display_frame_target_index(
+    value: int,
+    *,
+    target_type: Literal["bone", "morph"],
+    target_count: int,
+    frame_record_index: int,
+    element_index: int,
+    offset: int,
+) -> None:
+    """Validate one display-frame bone or morph reference."""
+
+    if value < 0 or value >= target_count:
+        if target_count == 0:
+            expected = f"no valid {target_type} index exists"
+        else:
+            expected = f"expected a value from 0 through {target_count - 1}"
+
+        _raise_pmx_error(
+            section=(f"display_frames[{frame_record_index}].elements"),
+            record_index=element_index,
+            offset=offset,
+            operation=(f"validating display-frame {target_type} index"),
+            reason=(
+                f"index {value} is invalid for {target_type} count "
+                f"{target_count}; {expected}."
+            ),
+        )
+
+
+def _read_pmx_display_frame_element(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    frame_record_index: int,
+    element_index: int,
+) -> PmxDisplayFrameElement:
+    """Read and validate one PMX display-frame element."""
+
+    if result.index_sizes is None:
+        _raise_pmx_error(
+            section=(f"display_frames[{frame_record_index}].elements"),
+            record_index=element_index,
+            offset=reader.offset,
+            operation="reading display-frame element",
+            reason="PMX index sizes are unavailable.",
+        )
+
+    if result.bone_count is None:
+        _raise_pmx_error(
+            section=(f"display_frames[{frame_record_index}].elements"),
+            record_index=element_index,
+            offset=reader.offset,
+            operation="reading display-frame element",
+            reason="PMX bone count is unavailable.",
+        )
+
+    if result.morph_count is None:
+        _raise_pmx_error(
+            section=(f"display_frames[{frame_record_index}].elements"),
+            record_index=element_index,
+            offset=reader.offset,
+            operation="reading display-frame element",
+            reason="PMX morph count is unavailable.",
+        )
+
+    section = f"display_frames[{frame_record_index}].elements"
+
+    with reader.context(
+        section,
+        record_index=element_index,
+    ):
+        target_type_offset = reader.offset
+        target_type_value = reader.read_uint8("display-frame element target type")
+
+        if target_type_value == 0:
+            target_type: Literal["bone", "morph"] = "bone"
+            target_count = result.bone_count
+            target_index_size = result.index_sizes.bone
+        elif target_type_value == 1:
+            target_type = "morph"
+            target_count = result.morph_count
+            target_index_size = result.index_sizes.morph
+        else:
+            _raise_pmx_error(
+                section=section,
+                record_index=element_index,
+                offset=target_type_offset,
+                operation=("validating display-frame element target type"),
+                reason=(
+                    f"invalid target type {target_type_value}; "
+                    "expected 0 for bone or 1 for morph."
+                ),
+            )
+
+        target_index_offset = reader.offset
+        target_index = reader.read_index(
+            target_index_size,
+            signed=True,
+            label=(f"display-frame {target_type} index"),
+        )
+
+    _validate_pmx_display_frame_target_index(
+        target_index,
+        target_type=target_type,
+        target_count=target_count,
+        frame_record_index=frame_record_index,
+        element_index=element_index,
+        offset=target_index_offset,
+    )
+
+    return PmxDisplayFrameElement(
+        target_type=target_type,
+        target_index=target_index,
+    )
+
+
+def _read_pmx_display_frame(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    record_index: int,
+) -> PmxDisplayFrame:
+    """Read one PMX display-frame record."""
+
+    if result.encoding is None:
+        _raise_pmx_error(
+            section="display_frames",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading display frame",
+            reason="PMX text encoding is unavailable.",
+        )
+
+    if result.index_sizes is None:
+        _raise_pmx_error(
+            section="display_frames",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading display frame",
+            reason="PMX index sizes are unavailable.",
+        )
+
+    require_even_length = result.encoding == "utf-16-le"
+
+    with reader.context(
+        "display_frames",
+        record_index=record_index,
+    ):
+        local_name = reader.read_length_prefixed_text(
+            "local display-frame name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+        universal_name = reader.read_length_prefixed_text(
+            "universal display-frame name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+
+        special_flag_offset = reader.offset
+        special_flag = reader.read_uint8("display-frame special flag")
+
+        if special_flag not in {0, 1}:
+            _raise_pmx_error(
+                section="display_frames",
+                record_index=record_index,
+                offset=special_flag_offset,
+                operation="validating display-frame special flag",
+                reason=(f"invalid special flag {special_flag}; expected 0 or 1."),
+            )
+
+        element_count = reader.read_bounded_count(
+            "display-frame element count",
+            max_count=MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT,
+            minimum_item_size=(
+                _minimum_pmx_display_frame_element_size(result.index_sizes)
+            ),
+        )
+
+    elements = tuple(
+        _read_pmx_display_frame_element(
+            reader,
+            result,
+            frame_record_index=record_index,
+            element_index=element_index,
+        )
+        for element_index in range(element_count)
+    )
+
+    return PmxDisplayFrame(
+        local_name=local_name,
+        universal_name=universal_name,
+        special=bool(special_flag),
+        elements=elements,
+    )
+
+
+def _scan_pmx_display_frames(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Read PMX display frames and validate bone/morph references."""
+
+    if result.index_sizes is None:
+        _raise_pmx_error(
+            section="display_frames",
+            offset=reader.offset,
+            operation="starting display-frame scan",
+            reason="PMX index sizes are unavailable.",
+        )
+
+    with reader.context("display_frames"):
+        display_frame_count = reader.read_bounded_count(
+            "display-frame count",
+            max_count=MAX_PMX_DISPLAY_FRAME_COUNT,
+            minimum_item_size=_minimum_pmx_display_frame_size(),
+        )
+
+    result.display_frame_count = display_frame_count
+    display_frames: list[PmxDisplayFrame] = []
+    total_element_count = 0
+
+    for record_index in range(display_frame_count):
+        display_frame = _read_pmx_display_frame(
+            reader,
+            result,
+            record_index=record_index,
+        )
+        display_frames.append(display_frame)
+        total_element_count += len(display_frame.elements)
+
+        if total_element_count > MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT:
+            _raise_pmx_error(
+                section="display_frames",
+                record_index=record_index,
+                offset=reader.offset,
+                operation=("validating total display-frame element count"),
+                reason=(
+                    f"cumulative display-frame element count "
+                    f"{total_element_count} exceeds the safety "
+                    "limit of "
+                    f"{MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT}."
+                ),
+            )
+
+    result.display_frames = display_frames
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -2634,7 +2954,7 @@ def scan_pmx_header(
 def scan_pmx_structure(
     file_path: str | Path,
 ) -> PmxHeaderScanResult:
-    """Scan PMX header through the morph section."""
+    """Scan PMX header through the display-frame section."""
 
     path = Path(file_path)
     result = PmxHeaderScanResult()
@@ -2669,6 +2989,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_morphs(
+                    reader,
+                    result,
+                )
+                _scan_pmx_display_frames(
                     reader,
                     result,
                 )

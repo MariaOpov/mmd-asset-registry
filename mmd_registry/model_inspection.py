@@ -8,6 +8,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, Final, Literal
 
+from mmd_registry.binary_reader import (
+    BinaryParseError,
+    BinaryReader,
+)
+
 
 PMX_MAGIC: Final[bytes] = b"PMX "
 PMD_MAGIC: Final[bytes] = b"Pmd"
@@ -67,34 +72,70 @@ class ModelInspectionResult:
 
 
 def _read_exact(
-    file: BinaryIO,
+    reader: BinaryReader,
     size: int,
     label: str,
 ) -> bytes:
-    """Read exactly size bytes or raise a clear truncated-file failure."""
+    """Read exactly size bytes while preserving inspection error wording."""
 
-    data = file.read(size)
+    available = reader.remaining
 
-    if len(data) != size:
+    if size > available:
         raise _InspectionFailure(
             f"Truncated file while reading {label}: "
-            f"expected {size} bytes, found {len(data)}."
+            f"expected {size} bytes, found {available}."
         )
 
-    return data
+    try:
+        return reader.read_exact(size, label)
+    except BinaryParseError as error:
+        raise _InspectionFailure(str(error)) from error
+
+
+def _read_float32(
+    reader: BinaryReader,
+    label: str,
+) -> float:
+    """Read one little-endian float32 with inspection-compatible errors."""
+
+    return struct.unpack(
+        "<f",
+        _read_exact(reader, 4, label),
+    )[0]
+
+
+def _read_int32(
+    reader: BinaryReader,
+    label: str,
+) -> int:
+    """Read one little-endian signed int32."""
+
+    return struct.unpack(
+        "<i",
+        _read_exact(reader, 4, label),
+    )[0]
+
+
+def _read_uint8(
+    reader: BinaryReader,
+    label: str,
+) -> int:
+    """Read one unsigned byte."""
+
+    return _read_exact(reader, 1, label)[0]
 
 
 def _read_supported_version(
-    file: BinaryIO,
+    reader: BinaryReader,
     format_name: str,
     supported_versions: tuple[float, ...],
 ) -> float:
     """Read and normalize a supported little-endian float version."""
 
-    raw_version = struct.unpack(
-        "<f",
-        _read_exact(file, 4, f"{format_name} version"),
-    )[0]
+    raw_version = _read_float32(
+        reader,
+        f"{format_name} version",
+    )
 
     if not math.isfinite(raw_version):
         raise _InspectionFailure(f"{format_name} header contains a non-finite version.")
@@ -127,110 +168,119 @@ def _decode_text(
 
 
 def _inspect_pmx(
-    file: BinaryIO,
+    reader: BinaryReader,
     result: ModelInspectionResult,
 ) -> None:
     """Inspect the PMX header and first model-name field."""
 
-    result.version = _read_supported_version(
-        file,
-        "PMX",
-        SUPPORTED_PMX_VERSIONS,
-    )
-
-    global_count = _read_exact(file, 1, "PMX global-count field")[0]
-
-    if global_count < MIN_PMX_GLOBAL_COUNT:
-        raise _InspectionFailure(
-            f"PMX global-count value {global_count} is smaller than "
-            f"the required minimum of {MIN_PMX_GLOBAL_COUNT}."
+    with reader.context("header"):
+        result.version = _read_supported_version(
+            reader,
+            "PMX",
+            SUPPORTED_PMX_VERSIONS,
         )
 
-    if global_count > MAX_PMX_GLOBAL_COUNT:
-        raise _InspectionFailure(
-            f"PMX global-count value {global_count} exceeds the safety "
-            f"limit of {MAX_PMX_GLOBAL_COUNT}."
+        global_count = _read_uint8(
+            reader,
+            "PMX global-count field",
         )
 
-    globals_data = _read_exact(
-        file,
-        global_count,
-        "PMX global settings",
-    )
-    encoding_flag = globals_data[0]
+        if global_count < MIN_PMX_GLOBAL_COUNT:
+            raise _InspectionFailure(
+                f"PMX global-count value {global_count} is smaller than "
+                f"the required minimum of {MIN_PMX_GLOBAL_COUNT}."
+            )
 
-    if encoding_flag == 0:
-        encoding = "utf-16-le"
-    elif encoding_flag == 1:
-        encoding = "utf-8"
-    else:
-        raise _InspectionFailure(f"Invalid PMX text-encoding flag: {encoding_flag}.")
+        if global_count > MAX_PMX_GLOBAL_COUNT:
+            raise _InspectionFailure(
+                f"PMX global-count value {global_count} exceeds the safety "
+                f"limit of {MAX_PMX_GLOBAL_COUNT}."
+            )
 
-    result.encoding = encoding
+        globals_data = _read_exact(
+            reader,
+            global_count,
+            "PMX global settings",
+        )
+        encoding_flag = globals_data[0]
 
-    model_name_length = struct.unpack(
-        "<i",
-        _read_exact(file, 4, "PMX model-name length"),
-    )[0]
+        if encoding_flag == 0:
+            encoding = "utf-16-le"
+        elif encoding_flag == 1:
+            encoding = "utf-8"
+        else:
+            raise _InspectionFailure(
+                f"Invalid PMX text-encoding flag: {encoding_flag}."
+            )
 
-    if model_name_length < 0:
-        raise _InspectionFailure(
-            f"PMX model-name length cannot be negative: {model_name_length}."
+        result.encoding = encoding
+
+    with reader.context("model_info"):
+        model_name_length = _read_int32(
+            reader,
+            "PMX model-name length",
         )
 
-    if model_name_length > MAX_MODEL_NAME_BYTES:
-        raise _InspectionFailure(
-            f"PMX model-name length {model_name_length} exceeds the "
-            f"safety limit of {MAX_MODEL_NAME_BYTES} bytes."
+        if model_name_length < 0:
+            raise _InspectionFailure(
+                f"PMX model-name length cannot be negative: {model_name_length}."
+            )
+
+        if model_name_length > MAX_MODEL_NAME_BYTES:
+            raise _InspectionFailure(
+                f"PMX model-name length {model_name_length} exceeds the "
+                f"safety limit of {MAX_MODEL_NAME_BYTES} bytes."
+            )
+
+        if encoding == "utf-16-le" and model_name_length % 2 != 0:
+            raise _InspectionFailure(
+                "PMX UTF-16LE model-name length must be an even number of bytes."
+            )
+
+        model_name_data = _read_exact(
+            reader,
+            model_name_length,
+            "PMX model name",
+        )
+        result.model_name = _decode_text(
+            model_name_data,
+            encoding,
+            "PMX model name",
         )
 
-    if encoding == "utf-16-le" and model_name_length % 2 != 0:
-        raise _InspectionFailure(
-            "PMX UTF-16LE model-name length must be an even number of bytes."
-        )
-
-    model_name_data = _read_exact(
-        file,
-        model_name_length,
-        "PMX model name",
-    )
-    result.model_name = _decode_text(
-        model_name_data,
-        encoding,
-        "PMX model name",
-    )
-
-    if not result.model_name:
-        result.warnings.append("PMX model name is empty.")
+        if not result.model_name:
+            result.warnings.append("PMX model name is empty.")
 
 
 def _inspect_pmd(
-    file: BinaryIO,
+    reader: BinaryReader,
     result: ModelInspectionResult,
 ) -> None:
     """Inspect the PMD header and fixed-width model-name field."""
 
-    result.version = _read_supported_version(
-        file,
-        "PMD",
-        SUPPORTED_PMD_VERSIONS,
-    )
-    result.encoding = "cp932"
+    with reader.context("header"):
+        result.version = _read_supported_version(
+            reader,
+            "PMD",
+            SUPPORTED_PMD_VERSIONS,
+        )
+        result.encoding = "cp932"
 
-    model_name_data = _read_exact(
-        file,
-        20,
-        "PMD model name",
-    )
-    model_name_data = model_name_data.split(b"\x00", 1)[0]
-    result.model_name = _decode_text(
-        model_name_data,
-        result.encoding,
-        "PMD model name",
-    ).rstrip()
+    with reader.context("model_info"):
+        model_name_data = _read_exact(
+            reader,
+            20,
+            "PMD model name",
+        )
+        model_name_data = model_name_data.split(b"\x00", 1)[0]
+        result.model_name = _decode_text(
+            model_name_data,
+            result.encoding,
+            "PMD model name",
+        ).rstrip()
 
-    if not result.model_name:
-        result.warnings.append("PMD model name is empty.")
+        if not result.model_name:
+            result.warnings.append("PMD model name is empty.")
 
 
 def _check_extension(
@@ -256,6 +306,54 @@ def _check_extension(
         )
 
 
+def _read_signature(
+    reader: BinaryReader,
+    result: ModelInspectionResult,
+) -> ModelFormat:
+    """Read and identify a PMX or PMD signature without over-reading."""
+
+    if reader.size < 3:
+        raise _InspectionFailure("File is too short to contain an MMD model signature.")
+
+    with reader.context("signature"):
+        prefix = _read_exact(
+            reader,
+            3,
+            "MMD model signature",
+        )
+
+        if prefix == PMD_MAGIC:
+            result.magic = "Pmd"
+            return "pmd"
+
+        if reader.remaining == 0:
+            result.magic = prefix.decode(
+                "ascii",
+                errors="replace",
+            )
+            raise _InspectionFailure(
+                f"Invalid MMD model magic/signature: {prefix.hex(' ')}."
+            )
+
+        prefix += _read_exact(
+            reader,
+            1,
+            "MMD model signature",
+        )
+
+        if prefix == PMX_MAGIC:
+            result.magic = "PMX "
+            return "pmx"
+
+        result.magic = prefix.decode(
+            "ascii",
+            errors="replace",
+        )
+        raise _InspectionFailure(
+            f"Invalid MMD model magic/signature: {prefix.hex(' ')}."
+        )
+
+
 def inspect_model_header(
     file_path: str | Path,
 ) -> ModelInspectionResult:
@@ -270,31 +368,25 @@ def inspect_model_header(
 
     try:
         with path.open("rb") as file:
-            prefix = file.read(4)
+            reader = BinaryReader(
+                file,
+                format_name="MMD",
+            )
 
-            if len(prefix) < 3:
-                raise _InspectionFailure(
-                    "File is too short to contain an MMD model signature."
-                )
+            detected_format = _read_signature(
+                reader,
+                result,
+            )
+            result.detected_format = detected_format
 
-            if prefix == PMX_MAGIC:
-                result.detected_format = "pmx"
-                result.magic = "PMX "
-                _inspect_pmx(file, result)
-            elif prefix[:3] == PMD_MAGIC:
-                result.detected_format = "pmd"
-                result.magic = "Pmd"
-                file.seek(3)
-                _inspect_pmd(file, result)
+            if detected_format == "pmx":
+                _inspect_pmx(reader, result)
             else:
-                result.magic = prefix.decode(
-                    "ascii",
-                    errors="replace",
-                )
-                raise _InspectionFailure(
-                    f"Invalid MMD model magic/signature: {prefix.hex(' ')}."
-                )
+                _inspect_pmd(reader, result)
+
     except _InspectionFailure as error:
+        result.errors.append(str(error))
+    except BinaryParseError as error:
         result.errors.append(str(error))
     except OSError as error:
         result.errors.append(f"Unable to read model file: {error}.")

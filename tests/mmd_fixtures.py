@@ -249,6 +249,106 @@ def build_pmx_vertex(
     return b"".join(parts)
 
 
+def build_pmx_material(
+    *,
+    local_name: str = "Material",
+    universal_name: str = "Material",
+    texture_index: int = -1,
+    sphere_texture_index: int = -1,
+    sphere_mode: int = 0,
+    toon_reference_mode: int = 1,
+    toon_reference_index: int = 0,
+    memo: str = "",
+    surface_index_count: int = 0,
+    encoding_flag: int = 1,
+    texture_index_size: int = 1,
+) -> bytes:
+    """Build one PMX material record for structural scanner tests."""
+
+    parts = [
+        _encode_pmx_text(
+            local_name,
+            encoding_flag,
+        ),
+        _encode_pmx_text(
+            universal_name,
+            encoding_flag,
+        ),
+        struct.pack(
+            "<4f",
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+        ),
+        struct.pack(
+            "<3f",
+            0.0,
+            0.0,
+            0.0,
+        ),
+        struct.pack("<f", 0.0),
+        struct.pack(
+            "<3f",
+            0.5,
+            0.5,
+            0.5,
+        ),
+        struct.pack("<B", 0),
+        struct.pack(
+            "<4f",
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ),
+        struct.pack("<f", 1.0),
+        _pack_pmx_index(
+            texture_index,
+            size=texture_index_size,
+            signed=True,
+        ),
+        _pack_pmx_index(
+            sphere_texture_index,
+            size=texture_index_size,
+            signed=True,
+        ),
+        struct.pack("<B", sphere_mode),
+        struct.pack("<B", toon_reference_mode),
+    ]
+
+    if toon_reference_mode == 0:
+        parts.append(
+            _pack_pmx_index(
+                toon_reference_index,
+                size=texture_index_size,
+                signed=True,
+            )
+        )
+    else:
+        parts.append(
+            struct.pack(
+                "<B",
+                toon_reference_index,
+            )
+        )
+
+    parts.extend(
+        [
+            _encode_pmx_text(
+                memo,
+                encoding_flag,
+            ),
+            struct.pack(
+                "<i",
+                surface_index_count,
+            ),
+        ]
+    )
+
+    return b"".join(parts)
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -270,8 +370,10 @@ def build_pmx_structure(
     surface_index_count_override: int | None = None,
     texture_paths: tuple[str, ...] = (),
     texture_count_override: int | None = None,
+    materials: tuple[bytes, ...] | None = None,
+    material_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the texture section."""
+    """Build a PMX fixture through the material section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -324,6 +426,27 @@ def build_pmx_structure(
         for texture_path in texture_paths
     )
 
+    if materials is None:
+        if surface_index_count:
+            material_records = (
+                build_pmx_material(
+                    surface_index_count=(surface_index_count),
+                    encoding_flag=encoding_flag,
+                    texture_index_size=(texture_index_size),
+                ),
+            )
+        else:
+            material_records = ()
+    else:
+        material_records = materials
+
+    material_count = (
+        len(material_records)
+        if material_count_override is None
+        else material_count_override
+    )
+    material_data = b"".join(material_records)
+
     return b"".join(
         [
             header,
@@ -342,5 +465,10 @@ def build_pmx_structure(
                 texture_count,
             ),
             texture_data,
+            struct.pack(
+                "<i",
+                material_count,
+            ),
+            material_data,
         ]
     )

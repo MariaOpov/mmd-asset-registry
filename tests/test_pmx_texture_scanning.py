@@ -132,9 +132,12 @@ class PmxTextureScanningTests(unittest.TestCase):
 
     def test_rejects_negative_texture_count(self) -> None:
         fixture_data = build_pmx_structure(
+            deform_types=(),
+            surface_indices=(),
             texture_paths=(),
+            texture_count_override=-1,
+            materials=(),
         )
-        fixture_data = fixture_data[:-4] + struct.pack("<i", -1)
         fixture = self.write_fixture(
             "negative_texture_count.pmx",
             fixture_data,
@@ -192,11 +195,14 @@ class PmxTextureScanningTests(unittest.TestCase):
 
     def test_rejects_truncated_texture_path(self) -> None:
         fixture_data = build_pmx_structure(
+            deform_types=(),
+            surface_indices=(),
             texture_paths=("textures/body.png",),
+            materials=(),
         )
         fixture = self.write_fixture(
             "truncated_texture.pmx",
-            fixture_data[:-1],
+            fixture_data[:-5],
         )
 
         result = scan_pmx_structure(fixture)
@@ -213,14 +219,18 @@ class PmxTextureScanningTests(unittest.TestCase):
 
     def test_rejects_invalid_utf8_texture_path(self) -> None:
         fixture_data = build_pmx_structure(
+            deform_types=(),
+            surface_indices=(),
             texture_paths=(),
+            materials=(),
         )
         fixture_data = b"".join(
             [
-                fixture_data[:-4],
+                fixture_data[:-8],
                 struct.pack("<i", 1),
                 struct.pack("<i", 1),
                 b"\xff",
+                struct.pack("<i", 0),
             ]
         )
         fixture = self.write_fixture(

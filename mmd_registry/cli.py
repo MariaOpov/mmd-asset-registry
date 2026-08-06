@@ -14,6 +14,10 @@ from mmd_registry import __version__
 from mmd_registry.constants import VALID_MODES
 from mmd_registry.hashing import check_file_sha256
 from mmd_registry.model_inspection import inspect_model_header
+from mmd_registry.model_scanning import (
+    PmxHeaderScanResult,
+    scan_pmx_structure,
+)
 from mmd_registry.reporting import (
     build_json_report,
     write_credits_file,
@@ -25,7 +29,14 @@ from mmd_registry.validator import (
 )
 
 
-COMMAND_NAMES = frozenset({"validate", "hash", "inspect"})
+COMMAND_NAMES = frozenset(
+    {
+        "validate",
+        "hash",
+        "inspect",
+        "scan",
+    }
+)
 
 
 class RegistryLoadError(Exception):
@@ -124,7 +135,7 @@ def _add_validate_arguments(
         const="reports/CREDITS.md",
         default=None,
         metavar="PATH",
-        help="Generate a Markdown credit file. Defaults to reports/CREDITS.md.",
+        help=("Generate a Markdown credit file. Defaults to reports/CREDITS.md."),
     )
 
 
@@ -134,8 +145,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mmd-asset-registry",
         description=(
-            "Validate MMD assets, calculate SHA-256 hashes, "
-            "and inspect PMX/PMD headers."
+            "Validate MMD assets, calculate SHA-256 hashes, inspect "
+            "PMX/PMD headers, and structurally scan PMX models."
         ),
     )
 
@@ -193,6 +204,24 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the result as JSON.",
+    )
+
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Structurally scan a PMX model.",
+        description=(
+            "Safely scan all PMX 2.0 or PMX 2.1 structural sections "
+            "and collect texture references without modifying the model."
+        ),
+    )
+    scan_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    scan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the complete scan result as JSON.",
     )
 
     return parser
@@ -403,6 +432,168 @@ def _run_inspect(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _format_scan_value(value: object | None) -> str:
+    """Format one optional scan value for human-readable output."""
+
+    if value is None:
+        return "unknown"
+
+    return str(value)
+
+
+def _print_scan_section_summary(
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print aggregate PMX section counts."""
+
+    summary = result.section_summary
+
+    if summary is None:
+        return
+
+    print("Sections:")
+    print(f"  Vertices: {summary.vertex_count}")
+    print(f"  Surface indices: {summary.surface_index_count}")
+    print(f"  Triangles: {summary.triangle_count}")
+    print(f"  Textures: {summary.texture_count}")
+    print(f"  Materials: {summary.material_count}")
+    print(f"  Bones: {summary.bone_count}")
+    print(f"  IK chains: {summary.ik_count}")
+    print(f"  IK links: {summary.ik_link_count}")
+    print(f"  Morphs: {summary.morph_count}")
+    print(f"  Morph offsets: {summary.morph_offset_count}")
+    print(f"  Display frames: {summary.display_frame_count}")
+    print(f"  Display-frame elements: {summary.display_frame_element_count}")
+    print(f"  Rigid bodies: {summary.rigid_body_count}")
+    print(f"  Joints: {summary.joint_count}")
+    print(f"  Soft bodies: {summary.soft_body_count}")
+    print(f"  Soft-body anchors: {summary.soft_body_anchor_count}")
+    print(f"  Pinned vertices: {summary.pinned_vertex_count}")
+
+
+def _print_scan_dependency_summary(
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print PMX texture-reference summary."""
+
+    summary = result.dependency_summary
+
+    if summary is None:
+        return
+
+    print("Texture dependencies:")
+    print(f"  Declared paths: {summary.declared_texture_path_count}")
+    print(f"  Material texture references: {summary.material_texture_reference_count}")
+    print(f"  Sphere texture references: {summary.sphere_texture_reference_count}")
+    print(f"  Toon texture references: {summary.toon_texture_reference_count}")
+    print(f"  Total references: {summary.total_texture_reference_count}")
+
+    if summary.referenced_texture_paths:
+        print("  Referenced paths:")
+        for texture_index, texture_path in zip(
+            summary.referenced_texture_indices,
+            summary.referenced_texture_paths,
+            strict=True,
+        ):
+            print(f"    [{texture_index}] {texture_path}")
+
+    if summary.unreferenced_texture_paths:
+        print("  Unreferenced paths:")
+        for texture_index, texture_path in zip(
+            summary.unreferenced_texture_indices,
+            summary.unreferenced_texture_paths,
+            strict=True,
+        ):
+            print(f"    [{texture_index}] {texture_path}")
+
+
+def _print_scan_result(
+    file_path: Path,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print one human-readable PMX structural scan result."""
+
+    model_name = result.model_info.local_name if result.model_info is not None else None
+    detected_format = (
+        result.detected_format.upper()
+        if result.detected_format is not None
+        else "unknown"
+    )
+
+    print(f"File: {file_path.as_posix()}")
+    print(f"Status: {result.status}")
+    print(f"Format: {detected_format}")
+    print(f"Version: {_format_scan_value(result.version)}")
+    print(f"Encoding: {_format_scan_value(result.encoding)}")
+    print(f"Model name: {_format_scan_value(model_name)}")
+    print(f"Scan complete: {'yes' if result.scan_complete else 'no'}")
+    print(f"File size: {_format_scan_value(result.file_size)}")
+    print(f"Bytes consumed: {result.bytes_consumed}")
+    print(f"Bytes remaining: {_format_scan_value(result.bytes_remaining)}")
+    print(f"Trailing bytes: {_format_scan_value(result.trailing_byte_count)}")
+
+    _print_scan_section_summary(result)
+    _print_scan_dependency_summary(result)
+
+    for message in result.warnings:
+        print(f"[WARNING] {message}")
+
+    for message in result.errors:
+        print(f"[ERROR] {message}")
+
+
+def _run_scan(arguments: argparse.Namespace) -> int:
+    """Structurally scan one PMX model file."""
+
+    file_path = Path(arguments.path)
+    input_error = _validate_input_file(file_path)
+
+    if input_error is not None:
+        print(f"[ERROR] scan: {input_error}")
+        return 2
+
+    try:
+        result = scan_pmx_structure(file_path)
+    except Exception as error:
+        message = f"Internal scan failure: {error}"
+
+        if arguments.json:
+            print(
+                json.dumps(
+                    {
+                        "path": file_path.as_posix(),
+                        "status": "error",
+                        "internal_error": True,
+                        "errors": [message],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            print(
+                f"[ERROR] scan: {message}",
+                file=sys.stderr,
+            )
+
+        return 3
+
+    payload = {
+        "path": file_path.as_posix(),
+        **result.to_dict(),
+    }
+
+    if arguments.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        _print_scan_result(file_path, result)
+
+    if result.errors:
+        return 1
+
+    return 0
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     """Run the registry command-line application."""
 
@@ -417,6 +608,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "inspect":
         return _run_inspect(arguments)
+
+    if arguments.command == "scan":
+        return _run_scan(arguments)
 
     parser.error(f"Unsupported command: {arguments.command}")
     return 2

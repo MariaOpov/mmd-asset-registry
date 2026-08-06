@@ -175,7 +175,7 @@ class PmxGeometryScanningTests(unittest.TestCase):
         # texture, and surface count fields, plus one byte from the vertex edge-scale.
         fixture = self.write_fixture(
             "truncated_vertex.pmx",
-            fixture_data[:-29],
+            fixture_data[:-33],
         )
 
         result = scan_pmx_structure(fixture)

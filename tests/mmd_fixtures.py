@@ -892,6 +892,77 @@ def build_pmx_rigid_body(
     )
 
 
+def build_pmx_joint(
+    *,
+    local_name: str = "Joint",
+    universal_name: str = "Joint",
+    joint_type: int = 0,
+    rigid_body_a_index: int = -1,
+    rigid_body_b_index: int = -1,
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    translation_limit_minimum: tuple[float, float, float] = (
+        -1.0,
+        -1.0,
+        -1.0,
+    ),
+    translation_limit_maximum: tuple[float, float, float] = (
+        1.0,
+        1.0,
+        1.0,
+    ),
+    rotation_limit_minimum: tuple[float, float, float] = (
+        -0.5,
+        -0.5,
+        -0.5,
+    ),
+    rotation_limit_maximum: tuple[float, float, float] = (
+        0.5,
+        0.5,
+        0.5,
+    ),
+    translation_spring: tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+    ),
+    rotation_spring: tuple[float, float, float] = (
+        0.0,
+        0.0,
+        0.0,
+    ),
+    encoding_flag: int = 1,
+    rigid_body_index_size: int = 1,
+) -> bytes:
+    """Build one PMX joint record."""
+
+    return b"".join(
+        [
+            _encode_pmx_text(local_name, encoding_flag),
+            _encode_pmx_text(universal_name, encoding_flag),
+            struct.pack("<B", joint_type),
+            _pack_pmx_index(
+                rigid_body_a_index,
+                size=rigid_body_index_size,
+                signed=True,
+            ),
+            _pack_pmx_index(
+                rigid_body_b_index,
+                size=rigid_body_index_size,
+                signed=True,
+            ),
+            struct.pack("<3f", *position),
+            struct.pack("<3f", *rotation),
+            struct.pack("<3f", *translation_limit_minimum),
+            struct.pack("<3f", *translation_limit_maximum),
+            struct.pack("<3f", *rotation_limit_minimum),
+            struct.pack("<3f", *rotation_limit_maximum),
+            struct.pack("<3f", *translation_spring),
+            struct.pack("<3f", *rotation_spring),
+        ]
+    )
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -923,8 +994,10 @@ def build_pmx_structure(
     display_frame_count_override: int | None = None,
     rigid_bodies: tuple[bytes, ...] = (),
     rigid_body_count_override: int | None = None,
+    joints: tuple[bytes, ...] = (),
+    joint_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the rigid-body section."""
+    """Build a PMX fixture through the joint section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -1018,6 +1091,9 @@ def build_pmx_structure(
     )
     rigid_body_data = b"".join(rigid_bodies)
 
+    joint_count = len(joints) if joint_count_override is None else joint_count_override
+    joint_data = b"".join(joints)
+
     return b"".join(
         [
             header,
@@ -1061,5 +1137,10 @@ def build_pmx_structure(
                 rigid_body_count,
             ),
             rigid_body_data,
+            struct.pack(
+                "<i",
+                joint_count,
+            ),
+            joint_data,
         ]
     )

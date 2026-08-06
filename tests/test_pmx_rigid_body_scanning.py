@@ -341,7 +341,7 @@ class PmxRigidBodyScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_rigid_body.pmx",
-            fixture_data[:-1],
+            fixture_data[:-5],
         )
 
         result = scan_pmx_structure(fixture)

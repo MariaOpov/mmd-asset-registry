@@ -492,7 +492,7 @@ class PmxMorphScanningTests(unittest.TestCase):
         )
         fixture = self.write_fixture(
             "truncated_morph.pmx",
-            fixture_data[:-9],
+            fixture_data[:-13],
         )
 
         result = scan_pmx_structure(fixture)

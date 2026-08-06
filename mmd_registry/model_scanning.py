@@ -43,6 +43,7 @@ MAX_PMX_DISPLAY_FRAME_COUNT: Final[int] = 100_000
 MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 1_000_000
 MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 5_000_000
 MAX_PMX_RIGID_BODY_COUNT: Final[int] = 200_000
+MAX_PMX_JOINT_COUNT: Final[int] = 200_000
 
 PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
 PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
@@ -491,6 +492,46 @@ class PmxRigidBody:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PmxJoint:
+    """Structural metadata extracted from one PMX joint."""
+
+    local_name: str
+    universal_name: str
+    joint_type: int
+    joint_type_name: str
+    rigid_body_a_index: int
+    rigid_body_b_index: int
+    position: tuple[float, float, float]
+    rotation: tuple[float, float, float]
+    translation_limit_minimum: tuple[float, float, float]
+    translation_limit_maximum: tuple[float, float, float]
+    rotation_limit_minimum: tuple[float, float, float]
+    rotation_limit_maximum: tuple[float, float, float]
+    translation_spring: tuple[float, float, float]
+    rotation_spring: tuple[float, float, float]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "joint_type": self.joint_type,
+            "joint_type_name": self.joint_type_name,
+            "rigid_body_a_index": self.rigid_body_a_index,
+            "rigid_body_b_index": self.rigid_body_b_index,
+            "position": list(self.position),
+            "rotation": list(self.rotation),
+            "translation_limit_minimum": list(self.translation_limit_minimum),
+            "translation_limit_maximum": list(self.translation_limit_maximum),
+            "rotation_limit_minimum": list(self.rotation_limit_minimum),
+            "rotation_limit_maximum": list(self.rotation_limit_maximum),
+            "translation_spring": list(self.translation_spring),
+            "rotation_spring": list(self.rotation_spring),
+        }
+
+
 @dataclass(slots=True)
 class PmxHeaderScanResult:
     """Result of scanning PMX header, model information, and early sections."""
@@ -518,6 +559,8 @@ class PmxHeaderScanResult:
     display_frames: list[PmxDisplayFrame] = field(default_factory=list)
     rigid_body_count: int | None = None
     rigid_bodies: list[PmxRigidBody] = field(default_factory=list)
+    joint_count: int | None = None
+    joints: list[PmxJoint] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -569,6 +612,8 @@ class PmxHeaderScanResult:
             ],
             "rigid_body_count": self.rigid_body_count,
             "rigid_bodies": [rigid_body.to_dict() for rigid_body in self.rigid_bodies],
+            "joint_count": self.joint_count,
+            "joints": [joint.to_dict() for joint in self.joints],
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
             "errors": list(self.errors),
@@ -3228,6 +3273,271 @@ def _scan_pmx_rigid_bodies(
     )
 
 
+def _minimum_pmx_joint_size(
+    index_sizes: PmxIndexSizes,
+) -> int:
+    """Return the fixed minimum size of one PMX joint record."""
+
+    text_length_fields = 8
+    joint_type_size = 1
+    rigid_body_indices_size = index_sizes.rigid_body * 2
+    vector_fields_size = 8 * 12
+
+    return (
+        text_length_fields
+        + joint_type_size
+        + rigid_body_indices_size
+        + vector_fields_size
+    )
+
+
+def _decode_pmx_joint_type(
+    value: int,
+    *,
+    version: float,
+    record_index: int,
+    offset: int,
+) -> str:
+    """Validate and decode one PMX joint type."""
+
+    type_names = {
+        0: "spring_6dof",
+        1: "6dof",
+        2: "point_to_point",
+        3: "cone_twist",
+        4: "slider",
+        5: "hinge",
+    }
+
+    try:
+        type_name = type_names[value]
+    except KeyError:
+        _raise_pmx_error(
+            section="joints",
+            record_index=record_index,
+            offset=offset,
+            operation="validating joint type",
+            reason=(f"invalid joint type {value}; expected a value from 0 through 5."),
+        )
+
+    if version == 2.0 and value != 0:
+        _raise_pmx_error(
+            section="joints",
+            record_index=record_index,
+            offset=offset,
+            operation="validating joint type",
+            reason=(
+                f"joint type {value} ({type_name}) requires PMX 2.1; "
+                "PMX 2.0 supports only type 0 (spring_6dof)."
+            ),
+        )
+
+    return type_name
+
+
+def _validate_pmx_joint_limit_pair(
+    minimum: tuple[float, float, float],
+    maximum: tuple[float, float, float],
+    *,
+    record_index: int,
+    label: str,
+    minimum_offset: int,
+) -> None:
+    """Validate component-wise PMX joint lower and upper limits."""
+
+    component_names = ("x", "y", "z")
+
+    for component_index, (minimum_value, maximum_value) in enumerate(
+        zip(minimum, maximum)
+    ):
+        if minimum_value <= maximum_value:
+            continue
+
+        component_name = component_names[component_index]
+        _raise_pmx_error(
+            section="joints",
+            record_index=record_index,
+            offset=minimum_offset + component_index * 4,
+            operation=f"validating {label} limits",
+            reason=(
+                f"{label} minimum {component_name} value "
+                f"{minimum_value} exceeds maximum {component_name} "
+                f"value {maximum_value}."
+            ),
+        )
+
+
+def _read_pmx_joint(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    record_index: int,
+) -> PmxJoint:
+    """Read and validate one PMX joint record."""
+
+    if result.encoding is None or result.version is None:
+        _raise_pmx_error(
+            section="joints",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading joint",
+            reason="PMX text encoding or version is unavailable.",
+        )
+
+    if result.index_sizes is None or result.rigid_body_count is None:
+        _raise_pmx_error(
+            section="joints",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading joint",
+            reason="PMX index sizes or rigid-body count are unavailable.",
+        )
+
+    require_even_length = result.encoding == "utf-16-le"
+
+    with reader.context("joints", record_index=record_index):
+        local_name = reader.read_length_prefixed_text(
+            "local joint name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+        universal_name = reader.read_length_prefixed_text(
+            "universal joint name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+
+        joint_type_offset = reader.offset
+        joint_type = reader.read_uint8("joint type")
+        joint_type_name = _decode_pmx_joint_type(
+            joint_type,
+            version=result.version,
+            record_index=record_index,
+            offset=joint_type_offset,
+        )
+
+        rigid_body_a_offset = reader.offset
+        rigid_body_a_index = reader.read_index(
+            result.index_sizes.rigid_body,
+            signed=True,
+            label="joint rigid-body A index",
+        )
+        _validate_pmx_index_range(
+            rigid_body_a_index,
+            count=result.rigid_body_count,
+            section="joints",
+            record_index=record_index,
+            label="joint rigid-body A index",
+            offset=rigid_body_a_offset,
+            allow_sentinel=True,
+        )
+
+        rigid_body_b_offset = reader.offset
+        rigid_body_b_index = reader.read_index(
+            result.index_sizes.rigid_body,
+            signed=True,
+            label="joint rigid-body B index",
+        )
+        _validate_pmx_index_range(
+            rigid_body_b_index,
+            count=result.rigid_body_count,
+            section="joints",
+            record_index=record_index,
+            label="joint rigid-body B index",
+            offset=rigid_body_b_offset,
+            allow_sentinel=True,
+        )
+
+        vector_fields: list[tuple[str, tuple[float, float, float], int]] = []
+        for vector_label in (
+            "joint position",
+            "joint rotation",
+            "joint translation limit minimum",
+            "joint translation limit maximum",
+            "joint rotation limit minimum",
+            "joint rotation limit maximum",
+            "joint translation spring",
+            "joint rotation spring",
+        ):
+            vector_offset = reader.offset
+            vector_value = _read_pmx_vec3(reader, vector_label)
+            _validate_pmx_finite_vec3(
+                vector_value,
+                section="joints",
+                record_index=record_index,
+                label=vector_label,
+                offset=vector_offset,
+                nonnegative=False,
+            )
+            vector_fields.append((vector_label, vector_value, vector_offset))
+
+    _validate_pmx_joint_limit_pair(
+        vector_fields[2][1],
+        vector_fields[3][1],
+        record_index=record_index,
+        label="joint translation limit",
+        minimum_offset=vector_fields[2][2],
+    )
+    _validate_pmx_joint_limit_pair(
+        vector_fields[4][1],
+        vector_fields[5][1],
+        record_index=record_index,
+        label="joint rotation limit",
+        minimum_offset=vector_fields[4][2],
+    )
+
+    return PmxJoint(
+        local_name=local_name,
+        universal_name=universal_name,
+        joint_type=joint_type,
+        joint_type_name=joint_type_name,
+        rigid_body_a_index=rigid_body_a_index,
+        rigid_body_b_index=rigid_body_b_index,
+        position=vector_fields[0][1],
+        rotation=vector_fields[1][1],
+        translation_limit_minimum=vector_fields[2][1],
+        translation_limit_maximum=vector_fields[3][1],
+        rotation_limit_minimum=vector_fields[4][1],
+        rotation_limit_maximum=vector_fields[5][1],
+        translation_spring=vector_fields[6][1],
+        rotation_spring=vector_fields[7][1],
+    )
+
+
+def _scan_pmx_joints(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Read and validate the PMX joint section."""
+
+    if result.index_sizes is None:
+        _raise_pmx_error(
+            section="joints",
+            offset=reader.offset,
+            operation="starting joint scan",
+            reason="PMX index sizes are unavailable.",
+        )
+
+    with reader.context("joints"):
+        joint_count = reader.read_bounded_count(
+            "joint count",
+            max_count=MAX_PMX_JOINT_COUNT,
+            minimum_item_size=_minimum_pmx_joint_size(result.index_sizes),
+        )
+
+    result.joint_count = joint_count
+    result.joints = [
+        _read_pmx_joint(
+            reader,
+            result,
+            record_index=record_index,
+        )
+        for record_index in range(joint_count)
+    ]
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -3379,7 +3689,7 @@ def scan_pmx_header(
 def scan_pmx_structure(
     file_path: str | Path,
 ) -> PmxHeaderScanResult:
-    """Scan PMX header through the rigid-body section."""
+    """Scan PMX header through the joint section."""
 
     path = Path(file_path)
     result = PmxHeaderScanResult()
@@ -3422,6 +3732,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_rigid_bodies(
+                    reader,
+                    result,
+                )
+                _scan_pmx_joints(
                     reader,
                     result,
                 )

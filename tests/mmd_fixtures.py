@@ -144,3 +144,185 @@ def build_pmx_model_info(
             ),
         ]
     )
+
+
+def _pack_pmx_index(
+    value: int,
+    *,
+    size: int,
+    signed: bool,
+) -> bytes:
+    """Pack one PMX index using a declared width."""
+
+    format_codes = {
+        (1, False): "<B",
+        (1, True): "<b",
+        (2, False): "<H",
+        (2, True): "<h",
+        (4, False): "<I",
+        (4, True): "<i",
+    }
+
+    try:
+        format_code = format_codes[(size, signed)]
+    except KeyError as error:
+        raise ValueError("PMX fixture index size must be 1, 2, or 4.") from error
+
+    return struct.pack(
+        format_code,
+        value,
+    )
+
+
+def build_pmx_vertex(
+    *,
+    deform_type: int = 0,
+    additional_uv_count: int = 0,
+    bone_index_size: int = 1,
+) -> bytes:
+    """Build one small PMX vertex record."""
+
+    parts = [
+        struct.pack(
+            "<8f",
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+        ),
+        b"\x00" * (additional_uv_count * 16),
+        struct.pack(
+            "<B",
+            deform_type,
+        ),
+    ]
+
+    bone_index = _pack_pmx_index(
+        0,
+        size=bone_index_size,
+        signed=True,
+    )
+
+    if deform_type == 0:
+        parts.append(bone_index)
+
+    elif deform_type == 1:
+        parts.extend(
+            [
+                bone_index * 2,
+                struct.pack("<f", 0.5),
+            ]
+        )
+
+    elif deform_type in {2, 4}:
+        parts.extend(
+            [
+                bone_index * 4,
+                struct.pack(
+                    "<4f",
+                    0.25,
+                    0.25,
+                    0.25,
+                    0.25,
+                ),
+            ]
+        )
+
+    elif deform_type == 3:
+        parts.extend(
+            [
+                bone_index * 2,
+                struct.pack("<f", 0.5),
+                struct.pack(
+                    "<9f",
+                    *([0.0] * 9),
+                ),
+            ]
+        )
+
+    parts.append(struct.pack("<f", 1.0))
+
+    return b"".join(parts)
+
+
+def build_pmx_structure(
+    *,
+    deform_types: tuple[int, ...] = (0,),
+    surface_indices: tuple[int, ...] = (
+        0,
+        0,
+        0,
+    ),
+    version: float = 2.0,
+    encoding_flag: int = 1,
+    additional_uv_count: int = 0,
+    vertex_index_size: int = 1,
+    texture_index_size: int = 1,
+    material_index_size: int = 1,
+    bone_index_size: int = 1,
+    morph_index_size: int = 1,
+    rigid_body_index_size: int = 1,
+    vertex_count_override: int | None = None,
+    surface_index_count_override: int | None = None,
+) -> bytes:
+    """Build a PMX fixture through the surface-index section."""
+
+    header = build_pmx_model_info(
+        version=version,
+        encoding_flag=encoding_flag,
+        additional_uv_count=additional_uv_count,
+        vertex_index_size=vertex_index_size,
+        texture_index_size=texture_index_size,
+        material_index_size=material_index_size,
+        bone_index_size=bone_index_size,
+        morph_index_size=morph_index_size,
+        rigid_body_index_size=rigid_body_index_size,
+    )
+
+    vertex_count = (
+        len(deform_types) if vertex_count_override is None else vertex_count_override
+    )
+
+    surface_index_count = (
+        len(surface_indices)
+        if surface_index_count_override is None
+        else surface_index_count_override
+    )
+
+    vertex_data = b"".join(
+        build_pmx_vertex(
+            deform_type=deform_type,
+            additional_uv_count=additional_uv_count,
+            bone_index_size=bone_index_size,
+        )
+        for deform_type in deform_types
+    )
+
+    surface_data = b"".join(
+        _pack_pmx_index(
+            index,
+            size=vertex_index_size,
+            signed=False,
+        )
+        for index in surface_indices
+    )
+
+    return b"".join(
+        [
+            header,
+            struct.pack(
+                "<i",
+                vertex_count,
+            ),
+            vertex_data,
+            struct.pack(
+                "<i",
+                surface_index_count,
+            ),
+            surface_data,
+        ]
+    )

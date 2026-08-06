@@ -44,6 +44,23 @@ COMMAND_NAMES = frozenset(
 )
 
 
+def _configure_utf8_standard_streams() -> None:
+    """Use UTF-8 for redirected CLI output when supported."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+
+        if not callable(reconfigure):
+            continue
+
+        try:
+            reconfigure(encoding="utf-8")
+        except (AttributeError, OSError, ValueError):
+            # In-memory and third-party streams may not support changing
+            # their encoding. Keep their existing behavior in that case.
+            continue
+
+
 class RegistryLoadError(Exception):
     """Raised when a registry file cannot be loaded."""
 
@@ -869,6 +886,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
 def main() -> None:
     """Command-line entry point."""
+
+    _configure_utf8_standard_streams()
 
     try:
         exit_code = run()

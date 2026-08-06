@@ -710,9 +710,85 @@ class PmxSoftBody:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PmxSectionSummary:
+    """Aggregate counts for a completely scanned PMX structure."""
+
+    vertex_count: int
+    surface_index_count: int
+    triangle_count: int
+    texture_count: int
+    material_count: int
+    bone_count: int
+    ik_count: int
+    ik_link_count: int
+    morph_count: int
+    morph_offset_count: int
+    display_frame_count: int
+    display_frame_element_count: int
+    rigid_body_count: int
+    joint_count: int
+    soft_body_count: int
+    soft_body_anchor_count: int
+    pinned_vertex_count: int
+
+    def to_dict(self) -> dict[str, int]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "vertex_count": self.vertex_count,
+            "surface_index_count": self.surface_index_count,
+            "triangle_count": self.triangle_count,
+            "texture_count": self.texture_count,
+            "material_count": self.material_count,
+            "bone_count": self.bone_count,
+            "ik_count": self.ik_count,
+            "ik_link_count": self.ik_link_count,
+            "morph_count": self.morph_count,
+            "morph_offset_count": self.morph_offset_count,
+            "display_frame_count": self.display_frame_count,
+            "display_frame_element_count": (self.display_frame_element_count),
+            "rigid_body_count": self.rigid_body_count,
+            "joint_count": self.joint_count,
+            "soft_body_count": self.soft_body_count,
+            "soft_body_anchor_count": self.soft_body_anchor_count,
+            "pinned_vertex_count": self.pinned_vertex_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxDependencySummary:
+    """Texture dependency references collected from PMX materials."""
+
+    declared_texture_path_count: int
+    material_texture_reference_count: int
+    sphere_texture_reference_count: int
+    toon_texture_reference_count: int
+    total_texture_reference_count: int
+    referenced_texture_indices: tuple[int, ...]
+    referenced_texture_paths: tuple[str, ...]
+    unreferenced_texture_indices: tuple[int, ...]
+    unreferenced_texture_paths: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "declared_texture_path_count": (self.declared_texture_path_count),
+            "material_texture_reference_count": (self.material_texture_reference_count),
+            "sphere_texture_reference_count": (self.sphere_texture_reference_count),
+            "toon_texture_reference_count": (self.toon_texture_reference_count),
+            "total_texture_reference_count": (self.total_texture_reference_count),
+            "referenced_texture_indices": list(self.referenced_texture_indices),
+            "referenced_texture_paths": list(self.referenced_texture_paths),
+            "unreferenced_texture_indices": list(self.unreferenced_texture_indices),
+            "unreferenced_texture_paths": list(self.unreferenced_texture_paths),
+        }
+
+
 @dataclass(slots=True)
 class PmxHeaderScanResult:
-    """Result of scanning PMX header, model information, and early sections."""
+    """Result of scanning PMX header and structural sections."""
 
     detected_format: Literal["pmx"] | None = None
     magic: str | None = None
@@ -743,6 +819,10 @@ class PmxHeaderScanResult:
     soft_bodies: list[PmxSoftBody] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
+    scan_complete: bool = False
+    trailing_byte_count: int | None = None
+    section_summary: PmxSectionSummary | None = None
+    dependency_summary: PmxDependencySummary | None = None
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -757,6 +837,15 @@ class PmxHeaderScanResult:
             return "warning"
 
         return "ok"
+
+    @property
+    def bytes_remaining(self) -> int | None:
+        """Return unread bytes, or ``None`` when file size is unavailable."""
+
+        if self.file_size is None:
+            return None
+
+        return max(self.file_size - self.bytes_consumed, 0)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
@@ -798,6 +887,19 @@ class PmxHeaderScanResult:
             "soft_bodies": [soft_body.to_dict() for soft_body in self.soft_bodies],
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
+            "bytes_remaining": self.bytes_remaining,
+            "scan_complete": self.scan_complete,
+            "trailing_byte_count": self.trailing_byte_count,
+            "section_summary": (
+                self.section_summary.to_dict()
+                if self.section_summary is not None
+                else None
+            ),
+            "dependency_summary": (
+                self.dependency_summary.to_dict()
+                if self.dependency_summary is not None
+                else None
+            ),
             "errors": list(self.errors),
             "warnings": list(self.warnings),
         }
@@ -4349,6 +4451,140 @@ def _scan_pmx_soft_bodies(
     result.soft_bodies = soft_bodies
 
 
+def _build_pmx_section_summary(
+    result: PmxHeaderScanResult,
+) -> PmxSectionSummary:
+    """Build aggregate section counts after a complete PMX scan."""
+
+    required_counts = {
+        "vertex_count": result.vertex_count,
+        "surface_index_count": result.surface_index_count,
+        "triangle_count": result.triangle_count,
+        "texture_count": result.texture_count,
+        "material_count": result.material_count,
+        "bone_count": result.bone_count,
+        "morph_count": result.morph_count,
+        "display_frame_count": result.display_frame_count,
+        "rigid_body_count": result.rigid_body_count,
+        "joint_count": result.joint_count,
+        "soft_body_count": result.soft_body_count,
+    }
+    missing = [name for name, value in required_counts.items() if value is None]
+    if missing:
+        raise AssertionError(
+            "Cannot summarize an incomplete PMX scan; missing: " + ", ".join(missing)
+        )
+
+    return PmxSectionSummary(
+        vertex_count=required_counts["vertex_count"],
+        surface_index_count=required_counts["surface_index_count"],
+        triangle_count=required_counts["triangle_count"],
+        texture_count=required_counts["texture_count"],
+        material_count=required_counts["material_count"],
+        bone_count=required_counts["bone_count"],
+        ik_count=sum(1 for bone in result.bones if bone.ik is not None),
+        ik_link_count=sum(
+            len(bone.ik.links) for bone in result.bones if bone.ik is not None
+        ),
+        morph_count=required_counts["morph_count"],
+        morph_offset_count=sum(len(morph.offsets) for morph in result.morphs),
+        display_frame_count=required_counts["display_frame_count"],
+        display_frame_element_count=sum(
+            len(display_frame.elements) for display_frame in result.display_frames
+        ),
+        rigid_body_count=required_counts["rigid_body_count"],
+        joint_count=required_counts["joint_count"],
+        soft_body_count=required_counts["soft_body_count"],
+        soft_body_anchor_count=sum(
+            len(soft_body.anchors) for soft_body in result.soft_bodies
+        ),
+        pinned_vertex_count=sum(
+            len(soft_body.pinned_vertex_indices) for soft_body in result.soft_bodies
+        ),
+    )
+
+
+def _build_pmx_dependency_summary(
+    result: PmxHeaderScanResult,
+) -> PmxDependencySummary:
+    """Summarize material references to declared PMX texture paths."""
+
+    material_reference_count = sum(
+        material.texture_index >= 0 for material in result.materials
+    )
+    sphere_reference_count = sum(
+        material.sphere_texture_index >= 0 for material in result.materials
+    )
+    toon_reference_count = sum(
+        material.toon_reference_mode == "texture" and material.toon_reference_index >= 0
+        for material in result.materials
+    )
+
+    referenced_indices = sorted(
+        {
+            index
+            for material in result.materials
+            for index in (
+                material.texture_index,
+                material.sphere_texture_index,
+                (
+                    material.toon_reference_index
+                    if material.toon_reference_mode == "texture"
+                    else -1
+                ),
+            )
+            if index >= 0
+        }
+    )
+    referenced_index_set = set(referenced_indices)
+    unreferenced_indices = [
+        index
+        for index in range(len(result.texture_paths))
+        if index not in referenced_index_set
+    ]
+
+    return PmxDependencySummary(
+        declared_texture_path_count=len(result.texture_paths),
+        material_texture_reference_count=material_reference_count,
+        sphere_texture_reference_count=sphere_reference_count,
+        toon_texture_reference_count=toon_reference_count,
+        total_texture_reference_count=(
+            material_reference_count + sphere_reference_count + toon_reference_count
+        ),
+        referenced_texture_indices=tuple(referenced_indices),
+        referenced_texture_paths=tuple(
+            result.texture_paths[index] for index in referenced_indices
+        ),
+        unreferenced_texture_indices=tuple(unreferenced_indices),
+        unreferenced_texture_paths=tuple(
+            result.texture_paths[index] for index in unreferenced_indices
+        ),
+    )
+
+
+def _finalize_pmx_structure_scan(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Finalize byte accounting and summaries after all PMX sections."""
+
+    trailing_byte_count = reader.remaining
+    section_summary = _build_pmx_section_summary(result)
+    dependency_summary = _build_pmx_dependency_summary(result)
+
+    result.trailing_byte_count = trailing_byte_count
+    result.section_summary = section_summary
+    result.dependency_summary = dependency_summary
+    result.scan_complete = True
+
+    if trailing_byte_count:
+        result.warnings.append(
+            "PMX file contains "
+            f"{trailing_byte_count} trailing byte(s) after "
+            "the final structural section."
+        )
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -4551,6 +4787,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_soft_bodies(
+                    reader,
+                    result,
+                )
+                _finalize_pmx_structure_scan(
                     reader,
                     result,
                 )

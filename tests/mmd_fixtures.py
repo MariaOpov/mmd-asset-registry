@@ -1124,6 +1124,7 @@ def build_pmx_structure(
     joint_count_override: int | None = None,
     soft_bodies: tuple[bytes, ...] = (),
     soft_body_count_override: int | None = None,
+    trailing_bytes: bytes = b"",
 ) -> bytes:
     """Build a PMX fixture through the optional soft-body section."""
 
@@ -1281,5 +1282,6 @@ def build_pmx_structure(
             ),
             joint_data,
             soft_body_section,
+            trailing_bytes,
         ]
     )

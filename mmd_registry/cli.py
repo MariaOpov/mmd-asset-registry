@@ -12,8 +12,16 @@ import yaml
 
 from mmd_registry import __version__
 from mmd_registry.constants import VALID_MODES
+from mmd_registry.dependency_diagnostics import (
+    TextureDependencyDiagnostics,
+    diagnose_texture_dependencies,
+)
 from mmd_registry.hashing import check_file_sha256
 from mmd_registry.model_inspection import inspect_model_header
+from mmd_registry.model_scanning import (
+    PmxHeaderScanResult,
+    scan_pmx_structure,
+)
 from mmd_registry.reporting import (
     build_json_report,
     write_credits_file,
@@ -25,7 +33,32 @@ from mmd_registry.validator import (
 )
 
 
-COMMAND_NAMES = frozenset({"validate", "hash", "inspect"})
+COMMAND_NAMES = frozenset(
+    {
+        "validate",
+        "hash",
+        "inspect",
+        "scan",
+        "doctor",
+    }
+)
+
+
+def _configure_utf8_standard_streams() -> None:
+    """Use UTF-8 for redirected CLI output when supported."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+
+        if not callable(reconfigure):
+            continue
+
+        try:
+            reconfigure(encoding="utf-8")
+        except (AttributeError, OSError, ValueError):
+            # In-memory and third-party streams may not support changing
+            # their encoding. Keep their existing behavior in that case.
+            continue
 
 
 class RegistryLoadError(Exception):
@@ -124,7 +157,7 @@ def _add_validate_arguments(
         const="reports/CREDITS.md",
         default=None,
         metavar="PATH",
-        help="Generate a Markdown credit file. Defaults to reports/CREDITS.md.",
+        help=("Generate a Markdown credit file. Defaults to reports/CREDITS.md."),
     )
 
 
@@ -134,8 +167,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mmd-asset-registry",
         description=(
-            "Validate MMD assets, calculate SHA-256 hashes, "
-            "and inspect PMX/PMD headers."
+            "Validate MMD assets, calculate SHA-256 hashes, inspect "
+            "PMX/PMD headers, structurally scan PMX models, and "
+            "diagnose texture dependencies."
         ),
     )
 
@@ -193,6 +227,43 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the result as JSON.",
+    )
+
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Structurally scan a PMX model.",
+        description=(
+            "Safely scan all PMX 2.0 or PMX 2.1 structural sections "
+            "and collect texture references without modifying the model."
+        ),
+    )
+    scan_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    scan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the complete scan result as JSON.",
+    )
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Scan a PMX model and diagnose texture dependencies.",
+        description=(
+            "Structurally scan a PMX model, resolve its declared texture "
+            "paths, and report missing or non-portable dependencies "
+            "without modifying any files."
+        ),
+    )
+    doctor_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the combined doctor result as JSON.",
     )
 
     return parser
@@ -403,6 +474,391 @@ def _run_inspect(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _format_scan_value(value: object | None) -> str:
+    """Format one optional scan value for human-readable output."""
+
+    if value is None:
+        return "unknown"
+
+    return str(value)
+
+
+def _print_scan_section_summary(
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print aggregate PMX section counts."""
+
+    summary = result.section_summary
+
+    if summary is None:
+        return
+
+    print("Sections:")
+    print(f"  Vertices: {summary.vertex_count}")
+    print(f"  Surface indices: {summary.surface_index_count}")
+    print(f"  Triangles: {summary.triangle_count}")
+    print(f"  Textures: {summary.texture_count}")
+    print(f"  Materials: {summary.material_count}")
+    print(f"  Bones: {summary.bone_count}")
+    print(f"  IK chains: {summary.ik_count}")
+    print(f"  IK links: {summary.ik_link_count}")
+    print(f"  Morphs: {summary.morph_count}")
+    print(f"  Morph offsets: {summary.morph_offset_count}")
+    print(f"  Display frames: {summary.display_frame_count}")
+    print(f"  Display-frame elements: {summary.display_frame_element_count}")
+    print(f"  Rigid bodies: {summary.rigid_body_count}")
+    print(f"  Joints: {summary.joint_count}")
+    print(f"  Soft bodies: {summary.soft_body_count}")
+    print(f"  Soft-body anchors: {summary.soft_body_anchor_count}")
+    print(f"  Pinned vertices: {summary.pinned_vertex_count}")
+
+
+def _print_scan_dependency_summary(
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print PMX texture-reference summary."""
+
+    summary = result.dependency_summary
+
+    if summary is None:
+        return
+
+    print("Texture dependencies:")
+    print(f"  Declared paths: {summary.declared_texture_path_count}")
+    print(f"  Material texture references: {summary.material_texture_reference_count}")
+    print(f"  Sphere texture references: {summary.sphere_texture_reference_count}")
+    print(f"  Toon texture references: {summary.toon_texture_reference_count}")
+    print(f"  Total references: {summary.total_texture_reference_count}")
+
+    if summary.referenced_texture_paths:
+        print("  Referenced paths:")
+        for texture_index, texture_path in zip(
+            summary.referenced_texture_indices,
+            summary.referenced_texture_paths,
+            strict=True,
+        ):
+            print(f"    [{texture_index}] {texture_path}")
+
+    if summary.unreferenced_texture_paths:
+        print("  Unreferenced paths:")
+        for texture_index, texture_path in zip(
+            summary.unreferenced_texture_indices,
+            summary.unreferenced_texture_paths,
+            strict=True,
+        ):
+            print(f"    [{texture_index}] {texture_path}")
+
+
+def _print_scan_result(
+    file_path: Path,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Print one human-readable PMX structural scan result."""
+
+    model_name = result.model_info.local_name if result.model_info is not None else None
+    detected_format = (
+        result.detected_format.upper()
+        if result.detected_format is not None
+        else "unknown"
+    )
+
+    print(f"File: {file_path.as_posix()}")
+    print(f"Status: {result.status}")
+    print(f"Format: {detected_format}")
+    print(f"Version: {_format_scan_value(result.version)}")
+    print(f"Encoding: {_format_scan_value(result.encoding)}")
+    print(f"Model name: {_format_scan_value(model_name)}")
+    print(f"Scan complete: {'yes' if result.scan_complete else 'no'}")
+    print(f"File size: {_format_scan_value(result.file_size)}")
+    print(f"Bytes consumed: {result.bytes_consumed}")
+    print(f"Bytes remaining: {_format_scan_value(result.bytes_remaining)}")
+    print(f"Trailing bytes: {_format_scan_value(result.trailing_byte_count)}")
+
+    _print_scan_section_summary(result)
+    _print_scan_dependency_summary(result)
+
+    for message in result.warnings:
+        print(f"[WARNING] {message}")
+
+    for message in result.errors:
+        print(f"[ERROR] {message}")
+
+
+def _run_scan(arguments: argparse.Namespace) -> int:
+    """Structurally scan one PMX model file."""
+
+    file_path = Path(arguments.path)
+    input_error = _validate_input_file(file_path)
+
+    if input_error is not None:
+        print(f"[ERROR] scan: {input_error}")
+        return 2
+
+    try:
+        result = scan_pmx_structure(file_path)
+    except Exception as error:
+        message = f"Internal scan failure: {error}"
+
+        if arguments.json:
+            print(
+                json.dumps(
+                    {
+                        "path": file_path.as_posix(),
+                        "status": "error",
+                        "internal_error": True,
+                        "errors": [message],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            print(
+                f"[ERROR] scan: {message}",
+                file=sys.stderr,
+            )
+
+        return 3
+
+    payload = {
+        "path": file_path.as_posix(),
+        **result.to_dict(),
+    }
+
+    if arguments.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        _print_scan_result(file_path, result)
+
+    if result.errors:
+        return 1
+
+    return 0
+
+
+def _doctor_status(
+    scan_result: PmxHeaderScanResult,
+    diagnostics: TextureDependencyDiagnostics | None,
+) -> str:
+    """Return the highest severity from scan and dependency diagnostics."""
+
+    if scan_result.errors:
+        return "error"
+
+    if diagnostics is not None and diagnostics.error_count:
+        return "error"
+
+    if scan_result.warnings:
+        return "warning"
+
+    if diagnostics is not None and diagnostics.warning_count:
+        return "warning"
+
+    return "ok"
+
+
+def _doctor_payload(
+    file_path: Path,
+    scan_result: PmxHeaderScanResult,
+    diagnostics: TextureDependencyDiagnostics | None,
+) -> dict[str, Any]:
+    """Build one stable, JSON-serializable doctor payload."""
+
+    return {
+        "path": file_path.as_posix(),
+        "status": _doctor_status(scan_result, diagnostics),
+        "scan": scan_result.to_dict(),
+        "texture_diagnostics": (
+            diagnostics.to_dict() if diagnostics is not None else None
+        ),
+    }
+
+
+def _print_texture_diagnostics(
+    diagnostics: TextureDependencyDiagnostics,
+) -> None:
+    """Print filesystem diagnostics for declared PMX texture paths."""
+
+    print("Texture filesystem diagnostics:")
+    print(f"  Status: {diagnostics.status}")
+    print(f"  Declared: {diagnostics.declared_texture_count}")
+    print(f"  Referenced: {diagnostics.referenced_texture_count}")
+    print(f"  Unreferenced: {diagnostics.unreferenced_texture_count}")
+    print(f"  Existing files: {diagnostics.existing_file_count}")
+    print(f"  Missing files: {diagnostics.missing_file_count}")
+    print(f"  Unresolved paths: {diagnostics.unresolved_path_count}")
+    print(f"  Portable paths: {diagnostics.portable_path_count}")
+    print(f"  Non-portable paths: {diagnostics.non_portable_path_count}")
+    print(f"  Warnings: {diagnostics.warning_count}")
+    print(f"  Errors: {diagnostics.error_count}")
+
+    if not diagnostics.dependencies:
+        return
+
+    print("Dependencies:")
+    for dependency in diagnostics.dependencies:
+        reference_label = "referenced" if dependency.is_referenced else "unreferenced"
+        print(
+            f"  [{dependency.texture_index}] "
+            f"{dependency.status} | {reference_label} | "
+            f"{dependency.raw_path}"
+        )
+
+        if dependency.resolved_path is not None:
+            print(f"    Resolved: {dependency.resolved_path}")
+
+        for issue in dependency.issues:
+            print(f"    [{issue.severity.upper()}] {issue.code}: {issue.message}")
+
+
+def _print_doctor_result(
+    file_path: Path,
+    scan_result: PmxHeaderScanResult,
+    diagnostics: TextureDependencyDiagnostics | None,
+) -> None:
+    """Print a combined structural and texture dependency diagnosis."""
+
+    model_name = (
+        scan_result.model_info.local_name
+        if scan_result.model_info is not None
+        else None
+    )
+    detected_format = (
+        scan_result.detected_format.upper()
+        if scan_result.detected_format is not None
+        else "unknown"
+    )
+
+    print(f"File: {file_path.as_posix()}")
+    print(f"Status: {_doctor_status(scan_result, diagnostics)}")
+    print("Structural scan:")
+    print(f"  Status: {scan_result.status}")
+    print(f"  Format: {detected_format}")
+    print(f"  Version: {_format_scan_value(scan_result.version)}")
+    print(f"  Model name: {_format_scan_value(model_name)}")
+    print(f"  Complete: {'yes' if scan_result.scan_complete else 'no'}")
+    print(f"  Trailing bytes: {_format_scan_value(scan_result.trailing_byte_count)}")
+
+    for message in scan_result.warnings:
+        print(f"  [WARNING] {message}")
+
+    for message in scan_result.errors:
+        print(f"  [ERROR] {message}")
+
+    if diagnostics is not None:
+        _print_texture_diagnostics(diagnostics)
+
+
+def _print_doctor_error(
+    file_path: Path,
+    message: str,
+    *,
+    json_output: bool,
+    internal_error: bool,
+) -> None:
+    """Print one path or internal doctor error in the requested format."""
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "path": file_path.as_posix(),
+                    "status": "error",
+                    "internal_error": internal_error,
+                    "errors": [message],
+                    "scan": None,
+                    "texture_diagnostics": None,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    print(f"[ERROR] doctor: {message}", file=sys.stderr)
+
+
+def _run_doctor(arguments: argparse.Namespace) -> int:
+    """Scan one PMX model and diagnose its texture dependencies."""
+
+    file_path = Path(arguments.path)
+    input_error = _validate_input_file(file_path)
+
+    if input_error is not None:
+        _print_doctor_error(
+            file_path,
+            input_error,
+            json_output=arguments.json,
+            internal_error=False,
+        )
+        return 2
+
+    try:
+        scan_result = scan_pmx_structure(file_path)
+    except Exception as error:
+        _print_doctor_error(
+            file_path,
+            f"Internal scan failure: {error}",
+            json_output=arguments.json,
+            internal_error=True,
+        )
+        return 3
+
+    diagnostics: TextureDependencyDiagnostics | None = None
+
+    if not scan_result.errors and scan_result.scan_complete:
+        dependency_summary = scan_result.dependency_summary
+
+        if dependency_summary is None:
+            _print_doctor_error(
+                file_path,
+                "Complete PMX scan did not produce a dependency summary.",
+                json_output=arguments.json,
+                internal_error=True,
+            )
+            return 3
+
+        try:
+            diagnostics = diagnose_texture_dependencies(
+                model_path=file_path,
+                texture_paths=scan_result.texture_paths,
+                referenced_texture_indices=(
+                    dependency_summary.referenced_texture_indices
+                ),
+            )
+        except Exception as error:
+            _print_doctor_error(
+                file_path,
+                f"Internal dependency diagnostic failure: {error}",
+                json_output=arguments.json,
+                internal_error=True,
+            )
+            return 3
+
+    payload = _doctor_payload(
+        file_path,
+        scan_result,
+        diagnostics,
+    )
+
+    if arguments.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        _print_doctor_result(
+            file_path,
+            scan_result,
+            diagnostics,
+        )
+
+    if scan_result.errors:
+        return 1
+
+    if diagnostics is not None and diagnostics.error_count:
+        return 1
+
+    return 0
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     """Run the registry command-line application."""
 
@@ -418,12 +874,20 @@ def run(argv: Sequence[str] | None = None) -> int:
     if arguments.command == "inspect":
         return _run_inspect(arguments)
 
+    if arguments.command == "scan":
+        return _run_scan(arguments)
+
+    if arguments.command == "doctor":
+        return _run_doctor(arguments)
+
     parser.error(f"Unsupported command: {arguments.command}")
     return 2
 
 
 def main() -> None:
     """Command-line entry point."""
+
+    _configure_utf8_standard_streams()
 
     try:
         exit_code = run()

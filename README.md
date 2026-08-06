@@ -1,74 +1,76 @@
 # MMD Asset & License Registry
 
-A lightweight Python registry for tracking MMD asset provenance, creator
-credits, local source files, SHA-256 integrity, PMX/PMD header metadata, and
-known usage restrictions.
+A lightweight, read-only Python toolkit for tracking MMD asset provenance,
+creator credits, local source files, SHA-256 integrity, model metadata,
+PMX structure, texture dependencies, and known usage restrictions.
 
-The project is designed as a validation gate before assets enter an automated
-MMD, Blender, or anime video pipeline.
+The project is designed as a validation and diagnostics gate before assets
+enter an automated MMD, Blender, or anime-video pipeline. It never edits,
+rewrites, repairs, or redistributes a model or texture file.
 
 ## Current version
 
 ```text
-Tool version: 0.3.0
+Tool version: 0.4.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
+Tool version and registry schema are intentionally independent. Version 0.4.0
+adds structural model scanning and dependency diagnostics without changing the
+persistent registry schema.
+
 Schema `0.2` remains supported for backward compatibility. Integrity and model
-header inspection are applied only to schema `0.3`.
+header inspection are applied only to schema `0.3` registry entries.
 
 ## Why this project exists
 
 MMD models and related assets are often collected from different creators,
-distribution pages, and communities.
-
-Over time, important information can become separated from the downloaded
-files:
+distribution pages, archives, and communities. Important information can later
+become separated from the downloaded files:
 
 - Who created the asset
-- Where the asset originally came from
+- Where it originally came from
 - What credit should appear in a published video
 - Whether editing, redistribution, or commercial use has known restrictions
-- Whether the local asset file still exists
-- Whether the local file still matches the registered copy
-- Whether a `.pmx` or `.pmd` file has a readable MMD model header
+- Whether the local file still exists and matches the registered copy
+- Whether a `.pmx` or `.pmd` file has a readable model header
+- Whether a PMX file is structurally readable from beginning to end
+- Which texture paths the model declares and actually references
+- Whether referenced textures exist and remain portable with the model
 - Which pipeline character uses the asset
 
-This registry keeps that information in one structured YAML file and validates
-it before a pipeline continues.
+The registry records this information in YAML and validates it before a
+pipeline continues. The scanner and doctor add technical evidence, but the
+tool does not automatically determine legal permission or replace review of
+the creator's original terms.
 
-The registry does not automatically determine legal permission. It records
-known information, missing information, known restrictions, file integrity,
-and limited technical metadata.
+## Version 0.4 features
 
-## Version 0.3 features
+Version 0.4.0 provides:
 
-Version 0.3 provides:
+- Bounded binary reads for untrusted PMX data
+- Complete read-only PMX 2.0 structural scanning
+- PMX 2.1 scanning, including soft bodies
+- PMX UTF-8 and UTF-16LE text decoding
+- Section-level validation for vertices, surfaces, textures, materials, bones,
+  IK, morphs, display frames, rigid bodies, joints, and soft bodies
+- Cross-reference validation for model indices
+- Complete-file byte accounting and trailing-byte warnings
+- Aggregate section and texture-reference summaries
+- Texture dependency filesystem diagnostics
+- Missing and non-file texture detection
+- Absolute, rooted, non-portable, and outside-model-directory path detection
+- Dedicated `scan` and `doctor` CLI commands
+- Human-readable and machine-readable JSON output
+- UTF-8 redirected output for Unicode model names and paths on Windows
+- Stable exit codes for scripts, CI, and pipeline gates
+- Programmatically generated binary fixtures; no copyrighted model fixtures
+- 300 automated unit tests after the release-readiness checkpoint
 
-- Schema `0.3` registry validation
-- Backward-compatible schema `0.2` validation
-- Streaming SHA-256 calculation
-- Registered hash verification
-- File-size reporting
-- Safe PMX `2.0` and `2.1` header inspection
-- Safe PMD `1.0` header inspection
-- PMX UTF-8 and UTF-16LE model-name decoding
-- PMD CP932 model-name decoding
-- Invalid signature, unsupported version, truncation, and extension mismatch
-  detection
-- Bounded reads for untrusted model-name lengths
-- Creator and source provenance tracking
-- Automatic Markdown credit generation
-- Private, publish, and commercial validation modes
-- Portable JSON reports
-- Dedicated `validate`, `hash`, and `inspect` CLI commands
-- Legacy validation command compatibility
-- Structured info, warning, and error messages
-- Exit codes for shell automation and CI
-- Programmatically generated binary test fixtures
-- Automated unit tests
-- Expanded GitHub Actions validation
+Existing version 0.3 capabilities remain available, including registry
+validation, provenance tracking, credit generation, SHA-256 integrity checks,
+portable JSON reports, and PMX/PMD header inspection.
 
 ## Installation
 
@@ -110,7 +112,24 @@ Available commands:
 validate  Validate an asset registry
 hash      Calculate or verify a file SHA-256 hash
 inspect   Inspect a PMX or PMD model header
+scan      Structurally scan a PMX model
+doctor    Scan a PMX model and diagnose texture dependencies
 ```
+
+Running without a command preserves the legacy behavior and performs registry
+validation.
+
+## Format support
+
+| Capability | PMX 2.0 | PMX 2.1 | PMD 1.0 |
+|---|---:|---:|---:|
+| Header inspection | Yes | Yes | Yes |
+| Complete structural scan | Yes | Yes | No |
+| Texture dependency doctor | Yes | Yes | No |
+
+PMD 1.0 is currently supported for header inspection only. `scan` and `doctor`
+return an unsupported-format error for PMD files instead of pretending to
+perform a partial structural scan.
 
 ## Validate a registry
 
@@ -138,131 +157,32 @@ Equivalent module command:
 python -m mmd_registry.cli validate --mode private
 ```
 
-### Private mode
+Validation modes:
 
-Used for local MMD, Blender, and pipeline testing.
+- `private` allows incomplete provenance and credit information while still
+  reporting it.
+- `publish` requires complete required credit information and rejects invalid
+  placeholder model headers.
+- `commercial` adds commercial-use checks and rejects unclear or prohibited
+  commercial permission.
 
-```bash
-python check_assets.py validate --mode private
-```
-
-Private mode allows incomplete provenance and credit information while still
-reporting warnings and informational messages.
-
-Typical behavior:
-
-- Missing source file: error
-- Duplicate asset ID: error
-- SHA-256 mismatch: error
-- Invalid non-placeholder PMX/PMD header: error
-- Invalid placeholder/review model header: warning
-- Unknown creator: warning
-- Missing required credit text: warning
-- Unclear editing rule: information
-- Unclear commercial-use rule: does not block private testing
-
-### Publish mode
-
-Used before publishing a public video.
-
-```bash
-python check_assets.py validate --mode publish
-```
-
-Publish mode requires complete required credit information and does not allow
-an invalid placeholder model header to pass as a warning.
-
-Typical behavior:
-
-- Missing required credit text: error
-- Invalid placeholder PMX/PMD header: error
-- Missing creator: warning
-- Missing original source page: warning
-- Unclear editing rule: warning
-
-### Commercial mode
-
-Used before monetized videos, commissions, advertisements, or other commercial
-output.
-
-```bash
-python check_assets.py validate --mode commercial
-```
-
-Commercial mode adds commercial-use checks.
-
-Typical behavior:
-
-- Commercial use prohibited: error
-- Commercial-use rule unclear: error
-- Commercial use conditional: warning
-- Missing required credit text: error
-- Invalid placeholder PMX/PMD header: error
-
-## Generate validation reports
-
-A JSON report is generated by default:
-
-```bash
-python check_assets.py validate --mode private
-```
-
-Default output:
+A JSON validation report is generated by default at:
 
 ```text
 reports/validation_report.json
 ```
 
-Disable report generation:
+Disable it with:
 
 ```bash
 python check_assets.py validate --mode private --no-report
 ```
 
-Use a custom report path:
-
-```bash
-python check_assets.py validate \
-  --report reports/custom-report.json
-```
-
-Legacy syntax is also valid:
-
-```bash
-python check_assets.py \
-  --mode private \
-  --report reports/custom-report.json
-```
-
-Generated reports are ignored by Git.
-
-## Generate asset credits
-
-Generate the default Markdown credit file:
+Generate Markdown credits with:
 
 ```bash
 python check_assets.py validate --mode private --credits
 ```
-
-Default output:
-
-```text
-reports/CREDITS.md
-```
-
-Use a custom output path:
-
-```bash
-python check_assets.py validate \
-  --credits output/ASSET_CREDITS.md
-```
-
-Assets with complete credit information are listed under `Credits`.
-
-Assets that require credit but have incomplete credit information are listed
-under `Incomplete Credit Information`.
-
-Generated credit files are ignored by Git.
 
 ## Calculate SHA-256
 
@@ -272,30 +192,11 @@ Calculate a file hash:
 python check_assets.py hash path/to/model.pmx
 ```
 
-Example output:
-
-```text
-File: path/to/model.pmx
-Algorithm: sha256
-SHA-256: 0123456789abcdef...
-Size bytes: 123456
-Status: not_recorded
-```
-
-Verify an expected hash:
+Verify an expected digest:
 
 ```bash
 python check_assets.py hash path/to/model.pmx \
   --expected 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-```
-
-Possible hash statuses:
-
-```text
-matched
-mismatched
-not_recorded
-invalid_expected
 ```
 
 Machine-readable output:
@@ -304,20 +205,7 @@ Machine-readable output:
 python check_assets.py hash path/to/model.pmx --json
 ```
 
-Example JSON:
-
-```json
-{
-  "path": "path/to/model.pmx",
-  "algorithm": "sha256",
-  "expected": null,
-  "actual": "0123456789abcdef...",
-  "status": "not_recorded",
-  "size_bytes": 123456
-}
-```
-
-Hashing reads the file in chunks rather than loading the complete file into
+Hashing reads the file in chunks instead of loading the complete file into
 memory.
 
 ## Inspect a PMX or PMD header
@@ -346,35 +234,147 @@ Machine-readable output:
 python check_assets.py inspect path/to/model.pmx --json
 ```
 
-Example JSON:
+The inspector reads only the model signature, version, global PMX header data,
+and first model-name field. It does not claim to perform a complete structural
+scan.
 
-```json
-{
-  "path": "path/to/model.pmx",
-  "status": "ok",
-  "detected_format": "pmx",
-  "magic": "PMX ",
-  "version": 2.1,
-  "model_name": "Example Model",
-  "encoding": "utf-8",
-  "errors": [],
-  "warnings": []
-}
+## Structurally scan a PMX model
+
+Run a complete read-only PMX structural scan:
+
+```bash
+python check_assets.py scan path/to/model.pmx
 ```
 
-The inspector currently supports:
+Machine-readable output:
+
+```bash
+python check_assets.py scan path/to/model.pmx --json
+```
+
+On Windows, quote paths that contain spaces or Unicode characters:
+
+```bat
+set "MODEL=D:\MMD\Models\Character\model.pmx"
+python check_assets.py scan "%MODEL%"
+python check_assets.py scan "%MODEL%" --json > model-scan.json
+```
+
+The `scan` command reads and validates:
+
+1. Signature, version, global settings, and model information
+2. Vertices and deform records
+3. Surface indices and triangle alignment
+4. Texture path declarations
+5. Materials and texture references
+6. Bones, optional bone fields, IK chains, and IK links
+7. Morphs and type-specific offsets
+8. Display frames and frame elements
+9. Rigid bodies
+10. Joints
+11. PMX 2.1 soft bodies, anchors, and pinned vertices
+
+A successful complete scan reports:
+
+- `file_size`
+- `bytes_consumed`
+- `bytes_remaining`
+- `trailing_byte_count`
+- `scan_complete`
+- Aggregate section counts
+- Referenced and unreferenced texture indices and paths
+
+A valid file with bytes after the final known PMX section is returned as a
+warning. A file truncated inside a required section is returned as an error and
+does not claim completion.
+
+The JSON result intentionally contains detailed structural records and can be
+large for production models. Redirect it to a file when full details are
+needed; use text output for a compact summary.
+
+## Diagnose texture dependencies
+
+Run structural scanning and filesystem diagnostics together:
+
+```bash
+python check_assets.py doctor path/to/model.pmx
+```
+
+Machine-readable output:
+
+```bash
+python check_assets.py doctor path/to/model.pmx --json
+```
+
+The doctor runs structural scanning first. Dependency diagnostics run only when
+the PMX scan completes successfully and provides a trustworthy texture
+summary.
+
+For every declared texture path, the doctor reports:
+
+- Declared texture index and original path
+- Whether a material references the declaration
+- Resolved path relative to the PMX directory
+- Whether the resolved path exists and is a regular file
+- Whether the path is portable with the model directory
+- Stable issue codes and warning/error severity
+
+Examples of diagnosed issues:
 
 ```text
-PMX 2.0
-PMX 2.1
-PMD 1.0
+empty_path
+invalid_path
+absolute_path
+rooted_path
+outside_model_directory
+missing_file
+not_a_file
 ```
 
-The inspector reads only the model header and first model-name field. It does
-not parse full geometry, bones, morphs, materials, physics, or textures.
+A missing texture referenced by a material is an error. A missing declaration
+that no material uses is a warning. Absolute paths and paths escaping the model
+directory are warnings because they can break when the model is moved to
+another computer.
 
-The inspector safely reports malformed input as result errors rather than
-allowing malformed files to crash the caller.
+## Text and JSON status behavior
+
+Primary result statuses:
+
+```text
+ok
+warning
+error
+```
+
+Warnings preserve a successful exit code when the model remains structurally
+readable and no referenced dependency has an error. JSON output preserves
+Unicode names and paths and is configured as UTF-8 even when redirected by
+Windows CMD.
+
+## Exit codes
+
+General CLI exit codes:
+
+```text
+0 = Command completed successfully; warnings may be present
+1 = Validation failed, hash verification failed, model was malformed or
+    unsupported, or a referenced texture dependency had an error
+2 = Required input path or registry file could not be used
+3 = Unexpected internal error
+```
+
+Command examples:
+
+- Validation with warnings but no errors: `0`
+- SHA-256 matched: `0`
+- SHA-256 mismatched: `1`
+- `inspect` on an invalid PMX/PMD header: `1`
+- `scan` on a complete PMX with trailing-byte warnings: `0`
+- `scan` on malformed PMX data: `1`
+- `doctor` with all referenced textures present: `0`
+- `doctor` with a referenced texture missing: `1`
+- Missing file passed to `hash`, `inspect`, `scan`, or `doctor`: `2`
+- Unexpected scanner or diagnostics failure: `3`
 
 ## Registry schema 0.3
 
@@ -388,7 +388,6 @@ assets:
     display_name: Example Character
     asset_type: character_model
     pipeline_character: ExampleCharacter
-
     source_path: sample_assets/example/model.pmx
 
     integrity:
@@ -414,220 +413,82 @@ assets:
       notes: Credit the original creator.
 
     status: ready
-
     tags:
       - character
       - example
-
-    notes: Example schema 0.3 asset.
 ```
 
-### Integrity field
-
-Schema `0.3` supports:
-
-```yaml
-integrity:
-  sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-```
-
-The registered digest must be exactly 64 hexadecimal characters.
-
-Validation behavior:
-
-- Matching hash: passes
-- Mismatched hash: error
-- Invalid registered hash: error
-- Missing registered hash: informational message
-- Missing source file: error
-
-`size_bytes` is calculated during validation and written to reports. It is not
-required in `assets.yaml`.
-
-### Schema 0.2 compatibility
-
-Schema `0.2` remains accepted:
-
-```yaml
-registry_version: "0.2"
-```
-
-For schema `0.2`:
-
-- Existing provenance, credit, status, and usage-rule checks still run
-- Integrity verification is not applied
-- PMX/PMD header inspection is not applied
-- JSON reports use `integrity: null`
-- JSON reports use `inspection: null`
-
-A registry-level informational message indicates that schema `0.2` is being
-used for backward compatibility.
+The registered SHA-256 digest must be exactly 64 hexadecimal characters.
+Schema `0.2` remains accepted, but integrity verification and model inspection
+are not applied to schema `0.2` entries.
 
 ## Model header validation policy
 
 For schema `0.3`, existing `.pmx` and `.pmd` source files are inspected.
 
-A model is treated as a placeholder/review asset when at least one of the
-following is true:
+A model is treated as a placeholder/review asset when at least one condition is
+true:
 
 - `status` is `review`
 - A tag is `placeholder`
-- The asset notes contain the word `placeholder`
+- Asset notes contain the word `placeholder`
 
 If inspection fails:
 
-- Private mode + placeholder/review asset: asset warning
-- Publish mode: asset error
-- Commercial mode: asset error
-- Non-placeholder asset in any mode: asset error
+- Private mode plus placeholder/review asset: warning
+- Publish mode: error
+- Commercial mode: error
+- Non-placeholder asset in any mode: error
 
-The inspection result itself still reports `status: error` in JSON when the
-file header is invalid. The containing asset may be downgraded to `warning`
-only under the private placeholder policy.
+The inspection result still reports technical truth as `error`; only the
+containing asset severity can be downgraded under the private placeholder
+policy.
 
-This distinction preserves technical truth while allowing unfinished local
-placeholder assets during development.
+## Safety and trust boundaries
 
-## JSON report asset structure
+The tool is read-only for model and texture inputs. It does not:
 
-Schema `0.3` report entries include source path, file size, integrity, and
-inspection metadata:
+- Modify or rewrite PMX/PMD files
+- Repair corrupt geometry, bones, morphs, or physics
+- Change texture paths
+- Copy, rename, convert, or delete textures
+- Import assets into Blender or MMD
+- Integrate directly with `mmd_tools`
+- Download assets or scrape creator pages
+- Determine copyright ownership or legal permission
+- Replace human review of original asset terms
 
-```json
-{
-  "id": "example_character",
-  "status": "ok",
-  "source_path": "sample_assets/example/model.pmx",
-  "file": {
-    "size_bytes": 123456
-  },
-  "integrity": {
-    "algorithm": "sha256",
-    "expected": "0123456789abcdef...",
-    "actual": "0123456789abcdef...",
-    "status": "matched"
-  },
-  "inspection": {
-    "status": "ok",
-    "detected_format": "pmx",
-    "magic": "PMX ",
-    "version": 2.1,
-    "model_name": "Example Model",
-    "encoding": "utf-8",
-    "errors": [],
-    "warnings": []
-  },
-  "errors": [],
-  "warnings": [],
-  "infos": []
-}
-```
+All binary counts, variable-length strings, indices, and aggregate record
+budgets are bounded before or while they are read. Malformed input is returned
+as structured errors instead of being trusted.
 
-Registered source paths are kept portable when they are inside the project
-directory.
+## Real-model verification
 
-## Asset types
+Version 0.4.0 was verified against a production-size PMX 2.0 model without
+committing or redistributing that model.
 
-Supported asset types:
+Verification summary:
 
 ```text
-character_model
-stage
-motion
-camera_motion
-accessory
-effect
-texture_pack
-audio
-other
+File size: 4,912,416 bytes
+Bytes consumed: 4,912,416
+Trailing bytes: 0
+Vertices: 31,387
+Triangles: 38,130
+Bones: 342
+Morphs: 59
+Rigid bodies: 221
+Joints: 299
+Declared/referenced textures: 11/11
+Missing textures: 0
+Non-portable paths: 0
+Scan exit code: 0
+Doctor exit code: 0
+UTF-8 JSON export: valid
 ```
 
-Character models require a non-empty `pipeline_character`.
-
-## Asset statuses
-
-Supported statuses:
-
-```text
-ready
-review
-blocked
-archived
-```
-
-Meaning:
-
-- `ready` — Asset is available for its intended pipeline use
-- `review` — Provenance, credit, usage, or technical information is incomplete
-- `blocked` — Validator rejects the asset
-- `archived` — Asset is retained but produces a warning
-
-## Usage-rule values
-
-Supported values:
-
-```text
-allowed
-prohibited
-conditional
-unclear
-not_applicable
-```
-
-These values record known information. They are not an automatic legal
-determination.
-
-## Validation output
-
-Example terminal output:
-
-```text
-[INFO] flavia: Asset is still under review.
-[WARNING] flavia: Creator name has not been recorded.
-[WARNING] flavia: Placeholder model header inspection failed: File is too short to contain an MMD model signature.
-[ERROR] flavia: Credit is required, but credit.text is missing.
-```
-
-Registry status values:
-
-```text
-passed
-passed_with_warnings
-failed
-```
-
-Asset status values in JSON reports:
-
-```text
-ok
-warning
-error
-```
-
-Informational messages do not change an asset from `ok` to `warning`.
-
-## Exit codes
-
-General CLI exit codes:
-
-```text
-0 = Command completed successfully
-1 = Validation failed, hash mismatched, expected hash was invalid,
-    or inspected model contained errors
-2 = Required input path or registry file could not be used
-3 = Unexpected internal error
-```
-
-Examples:
-
-- Validation with warnings but no errors: `0`
-- SHA-256 matched: `0`
-- SHA-256 mismatched: `1`
-- Invalid PMX/PMD header: `1`
-- Missing file passed to `hash` or `inspect`: `2`
-
-These exit codes allow shell scripts, pipelines, and GitHub Actions to stop
-when a required condition fails.
+This verification supplements generated fixtures; the repository does not
+contain the third-party production model or its textures.
 
 ## Automated tests
 
@@ -637,83 +498,77 @@ Run all tests:
 python -m unittest discover -s tests -v
 ```
 
-Version `0.3.0` includes 56 unit tests covering:
+After the release-readiness checkpoint, version 0.4.0 includes 300 unit tests
+covering:
 
-- CLI backward compatibility
-- Explicit CLI subcommands
+- Bounded binary reads and contextual truncation errors
+- PMX 2.0 and 2.1 header/global settings
+- All supported PMX structural sections and index sizes
+- Cross-reference and finite-value validation
+- Complete-file accounting and trailing bytes
+- Texture-reference summaries
+- Dependency path portability and filesystem state
+- `scan` and `doctor` text/JSON output
+- Exit codes `0`, `1`, `2`, and `3`
+- Windows redirected UTF-8 output
+- Legacy CLI compatibility
 - SHA-256 streaming and verification
-- Invalid hash formats
-- PMX UTF-8 and UTF-16LE headers
-- PMD CP932 headers
-- Unsupported versions
-- Invalid signatures
-- Truncated headers
-- Oversized model-name lengths
-- Extension/content mismatches
-- Schema `0.2` compatibility
-- Schema `0.3` integrity validation
-- Placeholder inspection policy
-- Portable JSON report paths
-- Integrity and inspection report metadata
-- JSON report writing
-- Credit Markdown generation
-- Incomplete credit reporting
-- Validation modes and usage restrictions
+- PMX/PMD header inspection
+- Registry schemas `0.2` and `0.3`
+- Validation modes, reports, and credit generation
+- Version, documentation, changelog, and workflow release readiness
 
-The PMX and PMD test files are generated programmatically during tests. The
-repository does not need copyrighted model fixtures for header-parser tests.
+Binary model fixtures are generated programmatically during tests. The
+repository does not require copyrighted model fixtures.
 
 ## GitHub Actions
 
-The repository includes:
-
-```text
-.github/workflows/validate.yml
-```
-
-The workflow runs on pushes and pull requests.
-
-It performs:
+The workflow at `.github/workflows/validate.yml` runs on pushes and pull
+requests. It performs:
 
 1. Repository checkout
 2. Python 3.12 setup
 3. Dependency installation
 4. Python source compilation
-5. Automated tests
-6. Tool-version check
-7. Private registry validation using legacy syntax
-8. Private registry validation using the explicit `validate` command
+5. Full automated test discovery
+6. Exact `0.4.0` package-version assertion
+7. Top-level version, `scan --help`, and `doctor --help` checks
+8. Private registry validation using legacy and explicit syntax
 9. Registered placeholder SHA-256 verification
 
 ## Project structure
 
 ```text
 mmd-asset-registry/
-├── .github/
-│   └── workflows/
-│       └── validate.yml
-├── .vscode/
-│   └── launch.json
+├── .github/workflows/validate.yml
 ├── mmd_registry/
 │   ├── __init__.py
+│   ├── binary_reader.py
 │   ├── cli.py
 │   ├── constants.py
+│   ├── dependency_diagnostics.py
 │   ├── hashing.py
 │   ├── model_inspection.py
+│   ├── model_scanning.py
 │   ├── reporting.py
 │   └── validator.py
 ├── reports/
-│   └── .gitkeep
 ├── sample_assets/
 ├── tests/
-│   ├── __init__.py
 │   ├── mmd_fixtures.py
+│   ├── test_binary_reader.py
 │   ├── test_cli.py
-│   ├── test_hashing.py
+│   ├── test_cli_utf8_output.py
+│   ├── test_dependency_diagnostics.py
+│   ├── test_doctor_cli.py
 │   ├── test_model_inspection.py
+│   ├── test_model_scanning.py
+│   ├── test_pmx_*_scanning.py
+│   ├── test_release_readiness.py
 │   ├── test_reporting.py
 │   └── test_validator.py
 ├── assets.yaml
+├── CHANGELOG.md
 ├── check_assets.py
 ├── README.md
 └── requirements.txt
@@ -721,31 +576,26 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version `0.3.0` does not:
+Version 0.4.0 does not:
 
-- Parse PMX or PMD beyond the header and first model name
-- Inspect vertices, materials, bones, morphs, rigid bodies, or physics
-- Detect missing texture files
-- Scan model dependencies
-- Import assets into Blender
-- Integrate directly with `mmd_tools`
-- Download assets
-- Scrape creator pages
+- Structurally scan PMD beyond header inspection
+- Write or edit PMX/PMD files
+- Repair or transform model data
+- Diagnose non-texture external dependencies
+- Register scan results back into `assets.yaml`
+- Provide batch directory scanning
+- Provide a graphical interface
+- Import models into Blender or MMD
 - Automatically determine legal permissions
-- Provide a web interface
-- Provide a database
-- Replace human review of original asset terms
 
 ## Roadmap
 
-Possible future work:
+Planned directions after 0.4.0:
 
-- Texture and dependency scanning
-- PMX/PMD section-count inspection
-- Bone, material, and morph summaries
-- Registry update commands
-- Safe automatic hash registration
-- Pipeline-readable asset selection
-- Batch hash and inspection commands
-- A desktop editor for registry and model metadata
-- Deeper MMD model editing workflows without requiring PMX Editor
+- PMD structural scanning
+- Registry browser and metadata editing
+- Batch scan and doctor commands
+- Safe registry updates from scan results
+- First desktop model inspector GUI
+- Safe PMX metadata, material, and texture-path writing
+- Later bone, morph, transform, vertex, and weight editing workflows

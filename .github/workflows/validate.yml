@@ -35,8 +35,12 @@ jobs:
       - name: Run automated tests
         run: python -m unittest discover -s tests -v
 
-      - name: Check reported version
-        run: python check_assets.py --version
+      - name: Check release-facing commands
+        run: |
+          python -c "from mmd_registry import __version__; assert __version__ == '0.4.0'"
+          python check_assets.py --version
+          python check_assets.py scan --help
+          python check_assets.py doctor --help
 
       - name: Validate registry with legacy syntax
         run: python check_assets.py --mode private --no-report

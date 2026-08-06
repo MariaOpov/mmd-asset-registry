@@ -28,6 +28,8 @@ MAX_PMX_NAME_BYTES: Final[int] = 64 * 1024
 MAX_PMX_COMMENT_BYTES: Final[int] = 1024 * 1024
 MAX_PMX_VERTEX_COUNT: Final[int] = 2_000_000
 MAX_PMX_SURFACE_INDEX_COUNT: Final[int] = 12_000_000
+MAX_PMX_TEXTURE_COUNT: Final[int] = 100_000
+MAX_PMX_TEXTURE_PATH_BYTES: Final[int] = 64 * 1024
 
 ScanStatus = Literal["ok", "warning", "error"]
 
@@ -91,6 +93,8 @@ class PmxHeaderScanResult:
     vertex_count: int | None = None
     surface_index_count: int | None = None
     triangle_count: int | None = None
+    texture_count: int | None = None
+    texture_paths: list[str] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -128,6 +132,8 @@ class PmxHeaderScanResult:
             "vertex_count": self.vertex_count,
             "surface_index_count": self.surface_index_count,
             "triangle_count": self.triangle_count,
+            "texture_count": self.texture_count,
+            "texture_paths": list(self.texture_paths),
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
             "errors": list(self.errors),
@@ -555,6 +561,50 @@ def _scan_pmx_geometry(
     )
 
 
+def _scan_pmx_textures(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Read raw PMX texture paths without resolving dependencies."""
+
+    if result.encoding is None:
+        _raise_pmx_error(
+            section="textures",
+            offset=reader.offset,
+            operation="starting texture scan",
+            reason="PMX text encoding is unavailable.",
+        )
+
+    encoding = result.encoding
+    require_even_length = encoding == "utf-16-le"
+
+    with reader.context("textures"):
+        texture_count = reader.read_bounded_count(
+            "texture count",
+            max_count=MAX_PMX_TEXTURE_COUNT,
+            minimum_item_size=4,
+        )
+
+    texture_paths: list[str] = []
+
+    for record_index in range(texture_count):
+        with reader.context(
+            "textures",
+            record_index=record_index,
+        ):
+            texture_path = reader.read_length_prefixed_text(
+                "texture path",
+                encoding=encoding,
+                max_length=MAX_PMX_TEXTURE_PATH_BYTES,
+                require_even_length=require_even_length,
+            )
+
+        texture_paths.append(texture_path)
+
+    result.texture_count = texture_count
+    result.texture_paths = texture_paths
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -706,7 +756,7 @@ def scan_pmx_header(
 def scan_pmx_structure(
     file_path: str | Path,
 ) -> PmxHeaderScanResult:
-    """Scan PMX header, model information, vertices, and surfaces."""
+    """Scan PMX header, geometry, and raw texture references."""
 
     path = Path(file_path)
     result = PmxHeaderScanResult()
@@ -725,6 +775,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_geometry(
+                    reader,
+                    result,
+                )
+                _scan_pmx_textures(
                     reader,
                     result,
                 )

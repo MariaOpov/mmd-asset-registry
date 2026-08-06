@@ -268,8 +268,10 @@ def build_pmx_structure(
     rigid_body_index_size: int = 1,
     vertex_count_override: int | None = None,
     surface_index_count_override: int | None = None,
+    texture_paths: tuple[str, ...] = (),
+    texture_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the surface-index section."""
+    """Build a PMX fixture through the texture section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -311,6 +313,17 @@ def build_pmx_structure(
         for index in surface_indices
     )
 
+    texture_count = (
+        len(texture_paths) if texture_count_override is None else texture_count_override
+    )
+    texture_data = b"".join(
+        _encode_pmx_text(
+            texture_path,
+            encoding_flag,
+        )
+        for texture_path in texture_paths
+    )
+
     return b"".join(
         [
             header,
@@ -324,5 +337,10 @@ def build_pmx_structure(
                 surface_index_count,
             ),
             surface_data,
+            struct.pack(
+                "<i",
+                texture_count,
+            ),
+            texture_data,
         ]
     )

@@ -963,6 +963,132 @@ def build_pmx_joint(
     )
 
 
+def build_pmx_soft_body_anchor(
+    *,
+    rigid_body_index: int = 0,
+    vertex_index: int = 0,
+    near_mode: int = 0,
+    rigid_body_index_size: int = 1,
+    vertex_index_size: int = 1,
+) -> bytes:
+    """Build one PMX 2.1 soft-body anchor record."""
+
+    return b"".join(
+        [
+            _pack_pmx_index(
+                rigid_body_index,
+                size=rigid_body_index_size,
+                signed=True,
+            ),
+            _pack_pmx_index(
+                vertex_index,
+                size=vertex_index_size,
+                signed=False,
+            ),
+            struct.pack("<B", near_mode),
+        ]
+    )
+
+
+def build_pmx_soft_body(
+    *,
+    local_name: str = "Soft Body",
+    universal_name: str = "Soft Body",
+    shape: int = 0,
+    material_index: int = 0,
+    collision_group: int = 0,
+    collision_mask: int = 0xFFFF,
+    flags: int = 0,
+    bending_link_distance: int = 0,
+    cluster_count: int = 0,
+    total_mass: float = 1.0,
+    collision_margin: float = 0.05,
+    aerodynamics_model: int = 0,
+    config: tuple[float, ...] = (
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.1,
+        1.0,
+        0.7,
+    ),
+    cluster_config: tuple[float, ...] = (
+        1.0,
+        0.1,
+        1.0,
+        0.5,
+        0.5,
+        0.5,
+    ),
+    iteration_config: tuple[int, int, int, int] = (0, 1, 0, 0),
+    material_config: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    anchors: tuple[bytes, ...] = (),
+    pinned_vertex_indices: tuple[int, ...] = (),
+    encoding_flag: int = 1,
+    material_index_size: int = 1,
+    vertex_index_size: int = 1,
+    anchor_count_override: int | None = None,
+    pinned_vertex_count_override: int | None = None,
+) -> bytes:
+    """Build one PMX 2.1 soft-body record."""
+
+    if len(config) != 12:
+        raise ValueError("soft-body config must contain 12 floats")
+    if len(cluster_config) != 6:
+        raise ValueError("soft-body cluster config must contain 6 floats")
+
+    anchor_count = (
+        len(anchors) if anchor_count_override is None else anchor_count_override
+    )
+    pinned_vertex_count = (
+        len(pinned_vertex_indices)
+        if pinned_vertex_count_override is None
+        else pinned_vertex_count_override
+    )
+
+    return b"".join(
+        [
+            _encode_pmx_text(local_name, encoding_flag),
+            _encode_pmx_text(universal_name, encoding_flag),
+            struct.pack("<B", shape),
+            _pack_pmx_index(
+                material_index,
+                size=material_index_size,
+                signed=True,
+            ),
+            struct.pack("<B", collision_group),
+            struct.pack("<H", collision_mask),
+            struct.pack("<B", flags),
+            struct.pack("<i", bending_link_distance),
+            struct.pack("<i", cluster_count),
+            struct.pack("<f", total_mass),
+            struct.pack("<f", collision_margin),
+            struct.pack("<i", aerodynamics_model),
+            struct.pack("<12f", *config),
+            struct.pack("<6f", *cluster_config),
+            struct.pack("<4i", *iteration_config),
+            struct.pack("<3f", *material_config),
+            struct.pack("<i", anchor_count),
+            b"".join(anchors),
+            struct.pack("<i", pinned_vertex_count),
+            b"".join(
+                _pack_pmx_index(
+                    vertex_index,
+                    size=vertex_index_size,
+                    signed=False,
+                )
+                for vertex_index in pinned_vertex_indices
+            ),
+        ]
+    )
+
+
 def build_pmx_structure(
     *,
     deform_types: tuple[int, ...] = (0,),
@@ -996,8 +1122,10 @@ def build_pmx_structure(
     rigid_body_count_override: int | None = None,
     joints: tuple[bytes, ...] = (),
     joint_count_override: int | None = None,
+    soft_bodies: tuple[bytes, ...] = (),
+    soft_body_count_override: int | None = None,
 ) -> bytes:
-    """Build a PMX fixture through the joint section."""
+    """Build a PMX fixture through the optional soft-body section."""
 
     header = build_pmx_model_info(
         version=version,
@@ -1094,6 +1222,16 @@ def build_pmx_structure(
     joint_count = len(joints) if joint_count_override is None else joint_count_override
     joint_data = b"".join(joints)
 
+    soft_body_count = (
+        len(soft_bodies)
+        if soft_body_count_override is None
+        else soft_body_count_override
+    )
+    soft_body_data = b"".join(soft_bodies)
+    soft_body_section = (
+        struct.pack("<i", soft_body_count) + soft_body_data if version == 2.1 else b""
+    )
+
     return b"".join(
         [
             header,
@@ -1142,5 +1280,6 @@ def build_pmx_structure(
                 joint_count,
             ),
             joint_data,
+            soft_body_section,
         ]
     )

@@ -44,6 +44,12 @@ MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 1_000_000
 MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 5_000_000
 MAX_PMX_RIGID_BODY_COUNT: Final[int] = 200_000
 MAX_PMX_JOINT_COUNT: Final[int] = 200_000
+MAX_PMX_SOFT_BODY_COUNT: Final[int] = 100_000
+MAX_PMX_SOFT_BODY_ANCHOR_COUNT: Final[int] = 500_000
+MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT: Final[int] = 1_000_000
+MAX_PMX_SOFT_BODY_PIN_COUNT: Final[int] = 500_000
+MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT: Final[int] = 1_000_000
+MAX_PMX_SOFT_BODY_PARAMETER_COUNT: Final[int] = 1_000_000
 
 PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
 PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
@@ -532,6 +538,178 @@ class PmxJoint:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyAnchor:
+    """One PMX 2.1 soft-body anchor reference."""
+
+    rigid_body_index: int
+    vertex_index: int
+    near_mode: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "rigid_body_index": self.rigid_body_index,
+            "vertex_index": self.vertex_index,
+            "near_mode": self.near_mode,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyConfig:
+    """Bullet soft-body configuration values stored by PMX 2.1."""
+
+    aerodynamics_model: int
+    aerodynamics_model_name: str
+    velocity_correction_factor: float
+    damping_coefficient: float
+    drag_coefficient: float
+    lift_coefficient: float
+    pressure_coefficient: float
+    volume_conservation_coefficient: float
+    dynamic_friction_coefficient: float
+    pose_matching_coefficient: float
+    rigid_contact_hardness: float
+    kinetic_contact_hardness: float
+    soft_contact_hardness: float
+    anchor_hardness: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "aerodynamics_model": self.aerodynamics_model,
+            "aerodynamics_model_name": self.aerodynamics_model_name,
+            "velocity_correction_factor": (self.velocity_correction_factor),
+            "damping_coefficient": self.damping_coefficient,
+            "drag_coefficient": self.drag_coefficient,
+            "lift_coefficient": self.lift_coefficient,
+            "pressure_coefficient": self.pressure_coefficient,
+            "volume_conservation_coefficient": (self.volume_conservation_coefficient),
+            "dynamic_friction_coefficient": (self.dynamic_friction_coefficient),
+            "pose_matching_coefficient": (self.pose_matching_coefficient),
+            "rigid_contact_hardness": self.rigid_contact_hardness,
+            "kinetic_contact_hardness": self.kinetic_contact_hardness,
+            "soft_contact_hardness": self.soft_contact_hardness,
+            "anchor_hardness": self.anchor_hardness,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyClusterConfig:
+    """PMX 2.1 soft-body cluster hardness and split values."""
+
+    soft_rigid_hardness: float
+    soft_kinetic_hardness: float
+    soft_soft_hardness: float
+    soft_rigid_impulse_split: float
+    soft_kinetic_impulse_split: float
+    soft_soft_impulse_split: float
+
+    def to_dict(self) -> dict[str, float]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "soft_rigid_hardness": self.soft_rigid_hardness,
+            "soft_kinetic_hardness": self.soft_kinetic_hardness,
+            "soft_soft_hardness": self.soft_soft_hardness,
+            "soft_rigid_impulse_split": (self.soft_rigid_impulse_split),
+            "soft_kinetic_impulse_split": (self.soft_kinetic_impulse_split),
+            "soft_soft_impulse_split": self.soft_soft_impulse_split,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyIterationConfig:
+    """PMX 2.1 soft-body solver iteration counts."""
+
+    velocity: int
+    position: int
+    drift: int
+    cluster: int
+
+    def to_dict(self) -> dict[str, int]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "velocity": self.velocity,
+            "position": self.position,
+            "drift": self.drift,
+            "cluster": self.cluster,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyMaterialConfig:
+    """PMX 2.1 soft-body material stiffness coefficients."""
+
+    linear_stiffness: float
+    area_angular_stiffness: float
+    volume_stiffness: float
+
+    def to_dict(self) -> dict[str, float]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "linear_stiffness": self.linear_stiffness,
+            "area_angular_stiffness": self.area_angular_stiffness,
+            "volume_stiffness": self.volume_stiffness,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBody:
+    """Structural metadata extracted from one PMX 2.1 soft body."""
+
+    local_name: str
+    universal_name: str
+    shape: int
+    shape_name: str
+    material_index: int
+    collision_group: int
+    collision_mask: int
+    flags: int
+    flag_names: tuple[str, ...]
+    bending_link_distance: int
+    cluster_count: int
+    total_mass: float
+    collision_margin: float
+    config: PmxSoftBodyConfig
+    cluster_config: PmxSoftBodyClusterConfig
+    iteration_config: PmxSoftBodyIterationConfig
+    material_config: PmxSoftBodyMaterialConfig
+    anchors: tuple[PmxSoftBodyAnchor, ...]
+    pinned_vertex_indices: tuple[int, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "shape": self.shape,
+            "shape_name": self.shape_name,
+            "material_index": self.material_index,
+            "collision_group": self.collision_group,
+            "collision_mask": self.collision_mask,
+            "flags": self.flags,
+            "flag_names": list(self.flag_names),
+            "bending_link_distance": self.bending_link_distance,
+            "cluster_count": self.cluster_count,
+            "total_mass": self.total_mass,
+            "collision_margin": self.collision_margin,
+            "config": self.config.to_dict(),
+            "cluster_config": self.cluster_config.to_dict(),
+            "iteration_config": self.iteration_config.to_dict(),
+            "material_config": self.material_config.to_dict(),
+            "anchor_count": len(self.anchors),
+            "anchors": [anchor.to_dict() for anchor in self.anchors],
+            "pinned_vertex_count": len(self.pinned_vertex_indices),
+            "pinned_vertex_indices": list(self.pinned_vertex_indices),
+        }
+
+
 @dataclass(slots=True)
 class PmxHeaderScanResult:
     """Result of scanning PMX header, model information, and early sections."""
@@ -561,6 +739,8 @@ class PmxHeaderScanResult:
     rigid_bodies: list[PmxRigidBody] = field(default_factory=list)
     joint_count: int | None = None
     joints: list[PmxJoint] = field(default_factory=list)
+    soft_body_count: int | None = None
+    soft_bodies: list[PmxSoftBody] = field(default_factory=list)
     file_size: int | None = None
     bytes_consumed: int = 0
     errors: list[str] = field(default_factory=list)
@@ -614,6 +794,8 @@ class PmxHeaderScanResult:
             "rigid_bodies": [rigid_body.to_dict() for rigid_body in self.rigid_bodies],
             "joint_count": self.joint_count,
             "joints": [joint.to_dict() for joint in self.joints],
+            "soft_body_count": self.soft_body_count,
+            "soft_bodies": [soft_body.to_dict() for soft_body in self.soft_bodies],
             "file_size": self.file_size,
             "bytes_consumed": self.bytes_consumed,
             "errors": list(self.errors),
@@ -3538,6 +3720,635 @@ def _scan_pmx_joints(
     ]
 
 
+def _minimum_pmx_soft_body_size(
+    index_sizes: PmxIndexSizes,
+) -> int:
+    """Return the fixed minimum size of one PMX 2.1 soft body."""
+
+    text_length_fields = 8
+    shape_size = 1
+    material_index_size = index_sizes.material
+    collision_fields_size = 4
+    integer_parameter_size = 8
+    mass_and_margin_size = 8
+    aerodynamics_model_size = 4
+    config_float_size = 12 * 4
+    cluster_float_size = 6 * 4
+    iteration_size = 4 * 4
+    material_config_size = 3 * 4
+    anchor_and_pin_count_size = 8
+
+    return (
+        text_length_fields
+        + shape_size
+        + material_index_size
+        + collision_fields_size
+        + integer_parameter_size
+        + mass_and_margin_size
+        + aerodynamics_model_size
+        + config_float_size
+        + cluster_float_size
+        + iteration_size
+        + material_config_size
+        + anchor_and_pin_count_size
+    )
+
+
+def _decode_pmx_soft_body_shape(
+    value: int,
+    *,
+    record_index: int,
+    offset: int,
+) -> str:
+    """Validate and decode one PMX 2.1 soft-body shape."""
+
+    shape_names = {
+        0: "tri_mesh",
+        1: "rope",
+    }
+
+    try:
+        return shape_names[value]
+    except KeyError:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation="validating soft-body shape",
+            reason=(f"invalid soft-body shape {value}; expected 0 or 1."),
+        )
+
+
+def _decode_pmx_soft_body_flags(
+    value: int,
+    *,
+    record_index: int,
+    offset: int,
+) -> tuple[str, ...]:
+    """Validate and decode PMX 2.1 soft-body flag bits."""
+
+    known_mask = 0x07
+    unknown_bits = value & ~known_mask
+    if unknown_bits:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation="validating soft-body flags",
+            reason=(f"soft-body flags contain unknown bits 0x{unknown_bits:02x}."),
+        )
+
+    definitions = (
+        (0x01, "generate_bending_links"),
+        (0x02, "generate_clusters"),
+        (0x04, "randomize_constraints"),
+    )
+    return tuple(name for bit, name in definitions if value & bit)
+
+
+def _decode_pmx_soft_body_aerodynamics_model(
+    value: int,
+    *,
+    record_index: int,
+    offset: int,
+) -> str:
+    """Validate and decode a PMX 2.1 aerodynamics model."""
+
+    model_names = {
+        0: "vertex_point",
+        1: "vertex_two_sided",
+        2: "vertex_one_sided",
+        3: "face_two_sided",
+        4: "face_one_sided",
+    }
+
+    try:
+        return model_names[value]
+    except KeyError:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation="validating soft-body aerodynamics model",
+            reason=(
+                f"invalid soft-body aerodynamics model {value}; "
+                "expected a value from 0 through 4."
+            ),
+        )
+
+
+def _read_pmx_soft_body_float(
+    reader: BinaryReader,
+    *,
+    record_index: int,
+    label: str,
+    nonnegative: bool,
+) -> float:
+    """Read and validate one soft-body float field."""
+
+    offset = reader.offset
+    value = reader.read_float32(label)
+    _validate_pmx_finite_scalar(
+        value,
+        section="soft_bodies",
+        record_index=record_index,
+        label=label,
+        offset=offset,
+        nonnegative=nonnegative,
+    )
+    return value
+
+
+def _read_pmx_soft_body_parameter_count(
+    reader: BinaryReader,
+    *,
+    record_index: int,
+    label: str,
+) -> int:
+    """Read one bounded nonnegative PMX soft-body integer parameter."""
+
+    offset = reader.offset
+    value = _read_pmx_int32(reader, label)
+
+    if value < 0:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation=f"validating {label}",
+            reason=f"{label} cannot be negative: {value}.",
+        )
+
+    if value > MAX_PMX_SOFT_BODY_PARAMETER_COUNT:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=offset,
+            operation=f"validating {label}",
+            reason=(
+                f"{label} {value} exceeds the safety limit of "
+                f"{MAX_PMX_SOFT_BODY_PARAMETER_COUNT}."
+            ),
+        )
+
+    return value
+
+
+def _read_pmx_soft_body_anchor(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    soft_body_index: int,
+    anchor_index: int,
+) -> PmxSoftBodyAnchor:
+    """Read and validate one PMX 2.1 soft-body anchor."""
+
+    if (
+        result.index_sizes is None
+        or result.rigid_body_count is None
+        or result.vertex_count is None
+    ):
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=soft_body_index,
+            offset=reader.offset,
+            operation="reading soft-body anchor",
+            reason="PMX index sizes or referenced counts are unavailable.",
+        )
+
+    with reader.context(
+        f"soft_bodies[{soft_body_index}].anchors",
+        record_index=anchor_index,
+    ):
+        rigid_body_offset = reader.offset
+        rigid_body_index = reader.read_index(
+            result.index_sizes.rigid_body,
+            signed=True,
+            label="soft-body anchor rigid-body index",
+        )
+        _validate_pmx_index_range(
+            rigid_body_index,
+            count=result.rigid_body_count,
+            section=f"soft_bodies[{soft_body_index}].anchors",
+            record_index=anchor_index,
+            label="soft-body anchor rigid-body index",
+            offset=rigid_body_offset,
+            allow_sentinel=False,
+        )
+
+        vertex_offset = reader.offset
+        vertex_index = reader.read_index(
+            result.index_sizes.vertex,
+            signed=False,
+            label="soft-body anchor vertex index",
+        )
+        _validate_pmx_index_range(
+            vertex_index,
+            count=result.vertex_count,
+            section=f"soft_bodies[{soft_body_index}].anchors",
+            record_index=anchor_index,
+            label="soft-body anchor vertex index",
+            offset=vertex_offset,
+            allow_sentinel=False,
+        )
+
+        near_mode_offset = reader.offset
+        near_mode_value = reader.read_uint8("soft-body anchor near-mode flag")
+        if near_mode_value not in (0, 1):
+            _raise_pmx_error(
+                section=f"soft_bodies[{soft_body_index}].anchors",
+                record_index=anchor_index,
+                offset=near_mode_offset,
+                operation="validating soft-body anchor near-mode flag",
+                reason=(
+                    f"invalid soft-body anchor near-mode flag "
+                    f"{near_mode_value}; expected 0 or 1."
+                ),
+            )
+
+    return PmxSoftBodyAnchor(
+        rigid_body_index=rigid_body_index,
+        vertex_index=vertex_index,
+        near_mode=bool(near_mode_value),
+    )
+
+
+def _read_pmx_soft_body(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+    *,
+    record_index: int,
+) -> PmxSoftBody:
+    """Read and validate one PMX 2.1 soft-body record."""
+
+    if result.encoding is None or result.index_sizes is None:
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading soft body",
+            reason="PMX encoding or index sizes are unavailable.",
+        )
+
+    if (
+        result.material_count is None
+        or result.rigid_body_count is None
+        or result.vertex_count is None
+    ):
+        _raise_pmx_error(
+            section="soft_bodies",
+            record_index=record_index,
+            offset=reader.offset,
+            operation="reading soft body",
+            reason="PMX referenced section counts are unavailable.",
+        )
+
+    require_even_length = result.encoding == "utf-16-le"
+
+    with reader.context("soft_bodies", record_index=record_index):
+        local_name = reader.read_length_prefixed_text(
+            "local soft-body name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+        universal_name = reader.read_length_prefixed_text(
+            "universal soft-body name",
+            encoding=result.encoding,
+            max_length=MAX_PMX_NAME_BYTES,
+            require_even_length=require_even_length,
+        )
+
+        shape_offset = reader.offset
+        shape = reader.read_uint8("soft-body shape")
+        shape_name = _decode_pmx_soft_body_shape(
+            shape,
+            record_index=record_index,
+            offset=shape_offset,
+        )
+
+        material_offset = reader.offset
+        material_index = reader.read_index(
+            result.index_sizes.material,
+            signed=True,
+            label="soft-body material index",
+        )
+        _validate_pmx_index_range(
+            material_index,
+            count=result.material_count,
+            section="soft_bodies",
+            record_index=record_index,
+            label="soft-body material index",
+            offset=material_offset,
+            allow_sentinel=True,
+        )
+
+        collision_group_offset = reader.offset
+        collision_group = reader.read_uint8("soft-body collision group")
+        if collision_group > 15:
+            _raise_pmx_error(
+                section="soft_bodies",
+                record_index=record_index,
+                offset=collision_group_offset,
+                operation="validating soft-body collision group",
+                reason=(
+                    f"soft-body collision group {collision_group} is "
+                    "outside the supported range 0 through 15."
+                ),
+            )
+
+        collision_mask = _read_pmx_uint16(
+            reader,
+            "soft-body collision mask",
+        )
+
+        flags_offset = reader.offset
+        flags = reader.read_uint8("soft-body flags")
+        flag_names = _decode_pmx_soft_body_flags(
+            flags,
+            record_index=record_index,
+            offset=flags_offset,
+        )
+
+        bending_link_distance = _read_pmx_soft_body_parameter_count(
+            reader,
+            record_index=record_index,
+            label="soft-body bending-link distance",
+        )
+        cluster_count = _read_pmx_soft_body_parameter_count(
+            reader,
+            record_index=record_index,
+            label="soft-body cluster count",
+        )
+
+        total_mass = _read_pmx_soft_body_float(
+            reader,
+            record_index=record_index,
+            label="soft-body total mass",
+            nonnegative=True,
+        )
+        collision_margin = _read_pmx_soft_body_float(
+            reader,
+            record_index=record_index,
+            label="soft-body collision margin",
+            nonnegative=True,
+        )
+
+        aerodynamics_offset = reader.offset
+        aerodynamics_model = _read_pmx_int32(
+            reader,
+            "soft-body aerodynamics model",
+        )
+        aerodynamics_model_name = _decode_pmx_soft_body_aerodynamics_model(
+            aerodynamics_model,
+            record_index=record_index,
+            offset=aerodynamics_offset,
+        )
+
+        config_labels = (
+            "soft-body velocity correction factor",
+            "soft-body damping coefficient",
+            "soft-body drag coefficient",
+            "soft-body lift coefficient",
+            "soft-body pressure coefficient",
+            "soft-body volume conservation coefficient",
+            "soft-body dynamic friction coefficient",
+            "soft-body pose matching coefficient",
+            "soft-body rigid contact hardness",
+            "soft-body kinetic contact hardness",
+            "soft-body soft contact hardness",
+            "soft-body anchor hardness",
+        )
+        config_values = tuple(
+            _read_pmx_soft_body_float(
+                reader,
+                record_index=record_index,
+                label=label,
+                nonnegative=False,
+            )
+            for label in config_labels
+        )
+
+        cluster_labels = (
+            "soft-body soft-rigid cluster hardness",
+            "soft-body soft-kinetic cluster hardness",
+            "soft-body soft-soft cluster hardness",
+            "soft-body soft-rigid impulse split",
+            "soft-body soft-kinetic impulse split",
+            "soft-body soft-soft impulse split",
+        )
+        cluster_values = tuple(
+            _read_pmx_soft_body_float(
+                reader,
+                record_index=record_index,
+                label=label,
+                nonnegative=False,
+            )
+            for label in cluster_labels
+        )
+
+        iteration_values = tuple(
+            _read_pmx_soft_body_parameter_count(
+                reader,
+                record_index=record_index,
+                label=label,
+            )
+            for label in (
+                "soft-body velocity iteration count",
+                "soft-body position iteration count",
+                "soft-body drift iteration count",
+                "soft-body cluster iteration count",
+            )
+        )
+
+        material_values = tuple(
+            _read_pmx_soft_body_float(
+                reader,
+                record_index=record_index,
+                label=label,
+                nonnegative=False,
+            )
+            for label in (
+                "soft-body linear stiffness",
+                "soft-body area-angular stiffness",
+                "soft-body volume stiffness",
+            )
+        )
+
+        anchor_count = reader.read_bounded_count(
+            "soft-body anchor count",
+            max_count=MAX_PMX_SOFT_BODY_ANCHOR_COUNT,
+            minimum_item_size=(
+                result.index_sizes.rigid_body + result.index_sizes.vertex + 1
+            ),
+        )
+
+        anchors = tuple(
+            _read_pmx_soft_body_anchor(
+                reader,
+                result,
+                soft_body_index=record_index,
+                anchor_index=anchor_index,
+            )
+            for anchor_index in range(anchor_count)
+        )
+
+        pinned_vertex_count = reader.read_bounded_count(
+            "soft-body pinned-vertex count",
+            max_count=MAX_PMX_SOFT_BODY_PIN_COUNT,
+            minimum_item_size=result.index_sizes.vertex,
+        )
+
+        pinned_vertex_indices: list[int] = []
+        for pin_index in range(pinned_vertex_count):
+            with reader.context(
+                f"soft_bodies[{record_index}].pinned_vertices",
+                record_index=pin_index,
+            ):
+                pin_offset = reader.offset
+                vertex_index = reader.read_index(
+                    result.index_sizes.vertex,
+                    signed=False,
+                    label="soft-body pinned vertex index",
+                )
+                _validate_pmx_index_range(
+                    vertex_index,
+                    count=result.vertex_count,
+                    section=(f"soft_bodies[{record_index}].pinned_vertices"),
+                    record_index=pin_index,
+                    label="soft-body pinned vertex index",
+                    offset=pin_offset,
+                    allow_sentinel=False,
+                )
+                pinned_vertex_indices.append(vertex_index)
+
+    return PmxSoftBody(
+        local_name=local_name,
+        universal_name=universal_name,
+        shape=shape,
+        shape_name=shape_name,
+        material_index=material_index,
+        collision_group=collision_group,
+        collision_mask=collision_mask,
+        flags=flags,
+        flag_names=flag_names,
+        bending_link_distance=bending_link_distance,
+        cluster_count=cluster_count,
+        total_mass=total_mass,
+        collision_margin=collision_margin,
+        config=PmxSoftBodyConfig(
+            aerodynamics_model=aerodynamics_model,
+            aerodynamics_model_name=aerodynamics_model_name,
+            velocity_correction_factor=config_values[0],
+            damping_coefficient=config_values[1],
+            drag_coefficient=config_values[2],
+            lift_coefficient=config_values[3],
+            pressure_coefficient=config_values[4],
+            volume_conservation_coefficient=config_values[5],
+            dynamic_friction_coefficient=config_values[6],
+            pose_matching_coefficient=config_values[7],
+            rigid_contact_hardness=config_values[8],
+            kinetic_contact_hardness=config_values[9],
+            soft_contact_hardness=config_values[10],
+            anchor_hardness=config_values[11],
+        ),
+        cluster_config=PmxSoftBodyClusterConfig(
+            soft_rigid_hardness=cluster_values[0],
+            soft_kinetic_hardness=cluster_values[1],
+            soft_soft_hardness=cluster_values[2],
+            soft_rigid_impulse_split=cluster_values[3],
+            soft_kinetic_impulse_split=cluster_values[4],
+            soft_soft_impulse_split=cluster_values[5],
+        ),
+        iteration_config=PmxSoftBodyIterationConfig(
+            velocity=iteration_values[0],
+            position=iteration_values[1],
+            drift=iteration_values[2],
+            cluster=iteration_values[3],
+        ),
+        material_config=PmxSoftBodyMaterialConfig(
+            linear_stiffness=material_values[0],
+            area_angular_stiffness=material_values[1],
+            volume_stiffness=material_values[2],
+        ),
+        anchors=anchors,
+        pinned_vertex_indices=tuple(pinned_vertex_indices),
+    )
+
+
+def _scan_pmx_soft_bodies(
+    reader: BinaryReader,
+    result: PmxHeaderScanResult,
+) -> None:
+    """Read and validate the optional PMX 2.1 soft-body section."""
+
+    if result.version is None or result.index_sizes is None:
+        _raise_pmx_error(
+            section="soft_bodies",
+            offset=reader.offset,
+            operation="starting soft-body scan",
+            reason="PMX version or index sizes are unavailable.",
+        )
+
+    if result.version == 2.0:
+        result.soft_body_count = 0
+        result.soft_bodies = []
+        return
+
+    with reader.context("soft_bodies"):
+        count_offset = reader.offset
+        soft_body_count = reader.read_bounded_count(
+            "soft-body count",
+            max_count=MAX_PMX_SOFT_BODY_COUNT,
+            minimum_item_size=_minimum_pmx_soft_body_size(result.index_sizes),
+        )
+
+    result.soft_body_count = soft_body_count
+    soft_bodies: list[PmxSoftBody] = []
+    total_anchor_count = 0
+    total_pin_count = 0
+
+    for record_index in range(soft_body_count):
+        soft_body = _read_pmx_soft_body(
+            reader,
+            result,
+            record_index=record_index,
+        )
+        total_anchor_count += len(soft_body.anchors)
+        total_pin_count += len(soft_body.pinned_vertex_indices)
+
+        if total_anchor_count > MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT:
+            _raise_pmx_error(
+                section="soft_bodies",
+                record_index=record_index,
+                offset=count_offset,
+                operation="validating total soft-body anchor count",
+                reason=(
+                    f"soft bodies declare {total_anchor_count} total "
+                    "anchors, exceeding the safety limit of "
+                    f"{MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT}."
+                ),
+            )
+
+        if total_pin_count > MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT:
+            _raise_pmx_error(
+                section="soft_bodies",
+                record_index=record_index,
+                offset=count_offset,
+                operation="validating total soft-body pinned-vertex count",
+                reason=(
+                    f"soft bodies declare {total_pin_count} total pinned "
+                    "vertices, exceeding the safety limit of "
+                    f"{MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT}."
+                ),
+            )
+
+        soft_bodies.append(soft_body)
+
+    result.soft_body_count = soft_body_count
+    result.soft_bodies = soft_bodies
+
+
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -3689,7 +4500,7 @@ def scan_pmx_header(
 def scan_pmx_structure(
     file_path: str | Path,
 ) -> PmxHeaderScanResult:
-    """Scan PMX header through the joint section."""
+    """Scan all structural sections defined by PMX 2.0 and 2.1."""
 
     path = Path(file_path)
     result = PmxHeaderScanResult()
@@ -3736,6 +4547,10 @@ def scan_pmx_structure(
                     result,
                 )
                 _scan_pmx_joints(
+                    reader,
+                    result,
+                )
+                _scan_pmx_soft_bodies(
                     reader,
                     result,
                 )

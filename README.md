@@ -2,8 +2,8 @@
 
 A lightweight, read-only Python toolkit for tracking MMD asset provenance,
 creator credits, local source files, SHA-256 integrity, model metadata,
-PMX structure, texture dependencies, bone hierarchies, and known usage
-restrictions.
+PMX structure, texture dependencies, bone hierarchies, bone semantics,
+rig diagnostics, canonical bone maps, and known usage restrictions.
 
 The project is designed as a validation and diagnostics gate before assets
 enter an automated MMD, Blender, or anime-video pipeline. It never edits,
@@ -12,13 +12,13 @@ rewrites, repairs, or redistributes a model or texture file.
 ## Current version
 
 ```text
-Tool version: 0.5.0
+Tool version: 0.6.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.5.0
-adds the read-only Bone Explorer without changing the persistent registry
+Tool version and registry schema are intentionally independent. Version 0.6.0
+adds the read-only Rig Analyzer without changing the persistent registry
 schema.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
@@ -41,12 +41,41 @@ become separated from the downloaded files:
 - Whether referenced textures exist and remain portable with the model
 - How hundreds of PMX bones are named and connected
 - Which bones provide IK or other rig capabilities
+- Which canonical semantic roles the rig can resolve safely
+- Which hierarchy, symmetry, ambiguity, or IK issues need review
 - Which pipeline character uses the asset
 
 The registry records this information in YAML and validates it before a
 pipeline continues. The scanner and doctor add technical evidence, but the
 tool does not automatically determine legal permission or replace review of
 the creator's original terms.
+
+## Version 0.6 features
+
+Version 0.6.0 introduces the read-only Rig Analyzer:
+
+- Deterministic semantic results containing canonical role, side, category,
+  confidence tier, matched aliases, and explainable evidence
+- Unicode width, whitespace, case, separator, camel-case, acronym, and digit
+  normalization shared by search and semantic analysis
+- A bounded Japanese and English alias vocabulary with replaceable semantic
+  profiles instead of model-specific hard-coding
+- Conservative helper, deform, twist, cancel, IK-parent, and EX conventions
+- Safe ambiguity handling that returns `unknown` instead of inventing a role
+- Iterative hierarchy-aware inference that handles deep rigs and cycles without
+  recursion or mutation of scanner records
+- Structured diagnostics for missing and duplicate roles, ambiguity,
+  left/right asymmetry, hierarchy problems, side conflicts, IK references, and
+  unclassified bones
+- Immutable, deterministic, JSON-serializable analysis, diagnostic, summary,
+  and canonical bone-map models
+- A `rig` CLI command with text and JSON reports, unmapped and role filters,
+  and standalone UTF-8 JSON bone-map export
+- Stable exit codes for clean rigs, actionable diagnostics, usage failures,
+  malformed inputs, and unexpected internal failures
+- 475 automated unit tests at the real-model validation checkpoint
+
+All version 0.5 capabilities remain available.
 
 ## Version 0.5 features
 
@@ -139,6 +168,7 @@ inspect   Inspect a PMX or PMD model header
 scan      Structurally scan a PMX model
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
+rig       Resolve bone semantics, diagnose a rig, and build a bone map
 ```
 
 Running without a command preserves the legacy behavior and performs registry
@@ -152,9 +182,10 @@ validation.
 | Complete structural scan | Yes | Yes | No |
 | Texture dependency doctor | Yes | Yes | No |
 | Bone Explorer | Yes | Yes | No |
+| Rig Analyzer | Yes | Yes | No |
 
 PMD 1.0 is currently supported for header inspection only. `scan`, `doctor`,
-and `bones` return an unsupported-format error for PMD files instead of
+`bones`, and `rig` return an unsupported-format error for PMD files instead of
 pretending to perform a partial structural scan.
 
 ## Validate a registry
@@ -419,6 +450,58 @@ matched count, active filters, warnings, errors, and exactly one of `bones`,
 would make a filtered hierarchy misleading. Unsupported option combinations
 return exit code `2` without scanning or modifying the model.
 
+## Analyze a PMX rig
+
+The `rig` command resolves a bounded set of canonical bone semantics, combines
+name and hierarchy evidence, reports rig diagnostics, and builds a read-only
+bone map. It preserves every original local and universal bone name and never
+rewrites the PMX file.
+
+Run the complete analysis:
+
+```bash
+python check_assets.py rig path/to/model.pmx
+```
+
+The text report summarizes resolved and unresolved bones, mapped canonical
+roles, diagnostic severity counts, the canonical role index, and structured
+issues requiring review.
+
+Print the complete machine-readable analysis:
+
+```bash
+python check_assets.py rig path/to/model.pmx --json
+```
+
+Show only bones that remain semantically unresolved:
+
+```bash
+python check_assets.py rig path/to/model.pmx --unmapped
+```
+
+Select one normalized canonical role, including its side when applicable:
+
+```bash
+python check_assets.py rig path/to/model.pmx --role left_knee
+```
+
+Write the standalone canonical bone map as UTF-8 JSON:
+
+```bash
+python check_assets.py rig path/to/model.pmx --export-map bone-map.json
+```
+
+`--unmapped` and `--role` are mutually exclusive. `--export-map` requires a
+`.json` path and refuses to overwrite the input PMX file. A filter with no
+matches is successful. Actionable rig warnings or errors return exit code `1`;
+an unusable path or invalid option combination returns `2`; and an unexpected
+scan, analysis, or export failure returns `3`.
+
+The default vocabulary is deliberately bounded. Accessory, clothing, hair,
+physics, or custom control bones remain `unknown` when the available evidence
+does not justify a canonical role. Profiles can be replaced by callers without
+mutating the default vocabulary.
+
 ## Diagnose texture dependencies
 
 Run structural scanning and filesystem diagnostics together:
@@ -473,10 +556,11 @@ warning
 error
 ```
 
-Warnings preserve a successful exit code when the model remains structurally
-readable and no referenced dependency has an error. JSON output preserves
-Unicode names and paths and is configured as UTF-8 even when redirected by
-Windows CMD.
+Scanner and dependency warnings preserve a successful exit code when the model
+remains structurally readable and no referenced dependency has an error. The
+Rig Analyzer returns exit code `1` when its structured report contains
+actionable warnings or errors. JSON output preserves Unicode names and paths
+and is configured as UTF-8 even when redirected by Windows CMD.
 
 ## Exit codes
 
@@ -485,7 +569,8 @@ General CLI exit codes:
 ```text
 0 = Command completed successfully; warnings may be present
 1 = Validation failed, hash verification failed, model was malformed or
-    unsupported, or a referenced texture dependency had an error
+    unsupported, a referenced texture dependency had an error, or the Rig
+    Analyzer reported actionable diagnostics
 2 = Required input path or registry file could not be used
 3 = Unexpected internal error
 ```
@@ -504,7 +589,12 @@ Command examples:
 - `bones` on malformed or unsupported PMX data: `1`
 - `bones --details` with an invalid index: `2`
 - Unsupported `bones` option combinations: `2`
-- Missing file passed to `hash`, `inspect`, `scan`, `doctor`, or `bones`: `2`
+- `rig` on a clean analyzed rig: `0`
+- `rig` with actionable diagnostics: `1`
+- `rig --role` or `rig --unmapped` with no matches: `0`
+- Unsafe or conflicting `rig` options: `2`
+- Missing file passed to `hash`, `inspect`, `scan`, `doctor`, `bones`, or
+  `rig`: `2`
 - Unexpected scanner or diagnostics failure: `3`
 
 ## Registry schema 0.3
@@ -582,6 +672,7 @@ The tool is read-only for model and texture inputs. It does not:
 - Modify or rewrite PMX/PMD files
 - Repair corrupt geometry, bones, morphs, or physics
 - Rename, reparent, reposition, or change the flags of bones
+- Apply inferred roles, aliases, hierarchy changes, or bone maps to a model
 - Automatically translate Japanese, Chinese, or Korean bone names
 - Change texture paths
 - Copy, rename, convert, or delete textures
@@ -597,7 +688,7 @@ as structured errors instead of being trusted.
 
 ## Real-model verification
 
-Version 0.5.0 was verified against a production-size PMX 2.0 model without
+Version 0.6.0 was verified against a production-size PMX 2.0 model without
 committing or redistributing that model.
 
 Verification summary:
@@ -627,6 +718,16 @@ Doctor exit code: 0
 UTF-8 JSON export: valid
 Bone table/tree/detail/search/IK text output: valid
 Bone table/tree/detail/search/IK JSON output: valid
+Rig Analyzer bones: 342
+Resolved semantic bones: 102
+Unresolved semantic bones: 240
+Mapped canonical roles: 37
+Rig diagnostics: 1 info, 2 warnings, 0 errors
+Rig diagnostic codes: ambiguous_semantic_role, missing_expected_role,
+  unclassified_bones
+False duplicate, side-conflict, and asymmetry diagnostics: 0
+Canonical bone-map UTF-8 JSON export: valid
+Rig Analyzer exit code with actionable warnings: 1
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -640,7 +741,7 @@ Run all tests:
 python -m unittest discover -s tests -v
 ```
 
-At the real-model validation checkpoint, version 0.5.0 includes 367 unit tests
+At the real-model validation checkpoint, version 0.6.0 includes 475 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -657,6 +758,12 @@ covering:
 - Individual bone details and enabled/disabled capabilities
 - Unicode-normalized name/index search and IK filtering
 - `bones` table, tree, details, search, IK, and JSON CLI modes
+- Semantic vocabulary, role variants, aliases, profiles, and immutable results
+- Unicode-normalized multilingual name resolution and ambiguity handling
+- Non-recursive, fixed-point hierarchy inference for deep or cyclic rigs
+- Structured rig diagnostics for roles, symmetry, hierarchy, and IK
+- Deterministic complete rig reports, summaries, and canonical bone maps
+- `rig` text, JSON, unmapped, role-filter, and bone-map export modes
 - Exit codes `0`, `1`, `2`, and `3`
 - Windows redirected UTF-8 output, including Unicode bone JSON
 - Legacy CLI compatibility
@@ -679,9 +786,9 @@ requests. It performs:
 3. Dependency installation
 4. Python source compilation
 5. Full automated test discovery
-6. Exact `0.5.0` package-version assertion
-7. Top-level version, `scan --help`, `doctor --help`, and `bones --help`
-   checks
+6. Exact `0.6.0` package-version assertion
+7. Top-level version, `scan --help`, `doctor --help`, `bones --help`, and
+   `rig --help` checks
 8. Private registry validation using legacy and explicit syntax
 9. Registered placeholder SHA-256 verification
 
@@ -697,7 +804,11 @@ mmd-asset-registry/
 |   |-- bone_details.py
 |   |-- bone_explorer.py
 |   |-- bone_hierarchy.py
+|   |-- bone_names.py
 |   |-- bone_search.py
+|   |-- bone_semantic_inference.py
+|   |-- bone_semantic_resolver.py
+|   |-- bone_semantics.py
 |   |-- cli.py
 |   |-- constants.py
 |   |-- dependency_diagnostics.py
@@ -705,6 +816,9 @@ mmd-asset-registry/
 |   |-- model_inspection.py
 |   |-- model_scanning.py
 |   |-- reporting.py
+|   |-- rig_analysis.py
+|   |-- rig_cli.py
+|   |-- rig_diagnostics.py
 |   `-- validator.py
 |-- reports/
 |-- sample_assets/
@@ -715,7 +829,11 @@ mmd-asset-registry/
 |   |-- test_bone_details.py
 |   |-- test_bone_explorer.py
 |   |-- test_bone_hierarchy.py
+|   |-- test_bone_names.py
 |   |-- test_bone_search.py
+|   |-- test_bone_semantic_inference.py
+|   |-- test_bone_semantic_resolver.py
+|   |-- test_bone_semantics.py
 |   |-- test_cli.py
 |   |-- test_cli_utf8_output.py
 |   |-- test_dependency_diagnostics.py
@@ -725,6 +843,9 @@ mmd-asset-registry/
 |   |-- test_pmx_*_scanning.py
 |   |-- test_release_readiness.py
 |   |-- test_reporting.py
+|   |-- test_rig_analysis.py
+|   |-- test_rig_cli.py
+|   |-- test_rig_diagnostics.py
 |   `-- test_validator.py
 |-- assets.yaml
 |-- CHANGELOG.md
@@ -735,7 +856,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.5.0 does not:
+Version 0.6.0 does not:
 
 - Structurally scan PMD beyond header inspection
 - Write or edit PMX/PMD files
@@ -744,16 +865,21 @@ Version 0.5.0 does not:
 - Register scan results back into `assets.yaml`
 - Provide batch directory scanning
 - Provide a graphical interface
-- Translate multilingual bone names beyond universal/local fallback
+- Translate, rename, or rewrite multilingual bone names
+- Guarantee canonical roles for custom accessory, clothing, hair, or physics
+  bones without sufficient evidence
+- Auto-repair semantic, hierarchy, symmetry, or IK diagnostics
 - Edit bone names, positions, parents, flags, IK, or weights
 - Import models into Blender or MMD
 - Automatically determine legal permissions
 
 ## Roadmap
 
-Planned directions after 0.5.0:
+Planned directions after 0.6.0:
 
 - Multilingual PMX naming with external, reviewable dictionaries
+- Integration of exported canonical bone maps with animation pipelines
+- Batch Rig Analyzer reports and project-level mapping review
 - PMD structural scanning
 - Registry browser and metadata editing
 - Batch scan and doctor commands

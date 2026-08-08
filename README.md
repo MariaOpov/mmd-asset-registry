@@ -2,7 +2,8 @@
 
 A lightweight, read-only Python toolkit for tracking MMD asset provenance,
 creator credits, local source files, SHA-256 integrity, model metadata,
-PMX structure, texture dependencies, and known usage restrictions.
+PMX structure, texture dependencies, bone hierarchies, and known usage
+restrictions.
 
 The project is designed as a validation and diagnostics gate before assets
 enter an automated MMD, Blender, or anime-video pipeline. It never edits,
@@ -11,14 +12,14 @@ rewrites, repairs, or redistributes a model or texture file.
 ## Current version
 
 ```text
-Tool version: 0.4.0
+Tool version: 0.5.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.4.0
-adds structural model scanning and dependency diagnostics without changing the
-persistent registry schema.
+Tool version and registry schema are intentionally independent. Version 0.5.0
+adds the read-only Bone Explorer without changing the persistent registry
+schema.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -38,6 +39,8 @@ become separated from the downloaded files:
 - Whether a PMX file is structurally readable from beginning to end
 - Which texture paths the model declares and actually references
 - Whether referenced textures exist and remain portable with the model
+- How hundreds of PMX bones are named and connected
+- Which bones provide IK or other rig capabilities
 - Which pipeline character uses the asset
 
 The registry records this information in YAML and validates it before a
@@ -45,9 +48,31 @@ pipeline continues. The scanner and doctor add technical evidence, but the
 tool does not automatically determine legal permission or replace review of
 the creator's original terms.
 
-## Version 0.4 features
+## Version 0.5 features
 
-Version 0.4.0 provides:
+Version 0.5.0 introduces the Bone Explorer:
+
+- Compact one-row-per-bone table output
+- Safe display-name fallback from universal to local names
+- Replaceable name-resolver architecture for future multilingual naming
+- Friendly capability tags without changing raw scanner data
+- Parent display-name resolution, including forward references
+- Safe parent-child hierarchy construction
+- Detection and non-fatal handling of duplicate indices, invalid parents,
+  self-parenting, and cycles
+- Non-recursive hierarchy construction and tree rendering for deep rigs
+- Individual bone detail reports with position, parent, tail, transform layer,
+  and enabled/disabled capabilities
+- Unicode-normalized, case-insensitive search across display, local, and
+  universal names
+- Exact index queries such as `339`, `#339`, and `[339]`
+- Basic IK-only filtering that composes with name search
+- Human-readable table, tree, detail, search, and IK CLI modes
+- Stable JSON output for tables, hierarchies, and details
+- UTF-8 redirected Bone Explorer output on Windows
+- 367 automated unit tests at the real-model validation checkpoint
+
+All version 0.4 capabilities remain available, including:
 
 - Bounded binary reads for untrusted PMX data
 - Complete read-only PMX 2.0 structural scanning
@@ -66,7 +91,6 @@ Version 0.4.0 provides:
 - UTF-8 redirected output for Unicode model names and paths on Windows
 - Stable exit codes for scripts, CI, and pipeline gates
 - Programmatically generated binary fixtures; no copyrighted model fixtures
-- 300 automated unit tests after the release-readiness checkpoint
 
 Existing version 0.3 capabilities remain available, including registry
 validation, provenance tracking, credit generation, SHA-256 integrity checks,
@@ -114,6 +138,7 @@ hash      Calculate or verify a file SHA-256 hash
 inspect   Inspect a PMX or PMD model header
 scan      Structurally scan a PMX model
 doctor    Scan a PMX model and diagnose texture dependencies
+bones     Explore PMX bones as a table, tree, detail report, or JSON
 ```
 
 Running without a command preserves the legacy behavior and performs registry
@@ -126,10 +151,11 @@ validation.
 | Header inspection | Yes | Yes | Yes |
 | Complete structural scan | Yes | Yes | No |
 | Texture dependency doctor | Yes | Yes | No |
+| Bone Explorer | Yes | Yes | No |
 
-PMD 1.0 is currently supported for header inspection only. `scan` and `doctor`
-return an unsupported-format error for PMD files instead of pretending to
-perform a partial structural scan.
+PMD 1.0 is currently supported for header inspection only. `scan`, `doctor`,
+and `bones` return an unsupported-format error for PMD files instead of
+pretending to perform a partial structural scan.
 
 ## Validate a registry
 
@@ -292,6 +318,107 @@ The JSON result intentionally contains detailed structural records and can be
 large for production models. Redirect it to a file when full details are
 needed; use text output for a compact summary.
 
+## Explore PMX bones
+
+The `bones` command turns raw scanner records into a read-only skeleton view.
+It does not rename, reposition, reparent, or write any bone back to the PMX
+file.
+
+Show the compact table:
+
+```bash
+python check_assets.py bones path/to/model.pmx
+```
+
+Each row contains the stable bone index, resolved display name, original local
+name, parent reference, and readable capability tags. Display names use the
+universal name when provided, then fall back to the local name and finally
+`[unnamed]`. Whitespace is normalized for presentation without changing the
+scanner record.
+
+Example:
+
+```text
+Idx  Name             Original  Parent           Tags
+---------------------------------------------------------------
+0    Root             全ての親  -                Rotate, Move
+1    Left Leg         左足      [0] Root         Rotate, Visible
+2    Left Leg IK      左足ＩＫ  [0] Root         Move, Rotate, IK
+```
+
+Render the complete parent-child hierarchy:
+
+```bash
+python check_assets.py bones path/to/model.pmx --tree
+```
+
+The hierarchy builder safely handles roots and parents that appear later in
+the PMX bone list. Duplicate indices, invalid parents, self-parenting, and
+cycles are reported as non-fatal presentation issues. Construction and
+rendering are iterative, so deep rigs do not depend on Python recursion.
+
+Show one bone in detail:
+
+```bash
+python check_assets.py bones path/to/model.pmx --details 339
+```
+
+The detail report includes:
+
+- Display, local, and universal names
+- Parent and transform layer
+- Bone-index or offset tail representation
+- XYZ position
+- Enabled and disabled rotation, translation, visibility, IK, inheritance,
+  axis, physics, and external-parent capabilities
+
+Search display, local, or universal names:
+
+```bash
+python check_assets.py bones path/to/model.pmx --search "Calf"
+```
+
+Search is case-insensitive and normalizes Unicode width and whitespace. Exact
+index forms are also accepted:
+
+```bash
+python check_assets.py bones path/to/model.pmx --search 339
+python check_assets.py bones path/to/model.pmx --search "#339"
+python check_assets.py bones path/to/model.pmx --search "[339]"
+```
+
+Show only IK bones:
+
+```bash
+python check_assets.py bones path/to/model.pmx --ik-only
+```
+
+Name search and IK filtering can be combined:
+
+```bash
+python check_assets.py bones path/to/model.pmx --search "Left" --ik-only
+```
+
+Machine-readable output is available for the table, tree, details, search,
+and IK modes:
+
+```bash
+python check_assets.py bones path/to/model.pmx --json
+python check_assets.py bones path/to/model.pmx --tree --json
+python check_assets.py bones path/to/model.pmx --details 339 --json
+python check_assets.py bones path/to/model.pmx --search "Calf" --json
+python check_assets.py bones path/to/model.pmx --ik-only --json
+```
+
+The JSON payload records the path, status, output mode, source bone count,
+matched count, active filters, warnings, errors, and exactly one of `bones`,
+`hierarchy`, or `detail` for the selected mode.
+
+`--details` cannot be combined with `--tree`, `--search`, or `--ik-only`.
+`--tree` cannot currently be combined with filters because removing parents
+would make a filtered hierarchy misleading. Unsupported option combinations
+return exit code `2` without scanning or modifying the model.
+
 ## Diagnose texture dependencies
 
 Run structural scanning and filesystem diagnostics together:
@@ -373,7 +500,11 @@ Command examples:
 - `scan` on malformed PMX data: `1`
 - `doctor` with all referenced textures present: `0`
 - `doctor` with a referenced texture missing: `1`
-- Missing file passed to `hash`, `inspect`, `scan`, or `doctor`: `2`
+- `bones` search with no matches: `0`
+- `bones` on malformed or unsupported PMX data: `1`
+- `bones --details` with an invalid index: `2`
+- Unsupported `bones` option combinations: `2`
+- Missing file passed to `hash`, `inspect`, `scan`, `doctor`, or `bones`: `2`
 - Unexpected scanner or diagnostics failure: `3`
 
 ## Registry schema 0.3
@@ -450,6 +581,8 @@ The tool is read-only for model and texture inputs. It does not:
 
 - Modify or rewrite PMX/PMD files
 - Repair corrupt geometry, bones, morphs, or physics
+- Rename, reparent, reposition, or change the flags of bones
+- Automatically translate Japanese, Chinese, or Korean bone names
 - Change texture paths
 - Copy, rename, convert, or delete textures
 - Import assets into Blender or MMD
@@ -464,7 +597,7 @@ as structured errors instead of being trusted.
 
 ## Real-model verification
 
-Version 0.4.0 was verified against a production-size PMX 2.0 model without
+Version 0.5.0 was verified against a production-size PMX 2.0 model without
 committing or redistributing that model.
 
 Verification summary:
@@ -476,6 +609,13 @@ Trailing bytes: 0
 Vertices: 31,387
 Triangles: 38,130
 Bones: 342
+Bone Explorer table records: 342
+Hierarchy nodes: 342
+Hierarchy roots: 2
+Hierarchy issues: 0
+CalfD search matches: 2
+IK-only matches: 4
+Detail validation: bone 339 with parent 338
 Morphs: 59
 Rigid bodies: 221
 Joints: 299
@@ -485,6 +625,8 @@ Non-portable paths: 0
 Scan exit code: 0
 Doctor exit code: 0
 UTF-8 JSON export: valid
+Bone table/tree/detail/search/IK text output: valid
+Bone table/tree/detail/search/IK JSON output: valid
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -498,7 +640,7 @@ Run all tests:
 python -m unittest discover -s tests -v
 ```
 
-After the release-readiness checkpoint, version 0.4.0 includes 300 unit tests
+At the real-model validation checkpoint, version 0.5.0 includes 367 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -509,8 +651,14 @@ covering:
 - Texture-reference summaries
 - Dependency path portability and filesystem state
 - `scan` and `doctor` text/JSON output
+- Bone display-name resolution and friendly flag presentation
+- Compact bone table rendering and JSON serialization
+- Safe hierarchy construction, cycle diagnostics, and iterative tree rendering
+- Individual bone details and enabled/disabled capabilities
+- Unicode-normalized name/index search and IK filtering
+- `bones` table, tree, details, search, IK, and JSON CLI modes
 - Exit codes `0`, `1`, `2`, and `3`
-- Windows redirected UTF-8 output
+- Windows redirected UTF-8 output, including Unicode bone JSON
 - Legacy CLI compatibility
 - SHA-256 streaming and verification
 - PMX/PMD header inspection
@@ -531,8 +679,9 @@ requests. It performs:
 3. Dependency installation
 4. Python source compilation
 5. Full automated test discovery
-6. Exact `0.4.0` package-version assertion
-7. Top-level version, `scan --help`, and `doctor --help` checks
+6. Exact `0.5.0` package-version assertion
+7. Top-level version, `scan --help`, `doctor --help`, and `bones --help`
+   checks
 8. Private registry validation using legacy and explicit syntax
 9. Registered placeholder SHA-256 verification
 
@@ -540,43 +689,53 @@ requests. It performs:
 
 ```text
 mmd-asset-registry/
-├── .github/workflows/validate.yml
-├── mmd_registry/
-│   ├── __init__.py
-│   ├── binary_reader.py
-│   ├── cli.py
-│   ├── constants.py
-│   ├── dependency_diagnostics.py
-│   ├── hashing.py
-│   ├── model_inspection.py
-│   ├── model_scanning.py
-│   ├── reporting.py
-│   └── validator.py
-├── reports/
-├── sample_assets/
-├── tests/
-│   ├── mmd_fixtures.py
-│   ├── test_binary_reader.py
-│   ├── test_cli.py
-│   ├── test_cli_utf8_output.py
-│   ├── test_dependency_diagnostics.py
-│   ├── test_doctor_cli.py
-│   ├── test_model_inspection.py
-│   ├── test_model_scanning.py
-│   ├── test_pmx_*_scanning.py
-│   ├── test_release_readiness.py
-│   ├── test_reporting.py
-│   └── test_validator.py
-├── assets.yaml
-├── CHANGELOG.md
-├── check_assets.py
-├── README.md
-└── requirements.txt
+|-- .github/workflows/validate.yml
+|-- mmd_registry/
+|   |-- __init__.py
+|   |-- binary_reader.py
+|   |-- bone_cli.py
+|   |-- bone_details.py
+|   |-- bone_explorer.py
+|   |-- bone_hierarchy.py
+|   |-- bone_search.py
+|   |-- cli.py
+|   |-- constants.py
+|   |-- dependency_diagnostics.py
+|   |-- hashing.py
+|   |-- model_inspection.py
+|   |-- model_scanning.py
+|   |-- reporting.py
+|   `-- validator.py
+|-- reports/
+|-- sample_assets/
+|-- tests/
+|   |-- mmd_fixtures.py
+|   |-- test_binary_reader.py
+|   |-- test_bone_cli.py
+|   |-- test_bone_details.py
+|   |-- test_bone_explorer.py
+|   |-- test_bone_hierarchy.py
+|   |-- test_bone_search.py
+|   |-- test_cli.py
+|   |-- test_cli_utf8_output.py
+|   |-- test_dependency_diagnostics.py
+|   |-- test_doctor_cli.py
+|   |-- test_model_inspection.py
+|   |-- test_model_scanning.py
+|   |-- test_pmx_*_scanning.py
+|   |-- test_release_readiness.py
+|   |-- test_reporting.py
+|   `-- test_validator.py
+|-- assets.yaml
+|-- CHANGELOG.md
+|-- check_assets.py
+|-- README.md
+`-- requirements.txt
 ```
 
 ## Current limitations
 
-Version 0.4.0 does not:
+Version 0.5.0 does not:
 
 - Structurally scan PMD beyond header inspection
 - Write or edit PMX/PMD files
@@ -585,13 +744,16 @@ Version 0.4.0 does not:
 - Register scan results back into `assets.yaml`
 - Provide batch directory scanning
 - Provide a graphical interface
+- Translate multilingual bone names beyond universal/local fallback
+- Edit bone names, positions, parents, flags, IK, or weights
 - Import models into Blender or MMD
 - Automatically determine legal permissions
 
 ## Roadmap
 
-Planned directions after 0.4.0:
+Planned directions after 0.5.0:
 
+- Multilingual PMX naming with external, reviewable dictionaries
 - PMD structural scanning
 - Registry browser and metadata editing
 - Batch scan and doctor commands

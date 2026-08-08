@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final, Literal, TypeAlias
+from typing import Any, Final, Iterable, Literal, TypeAlias
 
 from mmd_registry.model_scanning import PmxBone
 
@@ -86,6 +86,7 @@ BoneEvidenceCode: TypeAlias = Literal[
     "ik_definition",
     "parent_role",
     "child_role",
+    "hierarchy_side",
     "physics_binding",
     "alias_conflict",
     "naming_conflict",
@@ -158,6 +159,130 @@ class BoneSemanticResult:
             "evidence": list(self.evidence),
             "matched_aliases": list(self.matched_aliases),
         }
+
+
+_DEFORM_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
+    "shoulder": "shoulder_deform",
+    "arm": "arm_deform",
+    "elbow": "elbow_deform",
+    "wrist": "wrist_deform",
+    "finger": "finger_deform",
+    "thigh": "thigh_deform",
+    "knee": "knee_deform",
+    "ankle": "ankle_deform",
+    "toe": "toe_deform",
+}
+
+_HELPER_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
+    "shoulder": "shoulder_helper",
+    "arm": "arm_helper",
+    "elbow": "elbow_helper",
+    "wrist": "wrist_helper",
+    "finger": "finger_helper",
+    "thigh": "thigh_helper",
+    "knee": "knee_helper",
+    "ankle": "ankle_helper",
+    "toe": "toe_helper",
+}
+
+_BASE_ROLE_BY_VARIANT: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
+    variant: base
+    for variants in (
+        _DEFORM_VARIANTS,
+        _HELPER_VARIANTS,
+    )
+    for base, variant in variants.items()
+}
+
+_CONTROL_ROLES: Final[frozenset[BoneSemanticRole]] = frozenset(
+    {
+        "root",
+        "view_control",
+        "center",
+        "groove",
+    }
+)
+
+_IK_ROLES: Final[frozenset[BoneSemanticRole]] = frozenset(
+    {
+        "leg_ik_parent",
+        "leg_ik",
+        "toe_ik",
+    }
+)
+
+_EVIDENCE_ORDER: Final[tuple[BoneEvidenceCode, ...]] = (
+    "local_name_alias",
+    "universal_name_alias",
+    "local_name_convention",
+    "universal_name_convention",
+    "side_marker",
+    "bone_flags",
+    "ik_definition",
+    "parent_role",
+    "child_role",
+    "hierarchy_side",
+    "physics_binding",
+    "alias_conflict",
+    "naming_conflict",
+    "category_conflict",
+    "side_conflict",
+)
+
+
+def base_bone_semantic_role(
+    role: BoneSemanticRole,
+) -> BoneSemanticRole:
+    """Return the canonical base role for a deform/helper variant."""
+
+    return _BASE_ROLE_BY_VARIANT.get(role, role)
+
+
+def specialize_bone_semantic_role(
+    role: BoneSemanticRole,
+    category: BoneCategory,
+) -> BoneSemanticRole:
+    """Apply a supported deform/helper variant to one base role."""
+
+    base_role = base_bone_semantic_role(role)
+
+    if category == "deform":
+        return _DEFORM_VARIANTS.get(base_role, base_role)
+
+    if category == "helper":
+        return _HELPER_VARIANTS.get(base_role, base_role)
+
+    return role
+
+
+def default_bone_category_for_role(
+    role: BoneSemanticRole,
+) -> BoneCategory:
+    """Return the default category implied by one semantic role."""
+
+    if role == "unknown":
+        return "unknown"
+
+    if role in _CONTROL_ROLES:
+        return "control"
+
+    if role in _IK_ROLES:
+        return "ik"
+
+    if role in _HELPER_VARIANTS.values():
+        return "helper"
+
+    return "deform"
+
+
+def order_bone_evidence(
+    evidence: Iterable[BoneEvidenceCode],
+) -> tuple[BoneEvidenceCode, ...]:
+    """Deduplicate evidence and return it in one stable public order."""
+
+    evidence_set = set(evidence)
+
+    return tuple(code for code in _EVIDENCE_ORDER if code in evidence_set)
 
 
 def _alias_group(

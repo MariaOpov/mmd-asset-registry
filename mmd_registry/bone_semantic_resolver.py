@@ -19,6 +19,8 @@ from mmd_registry.bone_semantics import (
     BoneSemanticResult,
     BoneSemanticRole,
     BoneSide,
+    order_bone_evidence,
+    specialize_bone_semantic_role,
 )
 from mmd_registry.model_scanning import PmxBone
 
@@ -34,47 +36,6 @@ _IK_ROLES: Final[frozenset[BoneSemanticRole]] = frozenset(
         "leg_ik",
         "toe_ik",
     }
-)
-
-_DEFORM_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
-    "shoulder": "shoulder_deform",
-    "arm": "arm_deform",
-    "elbow": "elbow_deform",
-    "wrist": "wrist_deform",
-    "finger": "finger_deform",
-    "thigh": "thigh_deform",
-    "knee": "knee_deform",
-    "ankle": "ankle_deform",
-    "toe": "toe_deform",
-}
-
-_HELPER_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
-    "shoulder": "shoulder_helper",
-    "arm": "arm_helper",
-    "elbow": "elbow_helper",
-    "wrist": "wrist_helper",
-    "finger": "finger_helper",
-    "thigh": "thigh_helper",
-    "knee": "knee_helper",
-    "ankle": "ankle_helper",
-    "toe": "toe_helper",
-}
-
-_EVIDENCE_ORDER: Final[tuple[BoneEvidenceCode, ...]] = (
-    "local_name_alias",
-    "universal_name_alias",
-    "local_name_convention",
-    "universal_name_convention",
-    "side_marker",
-    "bone_flags",
-    "ik_definition",
-    "parent_role",
-    "child_role",
-    "physics_binding",
-    "alias_conflict",
-    "naming_conflict",
-    "category_conflict",
-    "side_conflict",
 )
 
 
@@ -289,14 +250,6 @@ def _find_name_conventions(value: str) -> tuple[_NameConvention, ...]:
     return tuple(sorted(conventions))
 
 
-def _ordered_evidence(
-    evidence: set[BoneEvidenceCode],
-) -> tuple[BoneEvidenceCode, ...]:
-    """Return evidence in one stable public order."""
-
-    return tuple(code for code in _EVIDENCE_ORDER if code in evidence)
-
-
 @dataclass(frozen=True, slots=True)
 class BoneSemanticResolver:
     """Resolve PMX bone semantics using one replaceable alias profile."""
@@ -412,11 +365,14 @@ class BoneSemanticResolver:
             convention = next(iter(conventions))
 
             if convention == "deform":
-                role = _DEFORM_VARIANTS.get(role, role)
                 category = "deform"
             else:
-                role = _HELPER_VARIANTS.get(role, role)
                 category = "helper"
+
+            role = specialize_bone_semantic_role(
+                role,
+                category,
+            )
 
             if role == "unknown":
                 confidence = "low"
@@ -478,7 +434,7 @@ class BoneSemanticResolver:
             side=side,
             category=category,
             confidence=confidence,
-            evidence=_ordered_evidence(evidence),
+            evidence=order_bone_evidence(evidence),
             matched_aliases=matched_aliases,
         )
 

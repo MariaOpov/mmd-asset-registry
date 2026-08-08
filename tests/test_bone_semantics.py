@@ -11,7 +11,11 @@ from mmd_registry.bone_semantics import (
     BoneSemanticAlias,
     BoneSemanticProfile,
     BoneSemanticResult,
+    base_bone_semantic_role,
     build_unknown_bone_semantic,
+    default_bone_category_for_role,
+    order_bone_evidence,
+    specialize_bone_semantic_role,
 )
 from mmd_registry.model_scanning import PmxBone
 
@@ -188,6 +192,53 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
         self.assertEqual(report["name"], "mmd-standard-v1")
         self.assertEqual(report["aliases"][0]["alias"], "全ての親")
         self.assertEqual(report["aliases"][0]["side"], "center")
+
+    def test_role_variant_helpers_are_deterministic(self) -> None:
+        self.assertEqual(
+            specialize_bone_semantic_role(
+                "knee",
+                "deform",
+            ),
+            "knee_deform",
+        )
+        self.assertEqual(
+            specialize_bone_semantic_role(
+                "arm_deform",
+                "helper",
+            ),
+            "arm_helper",
+        )
+        self.assertEqual(
+            base_bone_semantic_role("wrist_helper"),
+            "wrist",
+        )
+        self.assertEqual(
+            default_bone_category_for_role("leg_ik"),
+            "ik",
+        )
+        self.assertEqual(
+            default_bone_category_for_role("head"),
+            "deform",
+        )
+
+    def test_evidence_ordering_is_shared_and_stable(self) -> None:
+        self.assertEqual(
+            order_bone_evidence(
+                (
+                    "child_role",
+                    "local_name_alias",
+                    "hierarchy_side",
+                    "child_role",
+                    "parent_role",
+                )
+            ),
+            (
+                "local_name_alias",
+                "parent_role",
+                "child_role",
+                "hierarchy_side",
+            ),
+        )
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ BoneSemanticRole: TypeAlias = Literal[
     "waist",
     "lower_body",
     "upper_body",
+    "upper_body_2",
     "neck",
     "head",
     "eye",
@@ -87,6 +88,8 @@ BoneEvidenceCode: TypeAlias = Literal[
     "child_role",
     "physics_binding",
     "alias_conflict",
+    "naming_conflict",
+    "category_conflict",
     "side_conflict",
 ]
 
@@ -157,71 +160,248 @@ class BoneSemanticResult:
         }
 
 
+def _alias_group(
+    role: BoneSemanticRole,
+    category: BoneCategory,
+    aliases: tuple[str, ...],
+    *,
+    side: BoneSide | None = None,
+) -> tuple[BoneSemanticAlias, ...]:
+    """Build one compact immutable alias group."""
+
+    return tuple(
+        BoneSemanticAlias(
+            alias=alias,
+            role=role,
+            category=category,
+            side=side,
+        )
+        for alias in aliases
+    )
+
+
 DEFAULT_BONE_SEMANTIC_PROFILE: Final[BoneSemanticProfile] = BoneSemanticProfile(
-    name="mmd-minimal-v1",
+    name="mmd-standard-v1",
     aliases=(
-        BoneSemanticAlias(
-            alias="全ての親",
-            role="root",
-            category="control",
+        *_alias_group(
+            "root",
+            "control",
+            (
+                "全ての親",
+                "root",
+                "mother bone",
+                "master",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="root",
-            role="root",
-            category="control",
+        *_alias_group(
+            "view_control",
+            "control",
+            (
+                "操作中心",
+                "view center",
+                "control center",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="操作中心",
-            role="view_control",
-            category="control",
+        *_alias_group(
+            "center",
+            "control",
+            (
+                "センター",
+                "center",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="view center",
-            role="view_control",
-            category="control",
+        *_alias_group(
+            "groove",
+            "control",
+            (
+                "グルーブ",
+                "groove",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="センター",
-            role="center",
-            category="control",
+        *_alias_group(
+            "waist",
+            "deform",
+            (
+                "腰",
+                "waist",
+                "hip",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="center",
-            role="center",
-            category="control",
+        *_alias_group(
+            "lower_body",
+            "deform",
+            (
+                "下半身",
+                "lower body",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="グルーブ",
-            role="groove",
-            category="control",
+        *_alias_group(
+            "upper_body_2",
+            "deform",
+            (
+                "上半身2",
+                "upper body 2",
+                "upper body2",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="groove",
-            role="groove",
-            category="control",
+        *_alias_group(
+            "upper_body",
+            "deform",
+            (
+                "上半身",
+                "upper body",
+                "spine",
+                "chest",
+            ),
             side="center",
         ),
-        BoneSemanticAlias(
-            alias="ひざ",
-            role="knee",
-            category="deform",
+        *_alias_group(
+            "neck",
+            "deform",
+            (
+                "首",
+                "neck",
+            ),
+            side="center",
         ),
-        BoneSemanticAlias(
-            alias="knee",
-            role="knee",
-            category="deform",
+        *_alias_group(
+            "head",
+            "deform",
+            (
+                "頭",
+                "head",
+            ),
+            side="center",
         ),
-        BoneSemanticAlias(
-            alias="calf",
-            role="knee",
-            category="deform",
+        *_alias_group(
+            "eye",
+            "deform",
+            (
+                "目",
+                "eye",
+                "eyes",
+            ),
+        ),
+        *_alias_group(
+            "shoulder",
+            "deform",
+            (
+                "肩",
+                "shoulder",
+                "clavicle",
+            ),
+        ),
+        *_alias_group(
+            "arm",
+            "deform",
+            (
+                "腕",
+                "arm",
+                "upper arm",
+            ),
+        ),
+        *_alias_group(
+            "elbow",
+            "deform",
+            (
+                "ひじ",
+                "肘",
+                "elbow",
+                "forearm",
+                "lower arm",
+            ),
+        ),
+        *_alias_group(
+            "wrist",
+            "deform",
+            (
+                "手首",
+                "wrist",
+                "hand",
+            ),
+        ),
+        *_alias_group(
+            "finger",
+            "deform",
+            (
+                "指",
+                "finger",
+                "thumb",
+                "index finger",
+                "middle finger",
+                "ring finger",
+                "little finger",
+                "pinky",
+            ),
+        ),
+        *_alias_group(
+            "thigh",
+            "deform",
+            (
+                "足",
+                "thigh",
+                "leg",
+                "upper leg",
+            ),
+        ),
+        *_alias_group(
+            "knee",
+            "deform",
+            (
+                "ひざ",
+                "膝",
+                "knee",
+                "calf",
+                "lower leg",
+            ),
+        ),
+        *_alias_group(
+            "ankle",
+            "deform",
+            (
+                "足首",
+                "ankle",
+                "foot",
+            ),
+        ),
+        *_alias_group(
+            "toe",
+            "deform",
+            (
+                "つま先",
+                "toe",
+            ),
+        ),
+        *_alias_group(
+            "leg_ik_parent",
+            "ik",
+            (
+                "足ik親",
+                "leg ik parent",
+            ),
+        ),
+        *_alias_group(
+            "leg_ik",
+            "ik",
+            (
+                "足ik",
+                "leg ik",
+            ),
+        ),
+        *_alias_group(
+            "toe_ik",
+            "ik",
+            (
+                "つま先ik",
+                "toe ik",
+            ),
         ),
     ),
 )

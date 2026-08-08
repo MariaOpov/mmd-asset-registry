@@ -128,14 +128,14 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             result.role = "root"  # type: ignore[misc]
 
-    def test_default_profile_has_small_cross_language_vocabulary(self) -> None:
+    def test_default_profile_has_bounded_cross_language_vocabulary(self) -> None:
         aliases = {
             alias.alias: alias for alias in DEFAULT_BONE_SEMANTIC_PROFILE.aliases
         }
 
         self.assertEqual(
             DEFAULT_BONE_SEMANTIC_PROFILE.name,
-            "mmd-minimal-v1",
+            "mmd-standard-v1",
         )
         self.assertEqual(aliases["全ての親"].role, "root")
         self.assertEqual(aliases["root"].role, "root")
@@ -143,9 +143,11 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
         self.assertEqual(aliases["center"].role, "center")
         self.assertEqual(aliases["ひざ"].role, "knee")
         self.assertEqual(aliases["knee"].role, "knee")
+        self.assertEqual(aliases["足首"].role, "ankle")
+        self.assertEqual(aliases["leg ik"].role, "leg_ik")
         self.assertLessEqual(
             len(DEFAULT_BONE_SEMANTIC_PROFILE.aliases),
-            16,
+            80,
         )
 
     def test_profile_can_be_replaced_without_mutating_default(self) -> None:
@@ -183,7 +185,7 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
             ensure_ascii=False,
         )
 
-        self.assertEqual(report["name"], "mmd-minimal-v1")
+        self.assertEqual(report["name"], "mmd-standard-v1")
         self.assertEqual(report["aliases"][0]["alias"], "全ての親")
         self.assertEqual(report["aliases"][0]["side"], "center")
 

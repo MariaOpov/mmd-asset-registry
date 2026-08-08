@@ -11,6 +11,7 @@ from typing import Any, Sequence
 import yaml
 
 from mmd_registry import __version__
+from mmd_registry.bone_cli import run_bones_command
 from mmd_registry.constants import VALID_MODES
 from mmd_registry.dependency_diagnostics import (
     TextureDependencyDiagnostics,
@@ -40,6 +41,7 @@ COMMAND_NAMES = frozenset(
         "inspect",
         "scan",
         "doctor",
+        "bones",
     }
 )
 
@@ -169,7 +171,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         description=(
             "Validate MMD assets, calculate SHA-256 hashes, inspect "
             "PMX/PMD headers, structurally scan PMX models, and "
-            "diagnose texture dependencies."
+            "diagnose texture dependencies or explore PMX bones."
         ),
     )
 
@@ -264,6 +266,48 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the combined doctor result as JSON.",
+    )
+
+    bones_parser = subparsers.add_parser(
+        "bones",
+        help="Explore PMX bones in a human-readable form.",
+        description=(
+            "Scan and explore PMX bones as a compact table, "
+            "hierarchy tree, individual detail report, or JSON "
+            "without modifying the model."
+        ),
+    )
+    bones_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    bones_parser.add_argument(
+        "--tree",
+        action="store_true",
+        help="Render the complete parent-child hierarchy.",
+    )
+    bones_parser.add_argument(
+        "--details",
+        type=int,
+        default=None,
+        metavar="INDEX",
+        help="Show a detailed report for one bone index.",
+    )
+    bones_parser.add_argument(
+        "--search",
+        default=None,
+        metavar="QUERY",
+        help="Search local, universal, and display names or an index.",
+    )
+    bones_parser.add_argument(
+        "--ik-only",
+        action="store_true",
+        help="Show only bones with the IK capability.",
+    )
+    bones_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the Bone Explorer result as JSON.",
     )
 
     return parser
@@ -879,6 +923,16 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "doctor":
         return _run_doctor(arguments)
+
+    if arguments.command == "bones":
+        return run_bones_command(
+            path=arguments.path,
+            tree=arguments.tree,
+            details=arguments.details,
+            search_query=arguments.search,
+            ik_only=arguments.ik_only,
+            json_output=arguments.json,
+        )
 
     parser.error(f"Unsupported command: {arguments.command}")
     return 2

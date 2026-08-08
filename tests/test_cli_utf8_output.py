@@ -12,6 +12,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mmd_registry.cli import main
+from tests.mmd_fixtures import (
+    build_pmx_bone,
+    build_pmx_structure,
+)
 
 
 class _FakeScanResult:
@@ -62,6 +66,19 @@ class CliUtf8OutputTests(unittest.TestCase):
         self.model_path = self.project_root / "芙拉薇娅.pmx"
         self.model_path.write_bytes(b"fixture")
 
+        self.bone_model_path = self.project_root / "骨格モデル.pmx"
+        self.bone_model_path.write_bytes(
+            build_pmx_structure(
+                bones=(
+                    build_pmx_bone(
+                        local_name="左ひざD",
+                        universal_name="Bip001 L CalfD",
+                        extra_flags=0x001A,
+                    ),
+                )
+            )
+        )
+
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
 
@@ -73,8 +90,14 @@ class CliUtf8OutputTests(unittest.TestCase):
 
         stdout_bytes = io.BytesIO()
         stderr_bytes = io.BytesIO()
-        stdout = io.TextIOWrapper(stdout_bytes, encoding="cp1252")
-        stderr = io.TextIOWrapper(stderr_bytes, encoding="cp1252")
+        stdout = io.TextIOWrapper(
+            stdout_bytes,
+            encoding="cp1252",
+        )
+        stderr = io.TextIOWrapper(
+            stderr_bytes,
+            encoding="cp1252",
+        )
 
         try:
             with (
@@ -91,6 +114,7 @@ class CliUtf8OutputTests(unittest.TestCase):
 
             stdout.flush()
             stderr.flush()
+
             return (
                 int(exit_context.exception.code),
                 stdout_bytes.getvalue(),
@@ -115,7 +139,10 @@ class CliUtf8OutputTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, b"")
-        self.assertEqual(payload["model_info"]["local_name"], "芙拉薇娅")
+        self.assertEqual(
+            payload["model_info"]["local_name"],
+            "芙拉薇娅",
+        )
         self.assertTrue(payload["path"].endswith("芙拉薇娅.pmx"))
 
     def test_doctor_json_redirection_writes_utf8(self) -> None:
@@ -143,7 +170,36 @@ class CliUtf8OutputTests(unittest.TestCase):
             payload["scan"]["model_info"]["local_name"],
             "芙拉薇娅",
         )
-        self.assertEqual(payload["texture_diagnostics"]["status"], "ok")
+        self.assertEqual(
+            payload["texture_diagnostics"]["status"],
+            "ok",
+        )
+
+    def test_bones_json_redirection_writes_utf8(self) -> None:
+        """Unicode bone names survive redirected JSON output."""
+
+        exit_code, stdout, stderr = self.run_main_with_legacy_streams(
+            [
+                "bones",
+                str(self.bone_model_path),
+                "--json",
+            ]
+        )
+
+        payload = json.loads(stdout.decode("utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, b"")
+        self.assertTrue(payload["path"].endswith("骨格モデル.pmx"))
+        self.assertEqual(payload["bone_count"], 1)
+        self.assertEqual(
+            payload["bones"][0]["local_name"],
+            "左ひざD",
+        )
+        self.assertEqual(
+            payload["bones"][0]["display_name"],
+            "Bip001 L CalfD",
+        )
 
     def test_internal_error_redirection_writes_utf8_stderr(self) -> None:
         """Unexpected Unicode errors also survive stderr redirection."""
@@ -156,7 +212,10 @@ class CliUtf8OutputTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 3)
         self.assertEqual(stdout, b"")
-        self.assertIn("芙拉薇娅 failure", stderr.decode("utf-8"))
+        self.assertIn(
+            "芙拉薇娅 failure",
+            stderr.decode("utf-8"),
+        )
 
 
 if __name__ == "__main__":

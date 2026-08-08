@@ -37,11 +37,12 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.5.0'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.6.0'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py doctor --help
           python check_assets.py bones --help
+          python check_assets.py rig --help
 
       - name: Validate registry with legacy syntax
         run: python check_assets.py --mode private --no-report

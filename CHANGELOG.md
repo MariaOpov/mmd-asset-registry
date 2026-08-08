@@ -2,6 +2,56 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.6.0 - 2026-08-08
+
+### Added
+
+- A read-only Rig Analyzer that resolves bounded canonical semantics for PMX
+  bones while preserving their original local and universal names.
+- Immutable semantic results containing role, side, category, confidence tier,
+  matched aliases, and deterministic evidence.
+- Shared Unicode normalization for width, whitespace, case, separators,
+  camel-case words, acronyms, digits, and common naming suffixes.
+- A replaceable Japanese and English semantic profile with conservative
+  aliases for core MMD roles, IK controls, and helper or deform variants.
+- Safe ambiguity handling that leaves unsupported or conflicting bones
+  unresolved instead of creating high-confidence guesses.
+- Iterative hierarchy-aware semantic inference with fixed-point processing for
+  deep rigs, invalid parents, and cycles.
+- Structured rig diagnostics for missing and duplicate roles, ambiguity,
+  left/right asymmetry, suspicious hierarchy relationships, side conflicts,
+  invalid IK references, and unclassified bones.
+- Deterministic complete rig reports, summary counts, and canonical bone maps
+  that are immutable and JSON serializable.
+- A `rig` CLI command with text and JSON reports, `--unmapped` and `--role`
+  filters, and standalone UTF-8 JSON export through `--export-map`.
+- Stable Rig Analyzer exit codes for clean reports, actionable diagnostics,
+  usage errors, malformed inputs, and internal failures.
+- Programmatically generated semantic, inference, diagnostic, analysis, and
+  CLI fixtures, bringing the suite to 475 automated tests.
+
+### Verified
+
+- Analyzed a production-size PMX 2.0 model containing 342 bones without
+  modifying or redistributing the model.
+- Resolved 102 bones across 37 canonical role keys while conservatively
+  retaining 240 custom or unsupported bones as unresolved.
+- Reduced actionable diagnostics from 31 warnings to 2 evidence-backed
+  warnings, with zero errors and no false duplicate, side-conflict, or
+  asymmetry diagnostics.
+- Verified semantic text and JSON output plus standalone UTF-8 canonical
+  bone-map export on Windows.
+
+### Compatibility
+
+- Registry schema remains `0.3`.
+- Registry schemas `0.2` and `0.3` remain supported.
+- PMX 2.0 and PMX 2.1 remain supported for complete read-only structural scan,
+  Bone Explorer, and Rig Analyzer workflows.
+- PMD 1.0 remains supported for header inspection only.
+- Legacy validation command syntax and all existing CLI commands remain
+  supported.
+
 ## 0.5.0 - 2026-08-08
 
 ### Added

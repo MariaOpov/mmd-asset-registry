@@ -1,4 +1,4 @@
-"""Release-readiness checks for version 0.5.0."""
+"""Release-readiness checks for version 0.6.0."""
 
 from __future__ import annotations
 
@@ -17,13 +17,13 @@ WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "validate.yml"
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_5_0(self) -> None:
-        self.assertEqual(__version__, "0.5.0")
+    def test_package_version_is_0_6_0(self) -> None:
+        self.assertEqual(__version__, "0.6.0")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.5.0", readme)
+        self.assertIn("Tool version: 0.6.0", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
 
@@ -37,6 +37,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             "scan",
             "doctor",
             "bones",
+            "rig",
         ):
             with self.subTest(command=command):
                 self.assertIn(
@@ -49,6 +50,9 @@ class ReleaseReadinessTests(unittest.TestCase):
             "--details",
             "--search",
             "--ik-only",
+            "--unmapped",
+            "--role",
+            "--export-map",
             "--json",
         ):
             with self.subTest(option=option):
@@ -78,25 +82,26 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("2 = Required input path", readme)
         self.assertIn("3 = Unexpected internal error", readme)
 
-    def test_changelog_documents_0_5_0_capabilities(self) -> None:
+    def test_changelog_documents_0_6_0_capabilities(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("## 0.5.0 - 2026-08-08", changelog)
-        self.assertIn("read-only Bone Explorer", changelog)
-        self.assertIn("Compact one-row-per-bone table", changelog)
-        self.assertIn("Safe parent-child hierarchy", changelog)
-        self.assertIn("`bones` CLI command", changelog)
-        self.assertIn("Unicode-normalized bone search", changelog)
-        self.assertIn("367 automated tests", changelog)
+        self.assertIn("## 0.6.0 - 2026-08-08", changelog)
+        self.assertIn("read-only Rig Analyzer", changelog)
+        self.assertIn("canonical bone maps", changelog)
+        self.assertIn("hierarchy-aware semantic inference", changelog)
+        self.assertIn("Structured rig diagnostics", changelog)
+        self.assertIn("`rig` CLI command", changelog)
+        self.assertIn("475 automated tests", changelog)
 
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.5.0'", workflow)
+        self.assertIn("assert __version__ == '0.6.0'", workflow)
         self.assertIn("python check_assets.py --version", workflow)
         self.assertIn("python check_assets.py scan --help", workflow)
         self.assertIn("python check_assets.py doctor --help", workflow)
         self.assertIn("python check_assets.py bones --help", workflow)
+        self.assertIn("python check_assets.py rig --help", workflow)
 
 
 if __name__ == "__main__":

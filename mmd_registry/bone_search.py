@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Sequence
 
 from mmd_registry.bone_explorer import BoneView
+from mmd_registry.bone_names import normalize_bone_name
 
 
 def _normalize_search_text(value: str) -> str:
     """Normalize user-facing text for predictable matching."""
 
-    normalized = unicodedata.normalize("NFKC", value)
-
-    return " ".join(normalized.split()).casefold()
+    return normalize_bone_name(value)
 
 
 def _parse_index_query(query: str) -> int | None:
     """Parse supported exact-index query forms."""
 
-    candidate = unicodedata.normalize("NFKC", query).strip()
+    candidate = normalize_bone_name(query)
 
     if candidate.startswith("#"):
         candidate = candidate[1:].strip()
@@ -50,7 +48,7 @@ def _matches_search_query(
     )
 
     return any(
-        normalized_query in _normalize_search_text(name) for name in searchable_names
+        normalized_query in normalize_bone_name(name) for name in searchable_names
     )
 
 

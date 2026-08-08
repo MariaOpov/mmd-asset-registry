@@ -528,6 +528,30 @@ def _apply_hierarchy_inference(
     return current
 
 
+def expected_child_semantic_roles(
+    role: BoneSemanticRole,
+) -> frozenset[BoneSemanticRole]:
+    """Return expected direct child roles for one canonical base role."""
+
+    base_role = base_bone_semantic_role(role)
+
+    return _EXPECTED_CHILD_ROLES.get(
+        base_role,
+        frozenset(),
+    )
+
+
+def is_expected_semantic_relationship(
+    parent_role: BoneSemanticRole,
+    child_role: BoneSemanticRole,
+) -> bool:
+    """Return whether two known roles form one expected direct relation."""
+
+    child_base_role = base_bone_semantic_role(child_role)
+
+    return child_base_role in expected_child_semantic_roles(parent_role)
+
+
 def infer_bone_semantics(
     bones: Sequence[PmxBone],
     *,

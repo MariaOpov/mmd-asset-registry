@@ -128,6 +128,43 @@ class BoneSemanticInferenceTests(unittest.TestCase):
         self.assertEqual(helper.confidence, "low")
         self.assertNotIn("parent_role", helper.evidence)
 
+    def test_named_accessory_is_not_inferred_from_one_sided_context(self) -> None:
+        results = infer_bone_semantics(
+            (
+                make_bone(universal_name="Head"),
+                make_bone(
+                    universal_name="Left Hair Link 01",
+                    parent_index=0,
+                ),
+            )
+        )
+        accessory = results[1]
+
+        self.assertEqual(accessory.role, "unknown")
+        self.assertEqual(accessory.side, "left")
+        self.assertNotIn("parent_role", accessory.evidence)
+
+    def test_named_accessory_is_not_inferred_between_anatomical_roles(self) -> None:
+        results = infer_bone_semantics(
+            (
+                make_bone(universal_name="Left Elbow"),
+                make_bone(
+                    universal_name="Left Sleeve Link 01",
+                    parent_index=0,
+                ),
+                make_bone(
+                    universal_name="Left Finger",
+                    parent_index=1,
+                ),
+            )
+        )
+        accessory = results[1]
+
+        self.assertEqual(accessory.role, "unknown")
+        self.assertEqual(accessory.side, "left")
+        self.assertNotIn("parent_role", accessory.evidence)
+        self.assertNotIn("child_role", accessory.evidence)
+
     def test_hierarchy_support_strengthens_a_named_role(self) -> None:
         results = infer_bone_semantics(
             (

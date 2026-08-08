@@ -226,7 +226,7 @@ class RigAnalysisTests(unittest.TestCase):
             },
         )
 
-    def test_duplicate_role_map_preserves_every_matching_index(self) -> None:
+    def test_role_map_preserves_base_and_variant_without_duplicate_issue(self) -> None:
         report = analyze_rig(
             (
                 make_bone(universal_name="Left Knee D"),
@@ -241,10 +241,30 @@ class RigAnalysisTests(unittest.TestCase):
         )
         self.assertEqual(report.bone_map.mapped_count, 2)
         self.assertEqual(len(report.bone_map.entries), 2)
-        self.assertIn(
+        self.assertNotIn(
             "duplicate_semantic_role",
             tuple(issue.code for issue in report.diagnostics.issues),
         )
+
+    def test_named_accessory_stays_unmapped_despite_anatomical_context(self) -> None:
+        report = analyze_rig(
+            (
+                make_bone(universal_name="Left Elbow"),
+                make_bone(
+                    universal_name="Left Sleeve Link 01",
+                    parent_index=0,
+                ),
+                make_bone(
+                    universal_name="Left Finger",
+                    parent_index=1,
+                ),
+            ),
+            diagnostic_profile=empty_diagnostic_profile(),
+        )
+
+        self.assertEqual(report.semantics[1].role, "unknown")
+        self.assertEqual(report.bone_map.unmapped_indices, (1,))
+        self.assertNotIn(1, report.bone_map.role_index.get("left_wrist", []))
 
     def test_bone_map_preserves_names_roles_and_source_order(self) -> None:
         bones = (

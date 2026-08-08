@@ -185,6 +185,131 @@ class BoneSemanticResolverTests(unittest.TestCase):
         self.assertEqual(result.confidence, "medium")
         self.assertEqual(result.matched_aliases, ("leg ik",))
 
+    def test_leg_ik_parent_abbreviation_confirms_japanese_name(self) -> None:
+        result = resolve_bone_semantic(
+            8,
+            make_bone(
+                local_name="左足IK親",
+                universal_name="leg IKP_L",
+            ),
+        )
+
+        self.assertEqual(result.role, "leg_ik_parent")
+        self.assertEqual(result.side, "left")
+        self.assertEqual(result.category, "ik")
+        self.assertEqual(result.confidence, "high")
+        self.assertEqual(result.matched_aliases, ("足ik親", "leg ikp"))
+
+    def test_numbered_spine_alias_confirms_upper_body_2(self) -> None:
+        result = resolve_bone_semantic(
+            13,
+            make_bone(
+                local_name="上半身2",
+                universal_name="Bip001 Spine2",
+            ),
+        )
+
+        self.assertEqual(result.role, "upper_body_2")
+        self.assertEqual(result.side, "center")
+        self.assertEqual(result.category, "deform")
+        self.assertEqual(result.confidence, "high")
+        self.assertEqual(result.matched_aliases, ("上半身2", "spine 2"))
+
+    def test_toe_ex_uses_specific_cjk_alias_and_deform_convention(self) -> None:
+        result = resolve_bone_semantic(
+            337,
+            make_bone(
+                local_name="右足先EX",
+                universal_name="toe2_R",
+            ),
+        )
+
+        self.assertEqual(result.role, "toe_deform")
+        self.assertEqual(result.side, "right")
+        self.assertEqual(result.category, "deform")
+        self.assertEqual(result.confidence, "high")
+        self.assertEqual(result.matched_aliases, ("足先", "toe"))
+        self.assertIn("local_name_convention", result.evidence)
+
+    def test_unrelated_cjk_compound_does_not_match_short_alias(self) -> None:
+        result = resolve_bone_semantic(
+            40,
+            make_bone(local_name="左足袋"),
+        )
+
+        self.assertEqual(result.role, "unknown")
+        self.assertEqual(result.side, "left")
+        self.assertEqual(result.category, "unknown")
+        self.assertEqual(result.confidence, "unknown")
+        self.assertEqual(result.evidence, ("side_marker",))
+
+    def test_center_role_alias_is_rejected_for_paired_name(self) -> None:
+        result = resolve_bone_semantic(
+            41,
+            make_bone(universal_name="Left Chest 01"),
+        )
+
+        self.assertEqual(result.role, "unknown")
+        self.assertEqual(result.side, "left")
+        self.assertEqual(result.category, "unknown")
+        self.assertEqual(result.confidence, "unknown")
+        self.assertEqual(result.evidence, ("side_marker",))
+        self.assertEqual(result.matched_aliases, ())
+
+    def test_bounded_helper_and_deform_conventions_specialize_roles(self) -> None:
+        cases = (
+            (
+                make_bone(
+                    local_name="左腕捩",
+                    universal_name="Left Arm Twist",
+                ),
+                "arm_deform",
+                "deform",
+            ),
+            (
+                make_bone(local_name="腰キャンセル左"),
+                "waist_helper",
+                "helper",
+            ),
+            (
+                make_bone(
+                    local_name="左肩P",
+                    universal_name="ShoulderP_L",
+                ),
+                "shoulder_helper",
+                "helper",
+            ),
+            (
+                make_bone(local_name="左目先"),
+                "eye_helper",
+                "helper",
+            ),
+            (
+                make_bone(
+                    local_name="左腕輔",
+                    universal_name="cloth UpperArm L 01",
+                ),
+                "arm_helper",
+                "helper",
+            ),
+            (
+                make_bone(local_name="腰パーツ親"),
+                "waist_helper",
+                "helper",
+            ),
+        )
+
+        for index, (bone, expected_role, expected_category) in enumerate(cases):
+            with self.subTest(expected_role=expected_role, index=index):
+                result = resolve_bone_semantic(index, bone)
+
+                self.assertEqual(result.role, expected_role)
+                self.assertEqual(result.category, expected_category)
+                self.assertIn(
+                    "local_name_convention",
+                    result.evidence,
+                )
+
     def test_local_and_universal_role_conflict_is_not_guessed(self) -> None:
         result = resolve_bone_semantic(
             12,

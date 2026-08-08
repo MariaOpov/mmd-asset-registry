@@ -19,6 +19,7 @@ from mmd_registry.bone_semantics import (
     BoneSemanticResult,
     BoneSemanticRole,
     BoneSide,
+    base_bone_semantic_role,
     order_bone_evidence,
     specialize_bone_semantic_role,
 )
@@ -36,6 +37,41 @@ _IK_ROLES: Final[frozenset[BoneSemanticRole]] = frozenset(
         "leg_ik",
         "toe_ik",
     }
+)
+
+_DEFORM_VARIANT_BASE_ROLES: Final[frozenset[BoneSemanticRole]] = frozenset(
+    {
+        "shoulder",
+        "arm",
+        "elbow",
+        "wrist",
+        "finger",
+        "thigh",
+        "knee",
+        "ankle",
+        "toe",
+    }
+)
+
+_NON_ASCII_MATCH_AFFIXES: Final[tuple[str, ...]] = (
+    "キャンセル",
+    "パーツ親",
+    "補助",
+    "捩り",
+    "helper",
+    "support",
+    "dummy",
+    "twist",
+    "deform",
+    "左",
+    "右",
+    "輔",
+    "捩",
+    "先",
+    "ex",
+    "d",
+    "p",
+    "c",
 )
 
 
@@ -121,13 +157,41 @@ def _match_alias(
             strength=2,
         )
 
-    if alias.contains_non_ascii and alias.normalized in normalized_name:
+    if alias.contains_non_ascii and _has_bounded_non_ascii_match(
+        normalized_name,
+        alias.normalized,
+    ):
         return _AliasMatch(
             alias=alias,
             strength=1,
         )
 
     return None
+
+
+def _has_bounded_non_ascii_match(
+    normalized_name: str,
+    normalized_alias: str,
+) -> bool:
+    """Allow CJK containment only around known side/convention affixes."""
+
+    start = normalized_name.find(normalized_alias)
+
+    if start < 0:
+        return False
+
+    residue = (
+        normalized_name[:start]
+        + normalized_name[start + len(normalized_alias) :]
+    )
+    residue = "".join(residue.split())
+
+    for affix in _NON_ASCII_MATCH_AFFIXES:
+        residue = residue.replace(affix, "")
+
+    residue = residue.strip("0123456789_- ")
+
+    return not residue
 
 
 def _deduplicate_strings(values: Sequence[str]) -> tuple[str, ...]:
@@ -229,22 +293,51 @@ def _find_side_markers(value: str) -> tuple[BoneSide, ...]:
     return tuple(sorted(sides))
 
 
-def _find_name_conventions(value: str) -> tuple[_NameConvention, ...]:
+def _find_name_conventions(
+    value: str,
+    role: BoneSemanticRole,
+) -> tuple[_NameConvention, ...]:
     """Find explicit deform/helper conventions in one source name."""
 
     normalized = normalize_bone_name(value)
     tokens = split_bone_name_tokens(value)
     token_set = set(tokens)
+    base_role = base_bone_semantic_role(role)
     conventions: set[_NameConvention] = set()
 
     if (
         "deform" in token_set
         or "変形" in normalized
+        or (
+            base_role in _DEFORM_VARIANT_BASE_ROLES
+            and (
+                "twist" in token_set
+                or "捩" in normalized
+                or "ex" in token_set
+            )
+        )
         or (len(tokens) > 1 and tokens[-1] == "d")
     ):
         conventions.add("deform")
 
-    if token_set.intersection({"helper", "dummy", "support"}) or ("補助" in normalized):
+    if (
+        token_set.intersection({"helper", "dummy", "support", "cancel"})
+        or "補助" in normalized
+        or "輔" in normalized
+        or "キャンセル" in normalized
+        or "パーツ親" in normalized
+        or (
+            base_role == "eye"
+            and (
+                "目先" in normalized
+                or token_set.intersection({"tip", "end"})
+            )
+        )
+        or (
+            base_role == "shoulder"
+            and token_set.intersection({"p", "c"})
+        )
+    ):
         conventions.add("helper")
 
     return tuple(sorted(conventions))
@@ -346,8 +439,14 @@ class BoneSemanticResolver:
                 if category_conflict:
                     confidence = "low"
 
-        local_conventions = _find_name_conventions(bone.local_name)
-        universal_conventions = _find_name_conventions(bone.universal_name)
+        local_conventions = _find_name_conventions(
+            bone.local_name,
+            role,
+        )
+        universal_conventions = _find_name_conventions(
+            bone.universal_name,
+            role,
+        )
 
         if local_conventions:
             evidence.add("local_name_convention")
@@ -385,14 +484,31 @@ class BoneSemanticResolver:
         if marker_sides:
             evidence.add("side_marker")
 
-        side_candidates = {
-            *local.sides,
-            *universal.sides,
-            *marker_sides,
-        }
+        declared_sides = {*local.sides, *universal.sides}
+        explicit_sides = set(marker_sides)
+        side_candidates = {*declared_sides, *explicit_sides}
         side: BoneSide = "none"
 
-        if len(side_candidates) == 1:
+        if (
+            declared_sides == {"center"}
+            and len(explicit_sides) == 1
+            and explicit_sides != declared_sides
+        ):
+            side = next(iter(explicit_sides))
+
+            has_helper_variant = (
+                category == "helper"
+                and role != base_bone_semantic_role(role)
+            )
+
+            if not has_helper_variant:
+                role = "unknown"
+                category = "unknown"
+                confidence = "unknown"
+                evidence.discard("local_name_alias")
+                evidence.discard("universal_name_alias")
+                matched_aliases = ()
+        elif len(side_candidates) == 1:
             side = next(iter(side_candidates))
         elif len(side_candidates) > 1:
             evidence.add("side_conflict")

@@ -203,6 +203,44 @@ class RigDiagnosticTests(unittest.TestCase):
         self.assertEqual(len(duplicates), 1)
         self.assertEqual(duplicates[0].bone_indices, (5, 6))
 
+    def test_base_and_deform_variant_are_not_reported_as_duplicates(self) -> None:
+        profile = RigDiagnosticProfile(
+            name="variant-only",
+            required_roles=(),
+            paired_roles=(),
+            duplicate_exempt_roles=(),
+        )
+
+        report = diagnose_rig(
+            (
+                make_bone(universal_name="Left Knee"),
+                make_bone(universal_name="Left Knee D"),
+            ),
+            profile=profile,
+        )
+
+        self.assertNotIn("duplicate_semantic_role", codes_for(report))
+
+    def test_helper_companions_do_not_create_duplicates_or_asymmetry(self) -> None:
+        profile = RigDiagnosticProfile(
+            name="eye-only",
+            required_roles=(),
+            paired_roles=("eye",),
+            duplicate_exempt_roles=(),
+        )
+
+        report = diagnose_rig(
+            (
+                make_bone(local_name="左目"),
+                make_bone(local_name="左目先"),
+                make_bone(local_name="右目"),
+            ),
+            profile=profile,
+        )
+
+        self.assertNotIn("duplicate_semantic_role", codes_for(report))
+        self.assertNotIn("left_right_asymmetry", codes_for(report))
+
     def test_one_sided_paired_role_reports_asymmetry(self) -> None:
         report = diagnose_rig(
             (

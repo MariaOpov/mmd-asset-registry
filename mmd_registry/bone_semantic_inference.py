@@ -89,7 +89,17 @@ _BLOCKING_ROLE_EVIDENCE: Final[frozenset[BoneEvidenceCode]] = frozenset(
         "alias_conflict",
         "naming_conflict",
         "category_conflict",
+        "side_conflict",
     }
+)
+
+_INFERENCE_NAME_CONVENTION_EVIDENCE: Final[frozenset[BoneEvidenceCode]] = (
+    frozenset(
+        {
+            "local_name_convention",
+            "universal_name_convention",
+        }
+    )
 )
 
 
@@ -354,6 +364,16 @@ def _infer_unknown_result(
     """Infer one clean unknown result from an unambiguous context."""
 
     if _BLOCKING_ROLE_EVIDENCE.intersection(result.evidence):
+        return result
+
+    has_source_name = bool(
+        result.local_name.strip() or result.universal_name.strip()
+    )
+    has_known_convention = bool(
+        _INFERENCE_NAME_CONVENTION_EVIDENCE.intersection(result.evidence)
+    )
+
+    if has_source_name and not has_known_convention:
         return result
 
     candidate = _find_inference_candidate(

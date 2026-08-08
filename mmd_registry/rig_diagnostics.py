@@ -342,7 +342,9 @@ def _duplicate_role_issues(
         if (
             result.role == "unknown"
             or base_role in exempt_roles
+            or result.role != base_role
             or result.category in {"helper", "physics"}
+            or result.confidence not in {"medium", "high"}
             or result.side == "none"
         ):
             continue
@@ -392,15 +394,19 @@ def _asymmetry_issues(
             result.index
             for result in semantics
             if base_bone_semantic_role(result.role) == role
+            and result.role == role
             and result.side == "left"
             and result.category not in {"helper", "physics"}
+            and result.confidence in {"medium", "high"}
         )
         right = tuple(
             result.index
             for result in semantics
             if base_bone_semantic_role(result.role) == role
+            and result.role == role
             and result.side == "right"
             and result.category not in {"helper", "physics"}
+            and result.confidence in {"medium", "high"}
         )
 
         if not left and not right:

@@ -148,6 +148,9 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
         self.assertEqual(aliases["ひざ"].role, "knee")
         self.assertEqual(aliases["knee"].role, "knee")
         self.assertEqual(aliases["足首"].role, "ankle")
+        self.assertEqual(aliases["足先"].role, "toe")
+        self.assertEqual(aliases["spine 2"].role, "upper_body_2")
+        self.assertEqual(aliases["leg ikp"].role, "leg_ik_parent")
         self.assertEqual(aliases["leg ik"].role, "leg_ik")
         self.assertLessEqual(
             len(DEFAULT_BONE_SEMANTIC_PROFILE.aliases),
@@ -211,6 +214,17 @@ class BoneSemanticVocabularyTests(unittest.TestCase):
         self.assertEqual(
             base_bone_semantic_role("wrist_helper"),
             "wrist",
+        )
+        self.assertEqual(
+            specialize_bone_semantic_role(
+                "eye",
+                "helper",
+            ),
+            "eye_helper",
+        )
+        self.assertEqual(
+            base_bone_semantic_role("waist_helper"),
+            "waist",
         )
         self.assertEqual(
             default_bone_category_for_role("leg_ik"),

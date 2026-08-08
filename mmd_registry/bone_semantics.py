@@ -42,6 +42,8 @@ BoneSemanticRole: TypeAlias = Literal[
     "knee_deform",
     "ankle_deform",
     "toe_deform",
+    "waist_helper",
+    "eye_helper",
     "shoulder_helper",
     "arm_helper",
     "elbow_helper",
@@ -174,6 +176,8 @@ _DEFORM_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
 }
 
 _HELPER_VARIANTS: Final[dict[BoneSemanticRole, BoneSemanticRole]] = {
+    "waist": "waist_helper",
+    "eye": "eye_helper",
     "shoulder": "shoulder_helper",
     "arm": "arm_helper",
     "elbow": "elbow_helper",
@@ -373,6 +377,7 @@ DEFAULT_BONE_SEMANTIC_PROFILE: Final[BoneSemanticProfile] = BoneSemanticProfile(
                 "上半身2",
                 "upper body 2",
                 "upper body2",
+                "spine 2",
             ),
             side="center",
         ),
@@ -501,6 +506,7 @@ DEFAULT_BONE_SEMANTIC_PROFILE: Final[BoneSemanticProfile] = BoneSemanticProfile(
             "deform",
             (
                 "つま先",
+                "足先",
                 "toe",
             ),
         ),
@@ -510,6 +516,7 @@ DEFAULT_BONE_SEMANTIC_PROFILE: Final[BoneSemanticProfile] = BoneSemanticProfile(
             (
                 "足ik親",
                 "leg ik parent",
+                "leg ikp",
             ),
         ),
         *_alias_group(

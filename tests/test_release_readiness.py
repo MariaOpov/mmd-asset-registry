@@ -1,4 +1,4 @@
-"""Release-readiness checks for version 0.4.0."""
+"""Release-readiness checks for version 0.5.0."""
 
 from __future__ import annotations
 
@@ -17,22 +17,42 @@ WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "validate.yml"
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_4_0(self) -> None:
-        self.assertEqual(__version__, "0.4.0")
+    def test_package_version_is_0_5_0(self) -> None:
+        self.assertEqual(__version__, "0.5.0")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.4.0", readme)
+        self.assertIn("Tool version: 0.5.0", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
 
     def test_readme_documents_all_cli_commands(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        for command in ("validate", "hash", "inspect", "scan", "doctor"):
+        for command in (
+            "validate",
+            "hash",
+            "inspect",
+            "scan",
+            "doctor",
+            "bones",
+        ):
             with self.subTest(command=command):
-                self.assertIn(f"python check_assets.py {command}", readme)
+                self.assertIn(
+                    f"python check_assets.py {command}",
+                    readme,
+                )
+
+        for option in (
+            "--tree",
+            "--details",
+            "--search",
+            "--ik-only",
+            "--json",
+        ):
+            with self.subTest(option=option):
+                self.assertIn(option, readme)
 
     def test_readme_documents_format_support_boundaries(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
@@ -49,30 +69,34 @@ class ReleaseReadinessTests(unittest.TestCase):
         readme = README_PATH.read_text(encoding="utf-8")
 
         self.assertIn("The tool is read-only", readme)
+        self.assertIn(
+            "rename, reposition, reparent, or write any bone",
+            readme,
+        )
         self.assertIn("0 = Command completed successfully", readme)
         self.assertIn("1 = Validation failed", readme)
         self.assertIn("2 = Required input path", readme)
         self.assertIn("3 = Unexpected internal error", readme)
 
-    def test_changelog_documents_0_4_0_capabilities(self) -> None:
+    def test_changelog_documents_0_5_0_capabilities(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("## 0.4.0 - 2026-08-06", changelog)
-        self.assertIn(
-            "Complete read-only PMX 2.0 structural scanning",
-            changelog,
-        )
-        self.assertIn("`scan` CLI command", changelog)
-        self.assertIn("`doctor` CLI command", changelog)
-        self.assertIn("UTF-8 standard-stream configuration", changelog)
+        self.assertIn("## 0.5.0 - 2026-08-08", changelog)
+        self.assertIn("read-only Bone Explorer", changelog)
+        self.assertIn("Compact one-row-per-bone table", changelog)
+        self.assertIn("Safe parent-child hierarchy", changelog)
+        self.assertIn("`bones` CLI command", changelog)
+        self.assertIn("Unicode-normalized bone search", changelog)
+        self.assertIn("367 automated tests", changelog)
 
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.4.0'", workflow)
+        self.assertIn("assert __version__ == '0.5.0'", workflow)
         self.assertIn("python check_assets.py --version", workflow)
         self.assertIn("python check_assets.py scan --help", workflow)
         self.assertIn("python check_assets.py doctor --help", workflow)
+        self.assertIn("python check_assets.py bones --help", workflow)
 
 
 if __name__ == "__main__":

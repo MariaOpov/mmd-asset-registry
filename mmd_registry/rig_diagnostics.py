@@ -673,33 +673,60 @@ def _unclassified_issue(
     )
 
 
-def diagnose_rig(
+def diagnose_resolved_rig(
     bones: Sequence[PmxBone],
+    semantics: Sequence[BoneSemanticResult],
     *,
-    resolver: BoneSemanticResolver = DEFAULT_BONE_SEMANTIC_RESOLVER,
     profile: RigDiagnosticProfile = DEFAULT_RIG_DIAGNOSTIC_PROFILE,
 ) -> RigDiagnosticReport:
-    """Run structured rig diagnostics without modifying PMX records."""
+    """Diagnose one rig from matching precomputed semantic results."""
 
     source_bones = tuple(bones)
-    semantics = infer_bone_semantics(
-        source_bones,
-        resolver=resolver,
-    )
+    resolved_semantics = tuple(semantics)
+    expected_indices = tuple(range(len(source_bones)))
+    semantic_indices = tuple(result.index for result in resolved_semantics)
+
+    if semantic_indices != expected_indices:
+        raise ValueError(
+            "Resolved semantics must contain exactly one result for each "
+            "source bone in index order."
+        )
+
     hierarchy = build_bone_hierarchy(build_bone_views(source_bones))
     issues = (
         *_hierarchy_issues(hierarchy),
-        *_semantic_conflict_issues(semantics),
-        *_missing_role_issues(semantics, profile),
-        *_duplicate_role_issues(semantics, profile),
-        *_asymmetry_issues(semantics, profile),
-        *_parent_role_issues(hierarchy, semantics),
-        *_ik_issues(source_bones, semantics),
-        *_unclassified_issue(semantics),
+        *_semantic_conflict_issues(resolved_semantics),
+        *_missing_role_issues(resolved_semantics, profile),
+        *_duplicate_role_issues(resolved_semantics, profile),
+        *_asymmetry_issues(resolved_semantics, profile),
+        *_parent_role_issues(hierarchy, resolved_semantics),
+        *_ik_issues(source_bones, resolved_semantics),
+        *_unclassified_issue(resolved_semantics),
     )
 
     return RigDiagnosticReport(
         profile_name=profile.name,
         bone_count=len(source_bones),
         issues=issues,
+    )
+
+
+def diagnose_rig(
+    bones: Sequence[PmxBone],
+    *,
+    resolver: BoneSemanticResolver = DEFAULT_BONE_SEMANTIC_RESOLVER,
+    profile: RigDiagnosticProfile = DEFAULT_RIG_DIAGNOSTIC_PROFILE,
+) -> RigDiagnosticReport:
+    """Resolve and diagnose one rig without modifying PMX records."""
+
+    source_bones = tuple(bones)
+    semantics = infer_bone_semantics(
+        source_bones,
+        resolver=resolver,
+    )
+
+    return diagnose_resolved_rig(
+        source_bones,
+        semantics,
+        profile=profile,
     )

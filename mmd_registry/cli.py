@@ -28,6 +28,7 @@ from mmd_registry.reporting import (
     write_credits_file,
     write_json_report,
 )
+from mmd_registry.rig_cli import run_rig_command
 from mmd_registry.validator import (
     RegistryValidationResult,
     validate_registry,
@@ -42,6 +43,7 @@ COMMAND_NAMES = frozenset(
         "scan",
         "doctor",
         "bones",
+        "rig",
     }
 )
 
@@ -171,7 +173,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         description=(
             "Validate MMD assets, calculate SHA-256 hashes, inspect "
             "PMX/PMD headers, structurally scan PMX models, and "
-            "diagnose texture dependencies or explore PMX bones."
+            "diagnose texture dependencies, explore PMX bones, or "
+            "analyze PMX rigs."
         ),
     )
 
@@ -308,6 +311,41 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the Bone Explorer result as JSON.",
+    )
+
+    rig_parser = subparsers.add_parser(
+        "rig",
+        help="Analyze PMX bone semantics and rig diagnostics.",
+        description=(
+            "Resolve PMX bone semantics, diagnose hierarchy and IK issues, "
+            "and build a read-only canonical bone map."
+        ),
+    )
+    rig_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    rig_parser.add_argument(
+        "--unmapped",
+        action="store_true",
+        help="Show only semantically unresolved bones.",
+    )
+    rig_parser.add_argument(
+        "--role",
+        default=None,
+        metavar="ROLE",
+        help="Show bones for one canonical role, such as left_knee.",
+    )
+    rig_parser.add_argument(
+        "--export-map",
+        default=None,
+        metavar="PATH",
+        help="Write the canonical bone map to a JSON file.",
+    )
+    rig_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the complete rig analysis as JSON.",
     )
 
     return parser
@@ -931,6 +969,15 @@ def run(argv: Sequence[str] | None = None) -> int:
             details=arguments.details,
             search_query=arguments.search,
             ik_only=arguments.ik_only,
+            json_output=arguments.json,
+        )
+
+    if arguments.command == "rig":
+        return run_rig_command(
+            path=arguments.path,
+            unmapped=arguments.unmapped,
+            role=arguments.role,
+            export_map=arguments.export_map,
             json_output=arguments.json,
         )
 

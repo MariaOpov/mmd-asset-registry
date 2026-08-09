@@ -746,3 +746,350 @@ class PmxBone:
             "external_parent_key": self.external_parent_key,
             "ik": self.ik.to_dict() if self.ik is not None else None,
         }
+
+
+PmxMorphPanel: TypeAlias = Literal[0, 1, 2, 3, 4]
+PmxMorphType: TypeAlias = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+PmxMaterialMorphOperation: TypeAlias = Literal["multiply", "add"]
+PmxDisplayFrameTargetType: TypeAlias = Literal["bone", "morph"]
+
+
+@dataclass(frozen=True, slots=True)
+class PmxGroupMorphOffset:
+    """One group-morph reference and influence weight."""
+
+    morph_index: int
+    weight: float
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.morph_index, "morph_index")
+        _validate_float(self.weight, "weight")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {"morph_index": self.morph_index, "weight": self.weight}
+
+
+@dataclass(frozen=True, slots=True)
+class PmxVertexMorphOffset:
+    """One vertex-morph displacement."""
+
+    vertex_index: int
+    translation: PmxVector3
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.vertex_index, "vertex_index")
+        _validate_float_tuple(
+            self.translation,
+            field_name="translation",
+            length=3,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "vertex_index": self.vertex_index,
+            "translation": list(self.translation),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxBoneMorphOffset:
+    """One bone-morph translation and quaternion rotation."""
+
+    bone_index: int
+    translation: PmxVector3
+    rotation: PmxVector4
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.bone_index, "bone_index")
+        _validate_float_tuple(
+            self.translation,
+            field_name="translation",
+            length=3,
+        )
+        _validate_float_tuple(
+            self.rotation,
+            field_name="rotation",
+            length=4,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "bone_index": self.bone_index,
+            "translation": list(self.translation),
+            "rotation": list(self.rotation),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxUvMorphOffset:
+    """One base-UV or additional-UV morph displacement."""
+
+    vertex_index: int
+    uv_offset: PmxVector4
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.vertex_index, "vertex_index")
+        _validate_float_tuple(
+            self.uv_offset,
+            field_name="uv_offset",
+            length=4,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "vertex_index": self.vertex_index,
+            "uv_offset": list(self.uv_offset),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxMaterialMorphOffset:
+    """One material-morph operation and its color/scalar values."""
+
+    material_index: int
+    operation: PmxMaterialMorphOperation
+    diffuse: PmxVector4
+    specular: PmxVector3
+    specular_strength: float
+    ambient: PmxVector3
+    edge_color: PmxVector4
+    edge_scale: float
+    texture_tint: PmxVector4
+    sphere_tint: PmxVector4
+    toon_tint: PmxVector4
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.material_index, "material_index")
+
+        if self.operation not in ("multiply", "add"):
+            raise ValueError("operation must be either 'multiply' or 'add'.")
+
+        for field_name, length in (
+            ("diffuse", 4),
+            ("specular", 3),
+            ("ambient", 3),
+            ("edge_color", 4),
+            ("texture_tint", 4),
+            ("sphere_tint", 4),
+            ("toon_tint", 4),
+        ):
+            _validate_float_tuple(
+                getattr(self, field_name),
+                field_name=field_name,
+                length=length,
+            )
+
+        _validate_float(self.specular_strength, "specular_strength")
+        _validate_float(self.edge_scale, "edge_scale")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "material_index": self.material_index,
+            "operation": self.operation,
+            "diffuse": list(self.diffuse),
+            "specular": list(self.specular),
+            "specular_strength": self.specular_strength,
+            "ambient": list(self.ambient),
+            "edge_color": list(self.edge_color),
+            "edge_scale": self.edge_scale,
+            "texture_tint": list(self.texture_tint),
+            "sphere_tint": list(self.sphere_tint),
+            "toon_tint": list(self.toon_tint),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxFlipMorphOffset:
+    """One PMX 2.1 flip-morph reference and influence weight."""
+
+    morph_index: int
+    weight: float
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.morph_index, "morph_index")
+        _validate_float(self.weight, "weight")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {"morph_index": self.morph_index, "weight": self.weight}
+
+
+@dataclass(frozen=True, slots=True)
+class PmxImpulseMorphOffset:
+    """One PMX 2.1 rigid-body impulse morph record."""
+
+    rigid_body_index: int
+    local: bool
+    velocity: PmxVector3
+    angular_torque: PmxVector3
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.rigid_body_index, "rigid_body_index")
+
+        if not isinstance(self.local, bool):
+            raise TypeError("local must be a boolean.")
+
+        _validate_float_tuple(
+            self.velocity,
+            field_name="velocity",
+            length=3,
+        )
+        _validate_float_tuple(
+            self.angular_torque,
+            field_name="angular_torque",
+            length=3,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "rigid_body_index": self.rigid_body_index,
+            "local": self.local,
+            "velocity": list(self.velocity),
+            "angular_torque": list(self.angular_torque),
+        }
+
+
+PmxMorphOffset: TypeAlias = (
+    PmxGroupMorphOffset
+    | PmxVertexMorphOffset
+    | PmxBoneMorphOffset
+    | PmxUvMorphOffset
+    | PmxMaterialMorphOffset
+    | PmxFlipMorphOffset
+    | PmxImpulseMorphOffset
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PmxMorph:
+    """One complete PMX morph record with ordered typed offsets."""
+
+    local_name: str
+    universal_name: str
+    panel: PmxMorphPanel
+    panel_name: str
+    morph_type: PmxMorphType
+    morph_type_name: str
+    offsets: tuple[PmxMorphOffset, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "local_name",
+            "universal_name",
+            "panel_name",
+            "morph_type_name",
+        ):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        _validate_integer(self.panel, "panel")
+        if self.panel not in (0, 1, 2, 3, 4):
+            raise ValueError("panel must be a value from 0 through 4.")
+
+        _validate_integer(self.morph_type, "morph_type")
+        if self.morph_type not in tuple(range(11)):
+            raise ValueError("morph_type must be a value from 0 through 10.")
+
+        if not isinstance(self.offsets, tuple):
+            raise TypeError("offsets must be a tuple.")
+
+        supported_offset_types = (
+            PmxGroupMorphOffset,
+            PmxVertexMorphOffset,
+            PmxBoneMorphOffset,
+            PmxUvMorphOffset,
+            PmxMaterialMorphOffset,
+            PmxFlipMorphOffset,
+            PmxImpulseMorphOffset,
+        )
+        if not all(isinstance(offset, supported_offset_types) for offset in self.offsets):
+            raise TypeError("offsets must contain only supported PMX morph offsets.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "panel": self.panel,
+            "panel_name": self.panel_name,
+            "morph_type": self.morph_type,
+            "morph_type_name": self.morph_type_name,
+            "offset_count": len(self.offsets),
+            "offsets": [offset.to_dict() for offset in self.offsets],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxDisplayFrameElement:
+    """One bone or morph reference inside a PMX display frame."""
+
+    target_type: PmxDisplayFrameTargetType
+    target_index: int
+
+    def __post_init__(self) -> None:
+        if self.target_type not in ("bone", "morph"):
+            raise ValueError("target_type must be either 'bone' or 'morph'.")
+
+        _validate_integer(self.target_index, "target_index")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "target_type": self.target_type,
+            "target_index": self.target_index,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxDisplayFrame:
+    """One complete PMX display frame with ordered references."""
+
+    local_name: str
+    universal_name: str
+    special: bool
+    elements: tuple[PmxDisplayFrameElement, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in ("local_name", "universal_name"):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        if not isinstance(self.special, bool):
+            raise TypeError("special must be a boolean.")
+
+        if not isinstance(self.elements, tuple):
+            raise TypeError("elements must be a tuple.")
+
+        if not all(
+            isinstance(element, PmxDisplayFrameElement)
+            for element in self.elements
+        ):
+            raise TypeError(
+                "elements must contain only PmxDisplayFrameElement records."
+            )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "special": self.special,
+            "element_count": len(self.elements),
+            "elements": [element.to_dict() for element in self.elements],
+        }

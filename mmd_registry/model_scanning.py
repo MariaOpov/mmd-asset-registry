@@ -26,12 +26,23 @@ from mmd_registry.pmx.document import (
     PMX_BONE_FLAG_TRANSLATABLE,
     PMX_BONE_FLAG_VISIBLE,
     PmxBone,
+    PmxBoneMorphOffset,
+    PmxDisplayFrame,
+    PmxDisplayFrameElement,
+    PmxFlipMorphOffset,
+    PmxGroupMorphOffset,
     PmxHeader,
     PmxIk,
     PmxIkLink,
+    PmxImpulseMorphOffset,
     PmxIndexSizes,
     PmxMaterial,
+    PmxMaterialMorphOffset,
     PmxModelInfo,
+    PmxMorph,
+    PmxMorphOffset,
+    PmxUvMorphOffset,
+    PmxVertexMorphOffset,
 )
 from mmd_registry.pmx.errors import raise_pmx_error as _raise_pmx_error
 from mmd_registry.pmx.sections.bones import (
@@ -42,6 +53,13 @@ from mmd_registry.pmx.sections.bones import (
     PmxBoneReadState,
     read_pmx_bones,
     validate_pmx_bone_index as _validate_pmx_bone_index,
+)
+from mmd_registry.pmx.sections.display_frames import (
+    MAX_PMX_DISPLAY_FRAME_COUNT,
+    MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT,
+    MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT,
+    PmxDisplayFrameReadState,
+    read_pmx_display_frames,
 )
 from mmd_registry.pmx.sections.geometry import (
     MAX_PMX_SURFACE_INDEX_COUNT,
@@ -60,6 +78,13 @@ from mmd_registry.pmx.sections.materials import (
     PmxMaterialReadState,
     read_pmx_materials,
 )
+from mmd_registry.pmx.sections.morphs import (
+    MAX_PMX_MORPH_COUNT,
+    MAX_PMX_MORPH_OFFSET_COUNT,
+    MAX_PMX_TOTAL_MORPH_OFFSET_COUNT,
+    PmxMorphReadState,
+    read_pmx_morphs,
+)
 from mmd_registry.pmx.sections.textures import (
     MAX_PMX_TEXTURE_COUNT,
     PmxTextureReadState,
@@ -67,12 +92,6 @@ from mmd_registry.pmx.sections.textures import (
 )
 
 
-MAX_PMX_MORPH_COUNT: Final[int] = 200_000
-MAX_PMX_MORPH_OFFSET_COUNT: Final[int] = 2_000_000
-MAX_PMX_TOTAL_MORPH_OFFSET_COUNT: Final[int] = 5_000_000
-MAX_PMX_DISPLAY_FRAME_COUNT: Final[int] = 100_000
-MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 1_000_000
-MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT: Final[int] = 5_000_000
 MAX_PMX_RIGID_BODY_COUNT: Final[int] = 200_000
 MAX_PMX_JOINT_COUNT: Final[int] = 200_000
 MAX_PMX_SOFT_BODY_COUNT: Final[int] = 100_000
@@ -83,217 +102,6 @@ MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT: Final[int] = 1_000_000
 MAX_PMX_SOFT_BODY_PARAMETER_COUNT: Final[int] = 1_000_000
 
 ScanStatus = Literal["ok", "warning", "error"]
-
-
-@dataclass(frozen=True, slots=True)
-class PmxGroupMorphOffset:
-    """One group-morph reference and influence weight."""
-
-    morph_index: int
-    weight: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "morph_index": self.morph_index,
-            "weight": self.weight,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxVertexMorphOffset:
-    """One vertex-morph displacement."""
-
-    vertex_index: int
-    translation: tuple[float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "vertex_index": self.vertex_index,
-            "translation": list(self.translation),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxBoneMorphOffset:
-    """One bone-morph translation and quaternion rotation."""
-
-    bone_index: int
-    translation: tuple[float, float, float]
-    rotation: tuple[float, float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "bone_index": self.bone_index,
-            "translation": list(self.translation),
-            "rotation": list(self.rotation),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxUvMorphOffset:
-    """One base-UV or additional-UV morph displacement."""
-
-    vertex_index: int
-    uv_offset: tuple[float, float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "vertex_index": self.vertex_index,
-            "uv_offset": list(self.uv_offset),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxMaterialMorphOffset:
-    """One material-morph operation and its color/scalar values."""
-
-    material_index: int
-    operation: Literal["multiply", "add"]
-    diffuse: tuple[float, float, float, float]
-    specular: tuple[float, float, float]
-    specular_strength: float
-    ambient: tuple[float, float, float]
-    edge_color: tuple[float, float, float, float]
-    edge_scale: float
-    texture_tint: tuple[float, float, float, float]
-    sphere_tint: tuple[float, float, float, float]
-    toon_tint: tuple[float, float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "material_index": self.material_index,
-            "operation": self.operation,
-            "diffuse": list(self.diffuse),
-            "specular": list(self.specular),
-            "specular_strength": self.specular_strength,
-            "ambient": list(self.ambient),
-            "edge_color": list(self.edge_color),
-            "edge_scale": self.edge_scale,
-            "texture_tint": list(self.texture_tint),
-            "sphere_tint": list(self.sphere_tint),
-            "toon_tint": list(self.toon_tint),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxFlipMorphOffset:
-    """One PMX 2.1 flip-morph reference and influence weight."""
-
-    morph_index: int
-    weight: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "morph_index": self.morph_index,
-            "weight": self.weight,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxImpulseMorphOffset:
-    """One PMX 2.1 rigid-body impulse morph record."""
-
-    rigid_body_index: int
-    local: bool
-    velocity: tuple[float, float, float]
-    angular_torque: tuple[float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "rigid_body_index": self.rigid_body_index,
-            "local": self.local,
-            "velocity": list(self.velocity),
-            "angular_torque": list(self.angular_torque),
-        }
-
-
-PmxMorphOffset = (
-    PmxGroupMorphOffset
-    | PmxVertexMorphOffset
-    | PmxBoneMorphOffset
-    | PmxUvMorphOffset
-    | PmxMaterialMorphOffset
-    | PmxFlipMorphOffset
-    | PmxImpulseMorphOffset
-)
-
-
-@dataclass(frozen=True, slots=True)
-class PmxMorph:
-    """Structural metadata extracted from one PMX morph record."""
-
-    local_name: str
-    universal_name: str
-    panel: int
-    panel_name: str
-    morph_type: int
-    morph_type_name: str
-    offsets: tuple[PmxMorphOffset, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "panel": self.panel,
-            "panel_name": self.panel_name,
-            "morph_type": self.morph_type,
-            "morph_type_name": self.morph_type_name,
-            "offset_count": len(self.offsets),
-            "offsets": [offset.to_dict() for offset in self.offsets],
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxDisplayFrameElement:
-    """One bone or morph reference inside a PMX display frame."""
-
-    target_type: Literal["bone", "morph"]
-    target_index: int
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "target_type": self.target_type,
-            "target_index": self.target_index,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxDisplayFrame:
-    """Structural metadata extracted from one PMX display frame."""
-
-    local_name: str
-    universal_name: str
-    special: bool
-    elements: tuple[PmxDisplayFrameElement, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "special": self.special,
-            "element_count": len(self.elements),
-            "elements": [element.to_dict() for element in self.elements],
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -891,151 +699,6 @@ def _scan_pmx_bones(
         result.bones = list(bone_state.bones)
 
 
-def _read_pmx_vec4(
-    reader: BinaryReader,
-    label: str,
-) -> tuple[float, float, float, float]:
-    """Read one PMX vec4 as four little-endian floats."""
-
-    return (
-        reader.read_float32(f"{label} x"),
-        reader.read_float32(f"{label} y"),
-        reader.read_float32(f"{label} z"),
-        reader.read_float32(f"{label} w"),
-    )
-
-
-def _decode_pmx_morph_panel(
-    panel: int,
-    *,
-    offset: int,
-    record_index: int,
-) -> str:
-    """Validate and decode one PMX morph panel value."""
-
-    panel_names = {
-        0: "system",
-        1: "eyebrow",
-        2: "eye",
-        3: "mouth",
-        4: "other",
-    }
-
-    try:
-        return panel_names[panel]
-    except KeyError:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=offset,
-            operation="validating morph panel",
-            reason=(f"invalid panel {panel}; expected a value from 0 through 4."),
-        )
-
-
-def _decode_pmx_morph_type(
-    morph_type: int,
-    *,
-    version: float,
-    additional_uv_count: int,
-    offset: int,
-    record_index: int,
-) -> str:
-    """Validate and decode one PMX morph type."""
-
-    morph_type_names = {
-        0: "group",
-        1: "vertex",
-        2: "bone",
-        3: "uv",
-        4: "additional_uv_1",
-        5: "additional_uv_2",
-        6: "additional_uv_3",
-        7: "additional_uv_4",
-        8: "material",
-        9: "flip",
-        10: "impulse",
-    }
-
-    if morph_type not in morph_type_names:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=offset,
-            operation="validating morph type",
-            reason=(
-                f"invalid morph type {morph_type}; expected a value from 0 through 10."
-            ),
-        )
-
-    if morph_type in {9, 10} and version < 2.1:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=offset,
-            operation="validating morph type",
-            reason=(
-                f"morph type {morph_type} "
-                f"({morph_type_names[morph_type]}) requires PMX 2.1."
-            ),
-        )
-
-    if 4 <= morph_type <= 7:
-        required_uv_count = morph_type - 3
-        if additional_uv_count < required_uv_count:
-            _raise_pmx_error(
-                section="morphs",
-                record_index=record_index,
-                offset=offset,
-                operation="validating additional UV morph type",
-                reason=(
-                    f"morph type {morph_type} requires additional UV "
-                    f"layer {required_uv_count}, but the model declares "
-                    f"{additional_uv_count} additional UV layers."
-                ),
-            )
-
-    return morph_type_names[morph_type]
-
-
-def _minimum_pmx_morph_size() -> int:
-    """Return the smallest possible PMX morph-record size."""
-
-    text_length_fields = 8
-    panel_size = 1
-    type_size = 1
-    offset_count_size = 4
-    return text_length_fields + panel_size + type_size + offset_count_size
-
-
-def _minimum_pmx_morph_offset_size(
-    morph_type: int,
-    *,
-    index_sizes: PmxIndexSizes,
-) -> int:
-    """Return the smallest fixed size for one morph offset."""
-
-    if morph_type in {0, 9}:
-        return index_sizes.morph + 4
-
-    if morph_type == 1:
-        return index_sizes.vertex + 12
-
-    if morph_type == 2:
-        return index_sizes.bone + 28
-
-    if 3 <= morph_type <= 7:
-        return index_sizes.vertex + 16
-
-    if morph_type == 8:
-        return index_sizes.material + 113
-
-    if morph_type == 10:
-        return index_sizes.rigid_body + 25
-
-    raise ValueError(f"Unsupported PMX morph type: {morph_type}")
-
-
 def _validate_pmx_index_range(
     value: int,
     *,
@@ -1071,813 +734,92 @@ def _validate_pmx_index_range(
         )
 
 
-def _read_pmx_group_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    morph_count: int,
-    section: str,
-    offset_index: int,
-) -> PmxGroupMorphOffset:
-    """Read one PMX group-morph offset."""
-
-    assert result.index_sizes is not None
-    reference_offset = reader.offset
-    morph_index = reader.read_index(
-        result.index_sizes.morph,
-        signed=True,
-        label="group morph index",
-    )
-    _validate_pmx_index_range(
-        morph_index,
-        count=morph_count,
-        section=section,
-        record_index=offset_index,
-        label="group morph index",
-        offset=reference_offset,
-        allow_sentinel=False,
-    )
-    weight = reader.read_float32("group morph weight")
-    return PmxGroupMorphOffset(
-        morph_index=morph_index,
-        weight=weight,
-    )
-
-
-def _read_pmx_vertex_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    section: str,
-    offset_index: int,
-) -> PmxVertexMorphOffset:
-    """Read one PMX vertex-morph offset."""
-
-    assert result.index_sizes is not None
-    assert result.vertex_count is not None
-    reference_offset = reader.offset
-    vertex_index = reader.read_index(
-        result.index_sizes.vertex,
-        signed=False,
-        label="vertex morph vertex index",
-    )
-    _validate_pmx_index_range(
-        vertex_index,
-        count=result.vertex_count,
-        section=section,
-        record_index=offset_index,
-        label="vertex morph vertex index",
-        offset=reference_offset,
-        allow_sentinel=False,
-    )
-    translation = _read_pmx_vec3(
-        reader,
-        "vertex morph translation",
-    )
-    return PmxVertexMorphOffset(
-        vertex_index=vertex_index,
-        translation=translation,
-    )
-
-
-def _read_pmx_bone_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    section: str,
-    offset_index: int,
-) -> PmxBoneMorphOffset:
-    """Read one PMX bone-morph offset."""
-
-    assert result.index_sizes is not None
-    assert result.bone_count is not None
-    reference_offset = reader.offset
-    bone_index = reader.read_index(
-        result.index_sizes.bone,
-        signed=True,
-        label="bone morph bone index",
-    )
-    _validate_pmx_index_range(
-        bone_index,
-        count=result.bone_count,
-        section=section,
-        record_index=offset_index,
-        label="bone morph bone index",
-        offset=reference_offset,
-        allow_sentinel=False,
-    )
-    translation = _read_pmx_vec3(
-        reader,
-        "bone morph translation",
-    )
-    rotation = _read_pmx_vec4(
-        reader,
-        "bone morph rotation",
-    )
-    return PmxBoneMorphOffset(
-        bone_index=bone_index,
-        translation=translation,
-        rotation=rotation,
-    )
-
-
-def _read_pmx_uv_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    section: str,
-    offset_index: int,
-) -> PmxUvMorphOffset:
-    """Read one base-UV or additional-UV morph offset."""
-
-    assert result.index_sizes is not None
-    assert result.vertex_count is not None
-    reference_offset = reader.offset
-    vertex_index = reader.read_index(
-        result.index_sizes.vertex,
-        signed=False,
-        label="UV morph vertex index",
-    )
-    _validate_pmx_index_range(
-        vertex_index,
-        count=result.vertex_count,
-        section=section,
-        record_index=offset_index,
-        label="UV morph vertex index",
-        offset=reference_offset,
-        allow_sentinel=False,
-    )
-    uv_offset = _read_pmx_vec4(
-        reader,
-        "UV morph offset",
-    )
-    return PmxUvMorphOffset(
-        vertex_index=vertex_index,
-        uv_offset=uv_offset,
-    )
-
-
-def _read_pmx_material_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    section: str,
-    offset_index: int,
-) -> PmxMaterialMorphOffset:
-    """Read one PMX material-morph offset."""
-
-    assert result.index_sizes is not None
-    assert result.material_count is not None
-    reference_offset = reader.offset
-    material_index = reader.read_index(
-        result.index_sizes.material,
-        signed=True,
-        label="material morph material index",
-    )
-    _validate_pmx_index_range(
-        material_index,
-        count=result.material_count,
-        section=section,
-        record_index=offset_index,
-        label="material morph material index",
-        offset=reference_offset,
-        allow_sentinel=True,
-    )
-
-    operation_offset = reader.offset
-    operation_value = reader.read_uint8("material morph operation")
-    if operation_value == 0:
-        operation: Literal["multiply", "add"] = "multiply"
-    elif operation_value == 1:
-        operation = "add"
-    else:
-        _raise_pmx_error(
-            section=section,
-            record_index=offset_index,
-            offset=operation_offset,
-            operation="validating material morph operation",
-            reason=(f"invalid operation {operation_value}; expected 0 or 1."),
-        )
-
-    return PmxMaterialMorphOffset(
-        material_index=material_index,
-        operation=operation,
-        diffuse=_read_pmx_vec4(reader, "material morph diffuse"),
-        specular=_read_pmx_vec3(reader, "material morph specular"),
-        specular_strength=reader.read_float32("material morph specular strength"),
-        ambient=_read_pmx_vec3(reader, "material morph ambient"),
-        edge_color=_read_pmx_vec4(reader, "material morph edge color"),
-        edge_scale=reader.read_float32("material morph edge scale"),
-        texture_tint=_read_pmx_vec4(
-            reader,
-            "material morph texture tint",
-        ),
-        sphere_tint=_read_pmx_vec4(
-            reader,
-            "material morph sphere tint",
-        ),
-        toon_tint=_read_pmx_vec4(
-            reader,
-            "material morph toon tint",
-        ),
-    )
-
-
-def _read_pmx_flip_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    morph_count: int,
-    section: str,
-    offset_index: int,
-) -> PmxFlipMorphOffset:
-    """Read one PMX 2.1 flip-morph offset."""
-
-    assert result.index_sizes is not None
-    reference_offset = reader.offset
-    morph_index = reader.read_index(
-        result.index_sizes.morph,
-        signed=True,
-        label="flip morph index",
-    )
-    _validate_pmx_index_range(
-        morph_index,
-        count=morph_count,
-        section=section,
-        record_index=offset_index,
-        label="flip morph index",
-        offset=reference_offset,
-        allow_sentinel=False,
-    )
-    weight = reader.read_float32("flip morph weight")
-    return PmxFlipMorphOffset(
-        morph_index=morph_index,
-        weight=weight,
-    )
-
-
-def _read_pmx_impulse_morph_offset(
-    reader: BinaryReader,
-    *,
-    result: PmxHeaderScanResult,
-    section: str,
-    offset_index: int,
-) -> PmxImpulseMorphOffset:
-    """Read one PMX 2.1 impulse-morph offset.
-
-    The rigid-body section appears later in a PMX file, so its upper
-    index bound is validated when rigid-body scanning is implemented.
-    Negative indices are invalid and rejected here.
-    """
-
-    assert result.index_sizes is not None
-    reference_offset = reader.offset
-    rigid_body_index = reader.read_index(
-        result.index_sizes.rigid_body,
-        signed=True,
-        label="impulse morph rigid-body index",
-    )
-    if rigid_body_index < 0:
-        _raise_pmx_error(
-            section=section,
-            record_index=offset_index,
-            offset=reference_offset,
-            operation="validating impulse morph rigid-body index",
-            reason=(f"index {rigid_body_index} cannot be negative."),
-        )
-
-    local_flag_offset = reader.offset
-    local_flag = reader.read_uint8("impulse morph local flag")
-    if local_flag not in {0, 1}:
-        _raise_pmx_error(
-            section=section,
-            record_index=offset_index,
-            offset=local_flag_offset,
-            operation="validating impulse morph local flag",
-            reason=(f"invalid flag {local_flag}; expected 0 or 1."),
-        )
-
-    return PmxImpulseMorphOffset(
-        rigid_body_index=rigid_body_index,
-        local=(local_flag == 1),
-        velocity=_read_pmx_vec3(
-            reader,
-            "impulse morph velocity",
-        ),
-        angular_torque=_read_pmx_vec3(
-            reader,
-            "impulse morph angular torque",
-        ),
-    )
-
-
-def _read_pmx_morph_offset(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    morph_type: int,
-    morph_count: int,
-    morph_record_index: int,
-    offset_index: int,
-) -> PmxMorphOffset:
-    """Read one type-specific PMX morph offset."""
-
-    section = f"morphs[{morph_record_index}].offsets"
-
-    with reader.context(
-        section,
-        record_index=offset_index,
-    ):
-        if morph_type == 0:
-            return _read_pmx_group_morph_offset(
-                reader,
-                result=result,
-                morph_count=morph_count,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if morph_type == 1:
-            return _read_pmx_vertex_morph_offset(
-                reader,
-                result=result,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if morph_type == 2:
-            return _read_pmx_bone_morph_offset(
-                reader,
-                result=result,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if 3 <= morph_type <= 7:
-            return _read_pmx_uv_morph_offset(
-                reader,
-                result=result,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if morph_type == 8:
-            return _read_pmx_material_morph_offset(
-                reader,
-                result=result,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if morph_type == 9:
-            return _read_pmx_flip_morph_offset(
-                reader,
-                result=result,
-                morph_count=morph_count,
-                section=section,
-                offset_index=offset_index,
-            )
-
-        if morph_type == 10:
-            return _read_pmx_impulse_morph_offset(
-                reader,
-                result=result,
-                section=section,
-                offset_index=offset_index,
-            )
-
-    raise AssertionError(f"Unhandled PMX morph type: {morph_type}")
-
-
-def _read_pmx_morph(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-    morph_count: int,
-) -> PmxMorph:
-    """Read one PMX morph and its bounded offset records."""
-
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading morph",
-            reason="PMX text encoding is unavailable.",
-        )
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading morph",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    if result.version is None or result.additional_uv_count is None:
-        _raise_pmx_error(
-            section="morphs",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading morph",
-            reason="PMX header metadata is unavailable.",
-        )
-
-    require_even_length = result.encoding == "utf-16-le"
-
-    with reader.context(
-        "morphs",
-        record_index=record_index,
-    ):
-        local_name = reader.read_length_prefixed_text(
-            "local morph name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal morph name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        panel_offset = reader.offset
-        panel = reader.read_uint8("morph panel")
-        panel_name = _decode_pmx_morph_panel(
-            panel,
-            offset=panel_offset,
-            record_index=record_index,
-        )
-
-        type_offset = reader.offset
-        morph_type = reader.read_uint8("morph type")
-        morph_type_name = _decode_pmx_morph_type(
-            morph_type,
-            version=result.version,
-            additional_uv_count=result.additional_uv_count,
-            offset=type_offset,
-            record_index=record_index,
-        )
-
-        minimum_offset_size = _minimum_pmx_morph_offset_size(
-            morph_type,
-            index_sizes=result.index_sizes,
-        )
-        offset_count = reader.read_bounded_count(
-            "morph offset count",
-            max_count=MAX_PMX_MORPH_OFFSET_COUNT,
-            minimum_item_size=minimum_offset_size,
-        )
-
-    offsets = tuple(
-        _read_pmx_morph_offset(
-            reader,
-            result,
-            morph_type=morph_type,
-            morph_count=morph_count,
-            morph_record_index=record_index,
-            offset_index=offset_index,
-        )
-        for offset_index in range(offset_count)
-    )
-
-    return PmxMorph(
-        local_name=local_name,
-        universal_name=universal_name,
-        panel=panel,
-        panel_name=panel_name,
-        morph_type=morph_type,
-        morph_type_name=morph_type_name,
-        offsets=offsets,
-    )
-
-
 def _scan_pmx_morphs(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read PMX morphs and validate all currently resolvable references."""
+    """Read morphs while preserving the legacy list projection."""
 
-    if result.index_sizes is None:
+    if result.vertex_count is None:
         _raise_pmx_error(
             section="morphs",
             offset=reader.offset,
             operation="starting morph scan",
-            reason="PMX index sizes are unavailable.",
+            reason="PMX vertex count is unavailable.",
         )
-
-    with reader.context("morphs"):
-        morph_count = reader.read_bounded_count(
-            "morph count",
-            max_count=MAX_PMX_MORPH_COUNT,
-            minimum_item_size=_minimum_pmx_morph_size(),
-        )
-
-    result.morph_count = morph_count
-    morphs: list[PmxMorph] = []
-    total_offset_count = 0
-
-    for record_index in range(morph_count):
-        morph = _read_pmx_morph(
-            reader,
-            result,
-            record_index=record_index,
-            morph_count=morph_count,
-        )
-        morphs.append(morph)
-        total_offset_count += len(morph.offsets)
-
-        if total_offset_count > MAX_PMX_TOTAL_MORPH_OFFSET_COUNT:
-            _raise_pmx_error(
-                section="morphs",
-                record_index=record_index,
-                offset=reader.offset,
-                operation="validating total morph offset count",
-                reason=(
-                    f"cumulative morph offset count "
-                    f"{total_offset_count} exceeds the safety limit "
-                    f"of {MAX_PMX_TOTAL_MORPH_OFFSET_COUNT}."
-                ),
-            )
-
-    result.morphs = morphs
-
-
-def _minimum_pmx_display_frame_size() -> int:
-    """Return the smallest possible PMX display-frame record size."""
-
-    text_length_fields = 8
-    special_flag_size = 1
-    element_count_size = 4
-
-    return text_length_fields + special_flag_size + element_count_size
-
-
-def _minimum_pmx_display_frame_element_size(
-    index_sizes: PmxIndexSizes,
-) -> int:
-    """Return the smallest possible PMX display-frame element size."""
-
-    target_type_size = 1
-    target_index_size = min(
-        index_sizes.bone,
-        index_sizes.morph,
-    )
-
-    return target_type_size + target_index_size
-
-
-def _validate_pmx_display_frame_target_index(
-    value: int,
-    *,
-    target_type: Literal["bone", "morph"],
-    target_count: int,
-    frame_record_index: int,
-    element_index: int,
-    offset: int,
-) -> None:
-    """Validate one display-frame bone or morph reference."""
-
-    if value < 0 or value >= target_count:
-        if target_count == 0:
-            expected = f"no valid {target_type} index exists"
-        else:
-            expected = f"expected a value from 0 through {target_count - 1}"
-
-        _raise_pmx_error(
-            section=(f"display_frames[{frame_record_index}].elements"),
-            record_index=element_index,
-            offset=offset,
-            operation=(f"validating display-frame {target_type} index"),
-            reason=(
-                f"index {value} is invalid for {target_type} count "
-                f"{target_count}; {expected}."
-            ),
-        )
-
-
-def _read_pmx_display_frame_element(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    frame_record_index: int,
-    element_index: int,
-) -> PmxDisplayFrameElement:
-    """Read and validate one PMX display-frame element."""
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section=(f"display_frames[{frame_record_index}].elements"),
-            record_index=element_index,
-            offset=reader.offset,
-            operation="reading display-frame element",
-            reason="PMX index sizes are unavailable.",
-        )
-
     if result.bone_count is None:
         _raise_pmx_error(
-            section=(f"display_frames[{frame_record_index}].elements"),
-            record_index=element_index,
+            section="morphs",
             offset=reader.offset,
-            operation="reading display-frame element",
+            operation="starting morph scan",
             reason="PMX bone count is unavailable.",
         )
-
-    if result.morph_count is None:
+    if result.material_count is None:
         _raise_pmx_error(
-            section=(f"display_frames[{frame_record_index}].elements"),
-            record_index=element_index,
+            section="morphs",
             offset=reader.offset,
-            operation="reading display-frame element",
-            reason="PMX morph count is unavailable.",
+            operation="starting morph scan",
+            reason="PMX material count is unavailable.",
         )
 
-    section = f"display_frames[{frame_record_index}].elements"
+    morph_state = PmxMorphReadState()
 
-    with reader.context(
-        section,
-        record_index=element_index,
-    ):
-        target_type_offset = reader.offset
-        target_type_value = reader.read_uint8("display-frame element target type")
-
-        if target_type_value == 0:
-            target_type: Literal["bone", "morph"] = "bone"
-            target_count = result.bone_count
-            target_index_size = result.index_sizes.bone
-        elif target_type_value == 1:
-            target_type = "morph"
-            target_count = result.morph_count
-            target_index_size = result.index_sizes.morph
-        else:
-            _raise_pmx_error(
-                section=section,
-                record_index=element_index,
-                offset=target_type_offset,
-                operation=("validating display-frame element target type"),
-                reason=(
-                    f"invalid target type {target_type_value}; "
-                    "expected 0 for bone or 1 for morph."
-                ),
-            )
-
-        target_index_offset = reader.offset
-        target_index = reader.read_index(
-            target_index_size,
-            signed=True,
-            label=(f"display-frame {target_type} index"),
-        )
-
-    _validate_pmx_display_frame_target_index(
-        target_index,
-        target_type=target_type,
-        target_count=target_count,
-        frame_record_index=frame_record_index,
-        element_index=element_index,
-        offset=target_index_offset,
-    )
-
-    return PmxDisplayFrameElement(
-        target_type=target_type,
-        target_index=target_index,
-    )
-
-
-def _read_pmx_display_frame(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-) -> PmxDisplayFrame:
-    """Read one PMX display-frame record."""
-
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="display_frames",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading display frame",
-            reason="PMX text encoding is unavailable.",
-        )
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="display_frames",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading display frame",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    require_even_length = result.encoding == "utf-16-le"
-
-    with reader.context(
-        "display_frames",
-        record_index=record_index,
-    ):
-        local_name = reader.read_length_prefixed_text(
-            "local display-frame name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal display-frame name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        special_flag_offset = reader.offset
-        special_flag = reader.read_uint8("display-frame special flag")
-
-        if special_flag not in {0, 1}:
-            _raise_pmx_error(
-                section="display_frames",
-                record_index=record_index,
-                offset=special_flag_offset,
-                operation="validating display-frame special flag",
-                reason=(f"invalid special flag {special_flag}; expected 0 or 1."),
-            )
-
-        element_count = reader.read_bounded_count(
-            "display-frame element count",
-            max_count=MAX_PMX_DISPLAY_FRAME_ELEMENT_COUNT,
-            minimum_item_size=(
-                _minimum_pmx_display_frame_element_size(result.index_sizes)
-            ),
-        )
-
-    elements = tuple(
-        _read_pmx_display_frame_element(
+    try:
+        read_pmx_morphs(
             reader,
-            result,
-            frame_record_index=record_index,
-            element_index=element_index,
+            header=header,
+            vertex_count=result.vertex_count,
+            bone_count=result.bone_count,
+            material_count=result.material_count,
+            state=morph_state,
+            max_total_offset_count=MAX_PMX_TOTAL_MORPH_OFFSET_COUNT,
         )
-        for element_index in range(element_count)
-    )
-
-    return PmxDisplayFrame(
-        local_name=local_name,
-        universal_name=universal_name,
-        special=bool(special_flag),
-        elements=elements,
-    )
+    finally:
+        result.morph_count = morph_state.morph_count
+        result.morphs = list(morph_state.morphs)
 
 
 def _scan_pmx_display_frames(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read PMX display frames and validate bone/morph references."""
+    """Read display frames while preserving the legacy list projection."""
 
-    if result.index_sizes is None:
+    if result.bone_count is None:
         _raise_pmx_error(
             section="display_frames",
             offset=reader.offset,
             operation="starting display-frame scan",
-            reason="PMX index sizes are unavailable.",
+            reason="PMX bone count is unavailable.",
+        )
+    if result.morph_count is None:
+        _raise_pmx_error(
+            section="display_frames",
+            offset=reader.offset,
+            operation="starting display-frame scan",
+            reason="PMX morph count is unavailable.",
         )
 
-    with reader.context("display_frames"):
-        display_frame_count = reader.read_bounded_count(
-            "display-frame count",
-            max_count=MAX_PMX_DISPLAY_FRAME_COUNT,
-            minimum_item_size=_minimum_pmx_display_frame_size(),
-        )
+    frame_state = PmxDisplayFrameReadState()
 
-    result.display_frame_count = display_frame_count
-    display_frames: list[PmxDisplayFrame] = []
-    total_element_count = 0
-
-    for record_index in range(display_frame_count):
-        display_frame = _read_pmx_display_frame(
+    try:
+        read_pmx_display_frames(
             reader,
-            result,
-            record_index=record_index,
+            header=header,
+            bone_count=result.bone_count,
+            morph_count=result.morph_count,
+            state=frame_state,
+            max_total_element_count=(
+                MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT
+            ),
         )
-        display_frames.append(display_frame)
-        total_element_count += len(display_frame.elements)
-
-        if total_element_count > MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT:
-            _raise_pmx_error(
-                section="display_frames",
-                record_index=record_index,
-                offset=reader.offset,
-                operation=("validating total display-frame element count"),
-                reason=(
-                    f"cumulative display-frame element count "
-                    f"{total_element_count} exceeds the safety "
-                    "limit of "
-                    f"{MAX_PMX_TOTAL_DISPLAY_FRAME_ELEMENT_COUNT}."
-                ),
-            )
-
-    result.display_frames = display_frames
+    finally:
+        result.display_frame_count = frame_state.display_frame_count
+        result.display_frames = list(frame_state.display_frames)
 
 
 def _minimum_pmx_rigid_body_size(
@@ -3399,10 +2341,12 @@ def scan_pmx_structure(
                 _scan_pmx_morphs(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_display_frames(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_rigid_bodies(
                     reader,

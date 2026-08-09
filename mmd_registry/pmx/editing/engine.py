@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
+from typing import Final
 
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.editing.audit import PmxEditAudit, PmxEditChange
@@ -14,6 +16,8 @@ from mmd_registry.pmx.editing.operations import (
 )
 from mmd_registry.pmx.editing.numeric import canonicalize_pmx_float32
 from mmd_registry.pmx.editing.path_policy import validate_portable_texture_path
+from mmd_registry.pmx.editing.plan import PmxEditPlan
+from mmd_registry.pmx.editing.validation import validate_pmx_edit_plan
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.validation import validate_pmx_document
 
@@ -43,6 +47,7 @@ _MATERIAL_FLOAT_VECTOR_FIELDS = (
     "edge_color",
 )
 _MATERIAL_FLOAT_FIELDS = ("specular_strength", "edge_scale")
+_LOWERCASE_SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _is_plain_int(value: object) -> bool:
@@ -72,6 +77,39 @@ def _validate_operation_index(operation_index: object) -> None:
         raise TypeError("operation_index must be an integer.")
     if operation_index < 0:
         raise ValueError("operation_index cannot be negative.")
+
+
+def _validate_source_sha256(
+    plan: PmxEditPlan,
+    source_sha256: str | None,
+) -> None:
+    """Validate an optional actual source digest against the plan contract."""
+
+    if source_sha256 is not None:
+        if not isinstance(source_sha256, str):
+            raise TypeError("source_sha256 must be a string when provided.")
+        if _LOWERCASE_SHA256.fullmatch(source_sha256) is None:
+            raise ValueError(
+                "source_sha256 must be exactly 64 lowercase hexadecimal "
+                "characters."
+            )
+
+    expected = plan.expected_source_sha256
+    if expected is None:
+        return
+    if source_sha256 is None:
+        raise PmxEditPlanError(
+            "actual source SHA-256 is required by this plan.",
+            field="expected_source_sha256",
+        )
+    if source_sha256 != expected:
+        raise PmxEditPlanError(
+            (
+                f"source SHA-256 mismatch; expected {expected}, "
+                f"received {source_sha256}."
+            ),
+            field="expected_source_sha256",
+        )
 
 
 def _validate_edited_document(
@@ -376,4 +414,55 @@ def apply_update_material(
     return PmxEditResult(
         document=edited_document,
         audit=PmxEditAudit(changes=changes),
+    )
+
+
+def apply_pmx_edit_plan(
+    document: PmxDocument,
+    plan: PmxEditPlan,
+    *,
+    source_sha256: str | None = None,
+) -> PmxEditResult:
+    """Atomically apply a validated plan to an immutable PMX document."""
+
+    if not isinstance(document, PmxDocument):
+        raise TypeError("document must be a PmxDocument instance.")
+    if not isinstance(plan, PmxEditPlan):
+        raise TypeError("plan must be a PmxEditPlan instance.")
+
+    validate_pmx_document(document)
+    validate_pmx_edit_plan(plan)
+    _validate_source_sha256(plan, source_sha256)
+
+    edited_document = document
+    changes: list[PmxEditChange] = []
+    for operation_index, operation in enumerate(plan.operations):
+        if isinstance(operation, SetModelInfo):
+            operation_result = apply_set_model_info(
+                edited_document,
+                operation,
+                operation_index=operation_index,
+            )
+        elif isinstance(operation, SetTexturePath):
+            operation_result = apply_set_texture_path(
+                edited_document,
+                operation,
+                operation_index=operation_index,
+            )
+        elif isinstance(operation, UpdateMaterial):
+            operation_result = apply_update_material(
+                edited_document,
+                operation,
+                operation_index=operation_index,
+            )
+        else:
+            raise TypeError("plan contains an unsupported operation type.")
+
+        edited_document = operation_result.document
+        changes.extend(operation_result.audit.changes)
+
+    validate_pmx_document(edited_document)
+    return PmxEditResult(
+        document=edited_document,
+        audit=PmxEditAudit(changes=tuple(changes)),
     )

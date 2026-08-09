@@ -8,11 +8,15 @@ from mmd_registry.pmx.editing.audit import (
 )
 from mmd_registry.pmx.editing.engine import (
     PmxEditResult,
+    apply_pmx_edit_plan,
     apply_set_model_info,
     apply_set_texture_path,
     apply_update_material,
 )
-from mmd_registry.pmx.editing.errors import PmxEditPlanError
+from mmd_registry.pmx.editing.errors import (
+    PmxEditPlanError,
+    PmxEditVerificationError,
+)
 from mmd_registry.pmx.editing.json_loader import (
     load_pmx_edit_plan,
     parse_pmx_edit_plan_json,
@@ -29,10 +33,19 @@ from mmd_registry.pmx.editing.plan import (
     PmxEditPlan,
 )
 from mmd_registry.pmx.editing.path_policy import validate_portable_texture_path
+from mmd_registry.pmx.editing.preview import (
+    PMX_EDIT_PREVIEW_SCHEMA_VERSION,
+    PmxEditPreview,
+    calculate_pmx_edit_plan_sha256,
+    dry_run_pmx_edit,
+    render_pmx_edit_preview_json,
+    render_pmx_edit_preview_text,
+)
 from mmd_registry.pmx.editing.validation import validate_pmx_edit_plan
 
 __all__ = [
     "PMX_EDIT_PLAN_SCHEMA_VERSION",
+    "PMX_EDIT_PREVIEW_SCHEMA_VERSION",
     "PmxAuditValue",
     "PmxEditAudit",
     "PmxEditCategory",
@@ -40,16 +53,23 @@ __all__ = [
     "PmxEditOperation",
     "PmxEditPlan",
     "PmxEditPlanError",
+    "PmxEditPreview",
     "PmxEditResult",
+    "PmxEditVerificationError",
     "SetModelInfo",
     "SetTexturePath",
     "UpdateMaterial",
+    "apply_pmx_edit_plan",
     "apply_set_model_info",
     "apply_set_texture_path",
     "apply_update_material",
     "canonicalize_pmx_float32",
+    "calculate_pmx_edit_plan_sha256",
+    "dry_run_pmx_edit",
     "load_pmx_edit_plan",
     "parse_pmx_edit_plan_json",
+    "render_pmx_edit_preview_json",
+    "render_pmx_edit_preview_text",
     "validate_portable_texture_path",
     "validate_pmx_edit_plan",
 ]

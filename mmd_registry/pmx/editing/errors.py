@@ -34,3 +34,7 @@ class PmxEditPlanError(ValueError):
         self.operation_index = operation_index
         self.field = field
         super().__init__(f"Invalid PMX edit plan at {location}: {reason}")
+
+
+class PmxEditVerificationError(RuntimeError):
+    """Raised when an in-memory edited PMX fails semantic verification."""

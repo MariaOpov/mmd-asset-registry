@@ -294,37 +294,19 @@ class PmxEditDryRunCliTests(unittest.TestCase):
         self.assertEqual(output, "")
         self.assertIn("--overwrite requires an output path", error_output)
 
-    def test_write_mode_is_not_enabled_by_dry_run_checkpoint(self) -> None:
-        output_path = self.project_root / "output.pmx"
-        cases = (
-            (
-                [
-                    "edit",
-                    str(self.input_path),
-                    "--plan",
-                    str(self.plan_path),
-                ],
-                "Output path is required unless --dry-run",
-            ),
-            (
-                [
-                    "edit",
-                    str(self.input_path),
-                    str(output_path),
-                    "--plan",
-                    str(self.plan_path),
-                ],
-                "write mode is not available",
-            ),
+    def test_write_mode_requires_output(self) -> None:
+        exit_code, output, error_output = self.capture_run(
+            [
+                "edit",
+                str(self.input_path),
+                "--plan",
+                str(self.plan_path),
+            ]
         )
-        for arguments, reason in cases:
-            with self.subTest(reason=reason):
-                exit_code, output, error_output = self.capture_run(arguments)
 
-                self.assertEqual(exit_code, 2)
-                self.assertEqual(output, "")
-                self.assertIn(reason, error_output)
-                self.assertFalse(output_path.exists())
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(output, "")
+        self.assertIn("Output path is required unless --dry-run", error_output)
 
     def test_verification_failure_returns_one_without_output(self) -> None:
         output_path = self.project_root / "output.pmx"

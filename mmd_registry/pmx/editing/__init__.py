@@ -14,6 +14,7 @@ from mmd_registry.pmx.editing.engine import (
     apply_update_material,
 )
 from mmd_registry.pmx.editing.errors import (
+    PmxEditPathError,
     PmxEditPlanError,
     PmxEditVerificationError,
 )
@@ -41,6 +42,12 @@ from mmd_registry.pmx.editing.preview import (
     render_pmx_edit_preview_json,
     render_pmx_edit_preview_text,
 )
+from mmd_registry.pmx.editing.output import (
+    PmxEditWriteResult,
+    render_pmx_edit_write_json,
+    render_pmx_edit_write_text,
+    write_pmx_edit,
+)
 from mmd_registry.pmx.editing.validation import validate_pmx_edit_plan
 
 __all__ = [
@@ -51,11 +58,13 @@ __all__ = [
     "PmxEditCategory",
     "PmxEditChange",
     "PmxEditOperation",
+    "PmxEditPathError",
     "PmxEditPlan",
     "PmxEditPlanError",
     "PmxEditPreview",
     "PmxEditResult",
     "PmxEditVerificationError",
+    "PmxEditWriteResult",
     "SetModelInfo",
     "SetTexturePath",
     "UpdateMaterial",
@@ -70,6 +79,9 @@ __all__ = [
     "parse_pmx_edit_plan_json",
     "render_pmx_edit_preview_json",
     "render_pmx_edit_preview_text",
+    "render_pmx_edit_write_json",
+    "render_pmx_edit_write_text",
     "validate_portable_texture_path",
     "validate_pmx_edit_plan",
+    "write_pmx_edit",
 ]

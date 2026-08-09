@@ -262,6 +262,32 @@ class CliUtf8OutputTests(unittest.TestCase):
         )
         self.assertFalse(output_path.exists())
 
+    def test_edit_write_json_redirection_writes_utf8_output(self) -> None:
+        """Unicode edit values and paths survive redirected write JSON."""
+
+        output_path = self.project_root / "出力モデル.pmx"
+        exit_code, stdout, stderr = self.run_main_with_legacy_streams(
+            [
+                "edit",
+                str(self.bone_model_path),
+                str(output_path),
+                "--plan",
+                str(self.edit_plan_path),
+                "--json",
+            ]
+        )
+        payload = json.loads(stdout.decode("utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, b"")
+        self.assertFalse(payload["dry_run"])
+        self.assertTrue(payload["output"]["path"].endswith("出力モデル.pmx"))
+        self.assertEqual(
+            payload["audit"]["changes"][0]["after"],
+            "芙拉薇娅モデル 🌸",
+        )
+        self.assertTrue(output_path.is_file())
+
     def test_internal_error_redirection_writes_utf8_stderr(self) -> None:
         """Unexpected Unicode errors also survive stderr redirection."""
 

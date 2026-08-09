@@ -37,4 +37,8 @@ class PmxEditPlanError(ValueError):
 
 
 class PmxEditVerificationError(RuntimeError):
-    """Raised when an in-memory edited PMX fails semantic verification."""
+    """Raised when an edited PMX fails semantic or source verification."""
+
+
+class PmxEditPathError(ValueError):
+    """Raised when edit input/output paths violate safe-write policy."""

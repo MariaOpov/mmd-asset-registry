@@ -25,12 +25,16 @@ from mmd_registry.model_scanning import (
     scan_pmx_structure,
 )
 from mmd_registry.pmx.editing import (
+    PmxEditPathError,
     PmxEditPlanError,
     PmxEditVerificationError,
     dry_run_pmx_edit,
     load_pmx_edit_plan,
     render_pmx_edit_preview_json,
     render_pmx_edit_preview_text,
+    render_pmx_edit_write_json,
+    render_pmx_edit_write_text,
+    write_pmx_edit,
 )
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.roundtrip import (
@@ -302,10 +306,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     edit_parser = subparsers.add_parser(
         "edit",
-        help="Preview a declarative PMX edit plan without writing output.",
+        help="Preview or safely write a declarative PMX edit plan.",
         description=(
             "Load and validate a strict JSON edit plan, apply it entirely in "
-            "memory, and print a semantically verified dry-run preview."
+            "memory, semantically verify serialization, and either preview "
+            "the result or atomically write a distinct output PMX."
         ),
     )
     edit_parser.add_argument(
@@ -317,7 +322,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         help=(
-            "Optional future output path. Dry-run never creates or modifies it."
+            "Distinct output PMX path. Required in write mode and never "
+            "modified during dry-run."
         ),
     )
     edit_parser.add_argument(
@@ -335,14 +341,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--overwrite",
         action="store_true",
         help=(
-            "Reserved for a separate output path in write mode; never writes "
-            "during dry-run."
+            "Atomically replace an existing separate output file. Input and "
+            "output aliases are always refused."
         ),
     )
     edit_parser.add_argument(
         "--json",
         action="store_true",
-        help="Print the dry-run preview as stable Unicode-safe JSON.",
+        help="Print the preview or write result as stable Unicode-safe JSON.",
     )
 
     doctor_parser = subparsers.add_parser(
@@ -963,7 +969,7 @@ def _edit_path_error(path: Path, label: str) -> str | None:
 
 
 def _run_edit(arguments: argparse.Namespace) -> int:
-    """Run one verified PMX edit preview without creating output."""
+    """Preview or atomically write one verified PMX edit plan."""
 
     input_path = Path(arguments.input)
     plan_path = Path(arguments.plan)
@@ -983,17 +989,11 @@ def _run_edit(arguments: argparse.Namespace) -> int:
     if arguments.overwrite and output_path is None:
         print_error("--overwrite requires an output path.", "usage")
         return 2
-    if not arguments.dry_run:
-        if output_path is None:
-            print_error(
-                "Output path is required unless --dry-run is used.",
-                "usage",
-            )
-        else:
-            print_error(
-                "PMX write mode is not available until safe output support.",
-                "usage",
-            )
+    if not arguments.dry_run and output_path is None:
+        print_error(
+            "Output path is required unless --dry-run is used.",
+            "usage",
+        )
         return 2
 
     for path, label in ((input_path, "Input"), (plan_path, "Plan")):
@@ -1001,12 +1001,6 @@ def _run_edit(arguments: argparse.Namespace) -> int:
         if path_error is not None:
             print_error(path_error, "path_policy")
             return 2
-
-    try:
-        source_bytes = input_path.read_bytes()
-    except OSError as error:
-        print_error(f"Unable to read input file: {error}", "io")
-        return 2
 
     try:
         plan = load_pmx_edit_plan(plan_path)
@@ -1020,8 +1014,57 @@ def _run_edit(arguments: argparse.Namespace) -> int:
         print_error(f"Internal plan-load failure: {error}", "internal")
         return 3
 
+    if arguments.dry_run:
+        try:
+            source_bytes = input_path.read_bytes()
+        except OSError as error:
+            print_error(f"Unable to read input file: {error}", "io")
+            return 2
+
+        try:
+            preview = dry_run_pmx_edit(source_bytes, plan)
+        except PmxEditPlanError as error:
+            print_error(str(error), "invalid_plan")
+            return 1
+        except (BinaryParseError, PmxValidationError) as error:
+            print_error(str(error), "invalid_pmx")
+            return 1
+        except PmxEditVerificationError as error:
+            print_error(str(error), "verification")
+            return 1
+        except Exception as error:
+            print_error(f"Internal edit failure: {error}", "internal")
+            return 3
+
+        try:
+            if arguments.json:
+                sys.stdout.write(render_pmx_edit_preview_json(preview))
+            else:
+                sys.stdout.write(
+                    render_pmx_edit_preview_text(
+                        preview,
+                        include_changes=False,
+                    )
+                )
+        except Exception as error:
+            print_error(
+                f"Internal preview-render failure: {error}",
+                "internal",
+            )
+            return 3
+        return 0
+
+    assert output_path is not None
     try:
-        preview = dry_run_pmx_edit(source_bytes, plan)
+        result = write_pmx_edit(
+            input_path,
+            output_path,
+            plan,
+            overwrite=arguments.overwrite,
+        )
+    except PmxEditPathError as error:
+        print_error(str(error), "path_policy")
+        return 2
     except PmxEditPlanError as error:
         print_error(str(error), "invalid_plan")
         return 1
@@ -1031,22 +1074,20 @@ def _run_edit(arguments: argparse.Namespace) -> int:
     except PmxEditVerificationError as error:
         print_error(str(error), "verification")
         return 1
+    except OSError as error:
+        print_error(f"File operation failed: {error}", "io")
+        return 2
     except Exception as error:
         print_error(f"Internal edit failure: {error}", "internal")
         return 3
 
     try:
         if arguments.json:
-            sys.stdout.write(render_pmx_edit_preview_json(preview))
+            sys.stdout.write(render_pmx_edit_write_json(result))
         else:
-            sys.stdout.write(
-                render_pmx_edit_preview_text(
-                    preview,
-                    include_changes=False,
-                )
-            )
+            sys.stdout.write(render_pmx_edit_write_text(result))
     except Exception as error:
-        print_error(f"Internal preview-render failure: {error}", "internal")
+        print_error(f"Internal result-render failure: {error}", "internal")
         return 3
     return 0
 

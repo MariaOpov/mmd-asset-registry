@@ -193,6 +193,13 @@ class PmxHeaderScanningTests(unittest.TestCase):
         result = scan_pmx_header(fixture)
 
         self.assertEqual(result.status, "error")
+        self.assertEqual(result.detected_format, "pmx")
+        self.assertEqual(result.version, 2.0)
+        self.assertEqual(result.global_count, 8)
+        self.assertIsNone(result.encoding)
+        self.assertIsNone(result.additional_uv_count)
+        self.assertIsNone(result.index_sizes)
+        self.assertIsNone(result.model_info)
         self.assertTrue(
             any("invalid PMX text-encoding flag: 9" in error for error in result.errors)
         )

@@ -10,23 +10,18 @@ from typing import Any, Final, Literal
 from mmd_registry.binary_reader import (
     BinaryParseError,
     BinaryReader,
-    VALID_INDEX_SIZES,
 )
 from mmd_registry.pmx.document import PmxIndexSizes, PmxModelInfo
-
-
-PMX_MAGIC: Final[bytes] = b"PMX "
-
-SUPPORTED_PMX_VERSIONS: Final[tuple[float, ...]] = (
-    2.0,
-    2.1,
+from mmd_registry.pmx.errors import raise_pmx_error as _raise_pmx_error
+from mmd_registry.pmx.sections.header import (
+    MAX_PMX_NAME_BYTES,
+    PmxHeaderReadState,
+    read_pmx_header_body,
+    read_pmx_magic,
+    validate_pmx_magic,
 )
 
-MIN_PMX_GLOBAL_COUNT: Final[int] = 8
-MAX_PMX_GLOBAL_COUNT: Final[int] = 64
 
-MAX_PMX_NAME_BYTES: Final[int] = 64 * 1024
-MAX_PMX_COMMENT_BYTES: Final[int] = 1024 * 1024
 MAX_PMX_VERTEX_COUNT: Final[int] = 2_000_000
 MAX_PMX_SURFACE_INDEX_COUNT: Final[int] = 12_000_000
 MAX_PMX_TEXTURE_COUNT: Final[int] = 100_000
@@ -860,192 +855,6 @@ class PmxHeaderScanResult:
             "errors": list(self.errors),
             "warnings": list(self.warnings),
         }
-
-
-def _raise_pmx_error(
-    *,
-    section: str,
-    offset: int,
-    operation: str,
-    reason: str,
-    record_index: int | None = None,
-) -> None:
-    """Raise one contextual PMX parse error."""
-
-    raise BinaryParseError(
-        format_name="PMX",
-        section=section,
-        record_index=record_index,
-        offset=offset,
-        operation=operation,
-        reason=reason,
-    )
-
-
-def _normalize_pmx_version(
-    raw_version: float,
-    *,
-    offset: int,
-) -> float:
-    """Validate and normalize a supported PMX float version."""
-
-    if not math.isfinite(raw_version):
-        _raise_pmx_error(
-            section="header",
-            offset=offset,
-            operation="validating PMX version",
-            reason="version must be a finite floating-point number.",
-        )
-
-    for supported_version in SUPPORTED_PMX_VERSIONS:
-        if math.isclose(
-            raw_version,
-            supported_version,
-            rel_tol=0.0,
-            abs_tol=1e-4,
-        ):
-            return supported_version
-
-    _raise_pmx_error(
-        section="header",
-        offset=offset,
-        operation="validating PMX version",
-        reason=f"unsupported PMX version: {raw_version:.6g}.",
-    )
-
-
-def _validate_global_count(
-    global_count: int,
-    *,
-    offset: int,
-) -> None:
-    """Validate the PMX global-settings byte count."""
-
-    if global_count < MIN_PMX_GLOBAL_COUNT:
-        _raise_pmx_error(
-            section="header",
-            offset=offset,
-            operation="validating PMX global count",
-            reason=(
-                f"value {global_count} is smaller than the required "
-                f"minimum of {MIN_PMX_GLOBAL_COUNT}."
-            ),
-        )
-
-    if global_count > MAX_PMX_GLOBAL_COUNT:
-        _raise_pmx_error(
-            section="header",
-            offset=offset,
-            operation="validating PMX global count",
-            reason=(
-                f"value {global_count} exceeds the safety limit "
-                f"of {MAX_PMX_GLOBAL_COUNT}."
-            ),
-        )
-
-
-def _decode_encoding_flag(
-    encoding_flag: int,
-    *,
-    offset: int,
-) -> str:
-    """Return the Python codec selected by a PMX encoding flag."""
-
-    if encoding_flag == 0:
-        return "utf-16-le"
-
-    if encoding_flag == 1:
-        return "utf-8"
-
-    _raise_pmx_error(
-        section="header",
-        offset=offset,
-        operation="validating PMX text encoding",
-        reason=f"invalid PMX text-encoding flag: {encoding_flag}.",
-    )
-
-
-def _validate_additional_uv_count(
-    additional_uv_count: int,
-    *,
-    offset: int,
-) -> None:
-    """Validate the PMX additional-UV vector count."""
-
-    if additional_uv_count > 4:
-        _raise_pmx_error(
-            section="header",
-            offset=offset,
-            operation="validating PMX additional UV count",
-            reason=(
-                f"value {additional_uv_count} is invalid; "
-                "expected a value from 0 through 4."
-            ),
-        )
-
-
-def _validate_index_size(
-    value: int,
-    *,
-    label: str,
-    offset: int,
-) -> int:
-    """Validate one PMX index-width declaration."""
-
-    if value not in VALID_INDEX_SIZES:
-        _raise_pmx_error(
-            section="header",
-            offset=offset,
-            operation=f"validating {label}",
-            reason=(
-                f"invalid index size {value}; expected one of "
-                f"{sorted(VALID_INDEX_SIZES)}."
-            ),
-        )
-
-    return value
-
-
-def _read_model_info(
-    reader: BinaryReader,
-    encoding: str,
-) -> PmxModelInfo:
-    """Read all four PMX model-information text fields."""
-
-    require_even_length = encoding == "utf-16-le"
-
-    with reader.context("model_info"):
-        local_name = reader.read_length_prefixed_text(
-            "local model name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal model name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        local_comments = reader.read_length_prefixed_text(
-            "local model comments",
-            encoding=encoding,
-            max_length=MAX_PMX_COMMENT_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_comments = reader.read_length_prefixed_text(
-            "universal model comments",
-            encoding=encoding,
-            max_length=MAX_PMX_COMMENT_BYTES,
-            require_even_length=require_even_length,
-        )
-
-    return PmxModelInfo(
-        local_name=local_name,
-        universal_name=universal_name,
-        local_comments=local_comments,
-        universal_comments=universal_comments,
-    )
 
 
 def _minimum_pmx_vertex_size(
@@ -4548,111 +4357,35 @@ def _scan_pmx_header(
 ) -> None:
     """Scan PMX signature, globals, index sizes, and model information."""
 
-    with reader.context("signature"):
-        magic_offset = reader.offset
-        magic = reader.read_exact(
-            len(PMX_MAGIC),
-            "PMX signature",
-        )
+    magic, magic_offset = read_pmx_magic(reader)
 
     result.magic = magic.decode(
         "ascii",
         errors="replace",
     )
-
-    if magic != PMX_MAGIC:
-        _raise_pmx_error(
-            section="signature",
-            offset=magic_offset,
-            operation="validating PMX signature",
-            reason=(f"invalid PMX magic/signature: {magic.hex(' ')}."),
-        )
+    validate_pmx_magic(
+        magic,
+        offset=magic_offset,
+    )
 
     result.detected_format = "pmx"
+    header_state = PmxHeaderReadState()
 
-    with reader.context("header"):
-        version_offset = reader.offset
-        raw_version = reader.read_float32("PMX version")
-        result.version = _normalize_pmx_version(
-            raw_version,
-            offset=version_offset,
+    try:
+        header_data = read_pmx_header_body(
+            reader,
+            magic=magic,
+            state=header_state,
         )
+    finally:
+        result.version = header_state.version
+        result.encoding = header_state.encoding
+        result.global_count = header_state.global_count
+        result.additional_uv_count = header_state.additional_uv_count
+        result.index_sizes = header_state.index_sizes
+        result.model_info = header_state.model_info
 
-        global_count_offset = reader.offset
-        global_count = reader.read_uint8("PMX global-count field")
-        _validate_global_count(
-            global_count,
-            offset=global_count_offset,
-        )
-        result.global_count = global_count
-
-        globals_offset = reader.offset
-        globals_data = reader.read_exact(
-            global_count,
-            "PMX global settings",
-        )
-
-    encoding_flag = globals_data[0]
-    additional_uv_count = globals_data[1]
-
-    result.encoding = _decode_encoding_flag(
-        encoding_flag,
-        offset=globals_offset,
-    )
-    _validate_additional_uv_count(
-        additional_uv_count,
-        offset=globals_offset + 1,
-    )
-    result.additional_uv_count = additional_uv_count
-
-    result.index_sizes = PmxIndexSizes(
-        vertex=_validate_index_size(
-            globals_data[2],
-            label="vertex index size",
-            offset=globals_offset + 2,
-        ),
-        texture=_validate_index_size(
-            globals_data[3],
-            label="texture index size",
-            offset=globals_offset + 3,
-        ),
-        material=_validate_index_size(
-            globals_data[4],
-            label="material index size",
-            offset=globals_offset + 4,
-        ),
-        bone=_validate_index_size(
-            globals_data[5],
-            label="bone index size",
-            offset=globals_offset + 5,
-        ),
-        morph=_validate_index_size(
-            globals_data[6],
-            label="morph index size",
-            offset=globals_offset + 6,
-        ),
-        rigid_body=_validate_index_size(
-            globals_data[7],
-            label="rigid-body index size",
-            offset=globals_offset + 7,
-        ),
-    )
-
-    extra_global_count = global_count - MIN_PMX_GLOBAL_COUNT
-
-    if extra_global_count:
-        result.warnings.append(
-            f"PMX header contains {extra_global_count} "
-            "unrecognized extra global-setting bytes."
-        )
-
-    result.model_info = _read_model_info(
-        reader,
-        result.encoding,
-    )
-
-    if not result.model_info.local_name:
-        result.warnings.append("PMX local model name is empty.")
+    result.warnings.extend(header_data.warnings)
 
 
 def scan_pmx_header(

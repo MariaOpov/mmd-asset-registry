@@ -11,8 +11,13 @@ from mmd_registry.binary_reader import (
     BinaryParseError,
     BinaryReader,
 )
-from mmd_registry.pmx.document import PmxIndexSizes, PmxModelInfo
+from mmd_registry.pmx.document import PmxHeader, PmxIndexSizes, PmxModelInfo
 from mmd_registry.pmx.errors import raise_pmx_error as _raise_pmx_error
+from mmd_registry.pmx.sections.geometry import (
+    MAX_PMX_SURFACE_INDEX_COUNT,
+    PmxGeometryReadState,
+    read_pmx_geometry,
+)
 from mmd_registry.pmx.sections.header import (
     MAX_PMX_NAME_BYTES,
     PmxHeaderReadState,
@@ -22,8 +27,6 @@ from mmd_registry.pmx.sections.header import (
 )
 
 
-MAX_PMX_VERTEX_COUNT: Final[int] = 2_000_000
-MAX_PMX_SURFACE_INDEX_COUNT: Final[int] = 12_000_000
 MAX_PMX_TEXTURE_COUNT: Final[int] = 100_000
 MAX_PMX_TEXTURE_PATH_BYTES: Final[int] = 64 * 1024
 MAX_PMX_MATERIAL_COUNT: Final[int] = 100_000
@@ -857,238 +860,26 @@ class PmxHeaderScanResult:
         }
 
 
-def _minimum_pmx_vertex_size(
-    *,
-    additional_uv_count: int,
-    bone_index_size: int,
-) -> int:
-    """Return the smallest possible PMX vertex-record size."""
-
-    fixed_vector_bytes = 32 + (additional_uv_count * 16)
-
-    return fixed_vector_bytes + 1 + bone_index_size + 4
-
-
-def _skip_pmx_vertex(
-    reader: BinaryReader,
-    *,
-    record_index: int,
-    version: float,
-    additional_uv_count: int,
-    bone_index_size: int,
-) -> None:
-    """Safely skip one PMX vertex while validating its deform layout."""
-
-    with reader.context(
-        "vertices",
-        record_index=record_index,
-    ):
-        vector_data_size = 32 + (additional_uv_count * 16)
-
-        reader.skip(
-            vector_data_size,
-            ("vertex position, normal, UV, and additional UV data"),
-        )
-
-        deform_offset = reader.offset
-        deform_type = reader.read_uint8("vertex deform type")
-
-        if deform_type == 0:
-            reader.skip_items(
-                1,
-                bone_index_size,
-                "BDEF1 bone index",
-            )
-
-        elif deform_type == 1:
-            reader.skip_items(
-                2,
-                bone_index_size,
-                "BDEF2 bone indices",
-            )
-            reader.skip(
-                4,
-                "BDEF2 bone weight",
-            )
-
-        elif deform_type == 2:
-            reader.skip_items(
-                4,
-                bone_index_size,
-                "BDEF4 bone indices",
-            )
-            reader.skip(
-                16,
-                "BDEF4 bone weights",
-            )
-
-        elif deform_type == 3:
-            reader.skip_items(
-                2,
-                bone_index_size,
-                "SDEF bone indices",
-            )
-            reader.skip(
-                4,
-                "SDEF bone weight",
-            )
-            reader.skip(
-                36,
-                "SDEF C, R0, and R1 vectors",
-            )
-
-        elif deform_type == 4:
-            if version < 2.1:
-                _raise_pmx_error(
-                    section="vertices",
-                    record_index=record_index,
-                    offset=deform_offset,
-                    operation="validating vertex deform type",
-                    reason=("QDEF deform type requires PMX 2.1."),
-                )
-
-            reader.skip_items(
-                4,
-                bone_index_size,
-                "QDEF bone indices",
-            )
-            reader.skip(
-                16,
-                "QDEF bone weights",
-            )
-
-        else:
-            _raise_pmx_error(
-                section="vertices",
-                record_index=record_index,
-                offset=deform_offset,
-                operation="validating vertex deform type",
-                reason=(f"invalid PMX vertex deform type: {deform_type}."),
-            )
-
-        reader.skip(
-            4,
-            "vertex edge scale",
-        )
-
-
-def _scan_pmx_vertices(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-) -> None:
-    """Read the vertex count and safely skip every PMX vertex."""
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="vertices",
-            offset=reader.offset,
-            operation="starting vertex scan",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    if result.version is None:
-        _raise_pmx_error(
-            section="vertices",
-            offset=reader.offset,
-            operation="starting vertex scan",
-            reason="PMX version is unavailable.",
-        )
-
-    if result.additional_uv_count is None:
-        _raise_pmx_error(
-            section="vertices",
-            offset=reader.offset,
-            operation="starting vertex scan",
-            reason="PMX additional UV count is unavailable.",
-        )
-
-    index_sizes = result.index_sizes
-    version = result.version
-    additional_uv_count = result.additional_uv_count
-
-    minimum_vertex_size = _minimum_pmx_vertex_size(
-        additional_uv_count=additional_uv_count,
-        bone_index_size=index_sizes.bone,
-    )
-
-    with reader.context("vertices"):
-        vertex_count = reader.read_bounded_count(
-            "vertex count",
-            max_count=MAX_PMX_VERTEX_COUNT,
-            minimum_item_size=minimum_vertex_size,
-        )
-
-    result.vertex_count = vertex_count
-
-    for record_index in range(vertex_count):
-        _skip_pmx_vertex(
-            reader,
-            record_index=record_index,
-            version=version,
-            additional_uv_count=additional_uv_count,
-            bone_index_size=index_sizes.bone,
-        )
-
-
-def _scan_pmx_surface_indices(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-) -> None:
-    """Read and safely skip the PMX triangle-index section."""
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="surface_indices",
-            offset=reader.offset,
-            operation="starting surface-index scan",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    index_sizes = result.index_sizes
-    count_offset = reader.offset
-
-    with reader.context("surface_indices"):
-        surface_index_count = reader.read_bounded_count(
-            "surface index count",
-            max_count=MAX_PMX_SURFACE_INDEX_COUNT,
-            minimum_item_size=index_sizes.vertex,
-        )
-
-    if surface_index_count % 3 != 0:
-        _raise_pmx_error(
-            section="surface_indices",
-            offset=count_offset,
-            operation="validating surface index count",
-            reason=(
-                f"surface index count {surface_index_count} must be divisible by 3."
-            ),
-        )
-
-    result.surface_index_count = surface_index_count
-    result.triangle_count = surface_index_count // 3
-
-    with reader.context("surface_indices"):
-        reader.skip_items(
-            surface_index_count,
-            index_sizes.vertex,
-            "surface vertex indices",
-        )
-
-
 def _scan_pmx_geometry(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Scan PMX vertex and surface-index sections."""
+    """Read geometry while preserving the legacy count projection."""
 
-    _scan_pmx_vertices(
-        reader,
-        result,
-    )
-    _scan_pmx_surface_indices(
-        reader,
-        result,
-    )
+    geometry_state = PmxGeometryReadState()
+
+    try:
+        read_pmx_geometry(
+            reader,
+            header=header,
+            state=geometry_state,
+        )
+    finally:
+        result.vertex_count = geometry_state.vertex_count
+        result.surface_index_count = geometry_state.surface_index_count
+        result.triangle_count = geometry_state.triangle_count
 
 
 def _scan_pmx_textures(
@@ -4354,7 +4145,7 @@ def _finalize_pmx_structure_scan(
 def _scan_pmx_header(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
-) -> None:
+) -> PmxHeader:
     """Scan PMX signature, globals, index sizes, and model information."""
 
     magic, magic_offset = read_pmx_magic(reader)
@@ -4386,6 +4177,7 @@ def _scan_pmx_header(
         result.model_info = header_state.model_info
 
     result.warnings.extend(header_data.warnings)
+    return header_data.header
 
 
 def scan_pmx_header(
@@ -4440,13 +4232,14 @@ def scan_pmx_structure(
             result.file_size = reader.size
 
             try:
-                _scan_pmx_header(
+                header = _scan_pmx_header(
                     reader,
                     result,
                 )
                 _scan_pmx_geometry(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_textures(
                     reader,

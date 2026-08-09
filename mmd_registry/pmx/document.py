@@ -9,7 +9,7 @@ header-only object for a complete model.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal, TypeAlias
+from typing import ClassVar, Final, Literal, TypeAlias
 
 
 PmxVersion: TypeAlias = Literal[2.0, 2.1]
@@ -164,3 +164,241 @@ class PmxModelInfo:
             "local_comments": self.local_comments,
             "universal_comments": self.universal_comments,
         }
+
+
+PmxVector2: TypeAlias = tuple[float, float]
+PmxVector3: TypeAlias = tuple[float, float, float]
+PmxVector4: TypeAlias = tuple[float, float, float, float]
+
+
+def _validate_float(value: object, field_name: str) -> None:
+    """Require one explicit float without imposing semantic bounds."""
+
+    if not isinstance(value, float):
+        raise TypeError(f"{field_name} must be a float.")
+
+
+def _validate_integer(value: object, field_name: str) -> None:
+    """Require one explicit integer without accepting booleans."""
+
+    if not _is_plain_int(value):
+        raise TypeError(f"{field_name} must be an integer.")
+
+
+def _validate_float_tuple(
+    value: object,
+    *,
+    field_name: str,
+    length: int,
+) -> None:
+    """Require one immutable fixed-length tuple of explicit floats."""
+
+    if not isinstance(value, tuple):
+        raise TypeError(f"{field_name} must be a tuple.")
+
+    if len(value) != length:
+        raise ValueError(f"{field_name} must contain exactly {length} values.")
+
+    for item in value:
+        _validate_float(item, f"{field_name} value")
+
+
+def _validate_integer_tuple(
+    value: object,
+    *,
+    field_name: str,
+    length: int,
+) -> None:
+    """Require one immutable fixed-length tuple of explicit integers."""
+
+    if not isinstance(value, tuple):
+        raise TypeError(f"{field_name} must be a tuple.")
+
+    if len(value) != length:
+        raise ValueError(f"{field_name} must contain exactly {length} values.")
+
+    for item in value:
+        _validate_integer(item, f"{field_name} value")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxBdef1:
+    """One-bone PMX vertex deformation."""
+
+    deform_type: ClassVar[Literal[0]] = 0
+    bone_index: int
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.bone_index, "bone_index")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxBdef2:
+    """Two-bone PMX vertex deformation."""
+
+    deform_type: ClassVar[Literal[1]] = 1
+    bone_indices: tuple[int, int]
+    bone_1_weight: float
+
+    def __post_init__(self) -> None:
+        _validate_integer_tuple(
+            self.bone_indices,
+            field_name="bone_indices",
+            length=2,
+        )
+        _validate_float(self.bone_1_weight, "bone_1_weight")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxBdef4:
+    """Four-bone linear PMX vertex deformation."""
+
+    deform_type: ClassVar[Literal[2]] = 2
+    bone_indices: tuple[int, int, int, int]
+    weights: PmxVector4
+
+    def __post_init__(self) -> None:
+        _validate_integer_tuple(
+            self.bone_indices,
+            field_name="bone_indices",
+            length=4,
+        )
+        _validate_float_tuple(
+            self.weights,
+            field_name="weights",
+            length=4,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSdef:
+    """Spherical PMX vertex deformation with C, R0, and R1 vectors."""
+
+    deform_type: ClassVar[Literal[3]] = 3
+    bone_indices: tuple[int, int]
+    bone_1_weight: float
+    c: PmxVector3
+    r0: PmxVector3
+    r1: PmxVector3
+
+    def __post_init__(self) -> None:
+        _validate_integer_tuple(
+            self.bone_indices,
+            field_name="bone_indices",
+            length=2,
+        )
+        _validate_float(self.bone_1_weight, "bone_1_weight")
+
+        for field_name in ("c", "r0", "r1"):
+            _validate_float_tuple(
+                getattr(self, field_name),
+                field_name=field_name,
+                length=3,
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class PmxQdef:
+    """Four-bone dual-quaternion PMX 2.1 vertex deformation."""
+
+    deform_type: ClassVar[Literal[4]] = 4
+    bone_indices: tuple[int, int, int, int]
+    weights: PmxVector4
+
+    def __post_init__(self) -> None:
+        _validate_integer_tuple(
+            self.bone_indices,
+            field_name="bone_indices",
+            length=4,
+        )
+        _validate_float_tuple(
+            self.weights,
+            field_name="weights",
+            length=4,
+        )
+
+
+PmxDeform: TypeAlias = PmxBdef1 | PmxBdef2 | PmxBdef4 | PmxSdef | PmxQdef
+
+
+@dataclass(frozen=True, slots=True)
+class PmxVertex:
+    """One complete PMX vertex record required for serialization."""
+
+    position: PmxVector3
+    normal: PmxVector3
+    uv: PmxVector2
+    additional_uvs: tuple[PmxVector4, ...]
+    deform: PmxDeform
+    edge_scale: float
+
+    def __post_init__(self) -> None:
+        _validate_float_tuple(
+            self.position,
+            field_name="position",
+            length=3,
+        )
+        _validate_float_tuple(
+            self.normal,
+            field_name="normal",
+            length=3,
+        )
+        _validate_float_tuple(
+            self.uv,
+            field_name="uv",
+            length=2,
+        )
+
+        if not isinstance(self.additional_uvs, tuple):
+            raise TypeError("additional_uvs must be a tuple.")
+
+        if len(self.additional_uvs) > MAX_PMX_ADDITIONAL_UV_COUNT:
+            raise ValueError("additional_uvs cannot contain more than 4 vectors.")
+
+        for additional_uv in self.additional_uvs:
+            _validate_float_tuple(
+                additional_uv,
+                field_name="additional_uv",
+                length=4,
+            )
+
+        if not isinstance(
+            self.deform,
+            (PmxBdef1, PmxBdef2, PmxBdef4, PmxSdef, PmxQdef),
+        ):
+            raise TypeError("deform must be a supported PMX deform record.")
+
+        _validate_float(self.edge_scale, "edge_scale")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxGeometry:
+    """Complete ordered PMX vertex and surface-index sections."""
+
+    vertices: tuple[PmxVertex, ...]
+    surface_indices: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.vertices, tuple):
+            raise TypeError("vertices must be a tuple.")
+
+        if not all(isinstance(vertex, PmxVertex) for vertex in self.vertices):
+            raise TypeError("vertices must contain only PmxVertex records.")
+
+        if not isinstance(self.surface_indices, tuple):
+            raise TypeError("surface_indices must be a tuple.")
+
+        for surface_index in self.surface_indices:
+            _validate_integer(surface_index, "surface index")
+
+            if surface_index < 0:
+                raise ValueError("surface indices cannot be negative.")
+
+        if len(self.surface_indices) % 3 != 0:
+            raise ValueError("surface index count must be divisible by 3.")
+
+    @property
+    def triangle_count(self) -> int:
+        """Return the number of triangles represented by surface indices."""
+
+        return len(self.surface_indices) // 3

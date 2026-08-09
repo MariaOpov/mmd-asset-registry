@@ -6,7 +6,11 @@ from mmd_registry.pmx.editing.audit import (
     PmxEditCategory,
     PmxEditChange,
 )
-from mmd_registry.pmx.editing.engine import PmxEditResult, apply_set_model_info
+from mmd_registry.pmx.editing.engine import (
+    PmxEditResult,
+    apply_set_model_info,
+    apply_set_texture_path,
+)
 from mmd_registry.pmx.editing.errors import PmxEditPlanError
 from mmd_registry.pmx.editing.operations import (
     PmxEditOperation,
@@ -18,6 +22,7 @@ from mmd_registry.pmx.editing.plan import (
     PMX_EDIT_PLAN_SCHEMA_VERSION,
     PmxEditPlan,
 )
+from mmd_registry.pmx.editing.path_policy import validate_portable_texture_path
 from mmd_registry.pmx.editing.validation import validate_pmx_edit_plan
 
 __all__ = [
@@ -34,5 +39,7 @@ __all__ = [
     "SetTexturePath",
     "UpdateMaterial",
     "apply_set_model_info",
+    "apply_set_texture_path",
+    "validate_portable_texture_path",
     "validate_pmx_edit_plan",
 ]

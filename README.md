@@ -1,25 +1,29 @@
 # MMD Asset & License Registry
 
-A lightweight, read-only Python toolkit for tracking MMD asset provenance,
+A lightweight, safety-first Python toolkit for tracking MMD asset provenance,
 creator credits, local source files, SHA-256 integrity, model metadata,
 PMX structure, texture dependencies, bone hierarchies, bone semantics,
-rig diagnostics, canonical bone maps, and known usage restrictions.
+rig diagnostics, canonical bone maps, complete typed PMX documents, and known
+usage restrictions.
 
 The project is designed as a validation and diagnostics gate before assets
-enter an automated MMD, Blender, or anime-video pipeline. It never edits,
-rewrites, repairs, or redistributes a model or texture file.
+enter an automated MMD, Blender, or anime-video pipeline. All established
+inspection and analysis commands keep model and texture inputs read-only. The
+explicit `roundtrip` command can write a verified PMX copy to a distinct path;
+it never writes in place, repairs data, or redistributes an asset.
 
 ## Current version
 
 ```text
-Tool version: 0.6.0
+Tool version: 0.7.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.6.0
-adds the read-only Rig Analyzer without changing the persistent registry
-schema.
+Tool version and registry schema are intentionally independent. Version 0.7.0
+adds a complete typed PMX document model, deterministic writer, round-trip
+validation, and explicit copy-only CLI output without changing the persistent
+registry schema.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -43,12 +47,41 @@ become separated from the downloaded files:
 - Which bones provide IK or other rig capabilities
 - Which canonical semantic roles the rig can resolve safely
 - Which hierarchy, symmetry, ambiguity, or IK issues need review
+- Whether a complete PMX document can be validated and serialized safely
 - Which pipeline character uses the asset
 
 The registry records this information in YAML and validates it before a
 pipeline continues. The scanner and doctor add technical evidence, but the
 tool does not automatically determine legal permission or replace review of
 the creator's original terms.
+
+## Version 0.7 features
+
+Version 0.7.0 establishes the PMX document and serialization foundation needed
+for a future editor:
+
+- A complete immutable `PmxDocument` retaining every payload required to write
+  PMX 2.0 and PMX 2.1 files
+- Typed section records for geometry and all deform types, textures, materials,
+  bones and IK, every supported morph offset, display frames, rigid bodies,
+  joints, and soft bodies
+- Modular document loading independent from CLI and scanner presentation code
+- Deterministic little-endian serialization with UTF-8 and UTF-16LE support
+- Correct signed and unsigned 1/2/4-byte index handling
+- Cross-section validation for counts, capacities, references, material surface
+  coverage, versioned records, finite floats, text encoding, and flag payloads
+- Validation-before-write behavior, default overwrite refusal, and atomic
+  replacement for explicitly selected separate outputs
+- Semantic parse → serialize → parse verification before CLI output is created
+- The `roundtrip` command with text/JSON results and opt-in `--overwrite`
+- Generated PMX 2.0/2.1 × encoding × index-width fixtures, including a mixed
+  index-width case and all deform and morph types
+- Private real-model verification without committing or redistributing the
+  production model
+- Ubuntu and Windows CI coverage
+- 563 automated unit tests at the release-readiness checkpoint
+
+All version 0.6 capabilities remain available.
 
 ## Version 0.6 features
 
@@ -166,6 +199,7 @@ validate  Validate an asset registry
 hash      Calculate or verify a file SHA-256 hash
 inspect   Inspect a PMX or PMD model header
 scan      Structurally scan a PMX model
+roundtrip Write a verified PMX copy to a distinct output path
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
 rig       Resolve bone semantics, diagnose a rig, and build a bone map
@@ -180,13 +214,15 @@ validation.
 |---|---:|---:|---:|
 | Header inspection | Yes | Yes | Yes |
 | Complete structural scan | Yes | Yes | No |
+| Complete document load and write | Yes | Yes | No |
+| Verified round-trip copy | Yes | Yes | No |
 | Texture dependency doctor | Yes | Yes | No |
 | Bone Explorer | Yes | Yes | No |
 | Rig Analyzer | Yes | Yes | No |
 
-PMD 1.0 is currently supported for header inspection only. `scan`, `doctor`,
-`bones`, and `rig` return an unsupported-format error for PMD files instead of
-pretending to perform a partial structural scan.
+PMD 1.0 is currently supported for header inspection only. `scan`, `roundtrip`,
+`doctor`, `bones`, and `rig` reject PMD files instead of pretending to perform
+a partial structural operation.
 
 ## Validate a registry
 
@@ -348,6 +384,48 @@ does not claim completion.
 The JSON result intentionally contains detailed structural records and can be
 large for production models. Redirect it to a file when full details are
 needed; use text output for a compact summary.
+
+## Write a verified PMX round-trip copy
+
+The `roundtrip` command is the only CLI operation that writes a model file. It
+requires separate input and output paths, validates the complete document, and
+performs parse → serialize → parse semantic verification before output is
+created:
+
+```bash
+python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx
+```
+
+The command refuses to run when:
+
+- The input is missing, not a file, not a `.pmx`, or malformed
+- The output is not a `.pmx` path
+- Input and output resolve to the same file, including hardlink or symlink
+  aliases
+- The output already exists and `--overwrite` was not explicitly supplied
+- The output directory does not already exist
+- Serialization changes the semantic document structure
+
+Replace an existing separate output only with explicit permission:
+
+```bash
+python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx --overwrite
+```
+
+Input and output aliases remain prohibited even with `--overwrite`; in-place
+PMX editing is not supported. Explicit overwrite uses atomic replacement for
+the separate output and never changes the input path.
+
+Machine-readable reporting includes section counts, sizes, SHA-256 digests,
+semantic equality, and whether the copy is byte-identical:
+
+```bash
+python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx --json
+```
+
+Byte-identical output is verified when it occurs, but the architectural
+contract is semantic and structural equivalence. The writer does not repair,
+rename, reparent, translate, or otherwise reinterpret model data.
 
 ## Explore PMX bones
 
@@ -560,7 +638,9 @@ Scanner and dependency warnings preserve a successful exit code when the model
 remains structurally readable and no referenced dependency has an error. The
 Rig Analyzer returns exit code `1` when its structured report contains
 actionable warnings or errors. JSON output preserves Unicode names and paths
-and is configured as UTF-8 even when redirected by Windows CMD.
+and is configured as UTF-8 even when redirected by Windows CMD. A successful
+`roundtrip` reports semantic equality and output integrity before returning
+exit code `0`.
 
 ## Exit codes
 
@@ -583,6 +663,10 @@ Command examples:
 - `inspect` on an invalid PMX/PMD header: `1`
 - `scan` on a complete PMX with trailing-byte warnings: `0`
 - `scan` on malformed PMX data: `1`
+- `roundtrip` with verified distinct output: `0`
+- `roundtrip` on malformed PMX data: `1`
+- `roundtrip` with an input/output alias or existing unapproved output: `2`
+- `roundtrip` internal semantic or output verification failure: `3`
 - `doctor` with all referenced textures present: `0`
 - `doctor` with a referenced texture missing: `1`
 - `bones` search with no matches: `0`
@@ -593,8 +677,8 @@ Command examples:
 - `rig` with actionable diagnostics: `1`
 - `rig --role` or `rig --unmapped` with no matches: `0`
 - Unsafe or conflicting `rig` options: `2`
-- Missing file passed to `hash`, `inspect`, `scan`, `doctor`, `bones`, or
-  `rig`: `2`
+- Missing file passed to `hash`, `inspect`, `scan`, `roundtrip`, `doctor`,
+  `bones`, or `rig`: `2`
 - Unexpected scanner or diagnostics failure: `3`
 
 ## Registry schema 0.3
@@ -667,9 +751,14 @@ policy.
 
 ## Safety and trust boundaries
 
-The tool is read-only for model and texture inputs. It does not:
+The tool keeps model and texture inputs read-only. Only the explicit
+`roundtrip` command writes a PMX copy, and it requires a distinct output path,
+validates before writing, refuses overwrite by default, and never writes in
+place. The project does not:
 
-- Modify or rewrite PMX/PMD files
+- Modify or rewrite an input PMX/PMD file in place
+- Write any model from `validate`, `hash`, `inspect`, `scan`, `doctor`, `bones`,
+  or `rig`
 - Repair corrupt geometry, bones, morphs, or physics
 - Rename, reparent, reposition, or change the flags of bones
 - Apply inferred roles, aliases, hierarchy changes, or bone maps to a model
@@ -684,11 +773,13 @@ The tool is read-only for model and texture inputs. It does not:
 
 All binary counts, variable-length strings, indices, and aggregate record
 budgets are bounded before or while they are read. Malformed input is returned
-as structured errors instead of being trusted.
+as structured errors instead of being trusted. Writer validation checks counts,
+index capacity, cross-section references, version requirements, finite values,
+and encodability before a destination is created.
 
 ## Real-model verification
 
-Version 0.6.0 was verified against a production-size PMX 2.0 model without
+Version 0.7.0 was verified against a production-size PMX 2.0 model without
 committing or redistributing that model.
 
 Verification summary:
@@ -728,6 +819,14 @@ Rig diagnostic codes: ambiguous_semantic_role, missing_expected_role,
 False duplicate, side-conflict, and asymmetry diagnostics: 0
 Canonical bone-map UTF-8 JSON export: valid
 Rig Analyzer exit code with actionable warnings: 1
+PMX document reference validation: valid
+Parse -> serialize -> parse semantic equality: valid
+Round-trip source/output size: 4,912,416 / 4,912,416 bytes
+Round-trip SHA-256 digests: matched
+Round-trip output: byte-identical
+Input model unchanged: yes
+Temporary round-trip output removed: yes
+Private round-trip elapsed time: 9.823 seconds
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -741,7 +840,7 @@ Run all tests:
 python -m unittest discover -s tests -v
 ```
 
-At the real-model validation checkpoint, version 0.6.0 includes 475 unit tests
+At the release-readiness checkpoint, version 0.7.0 includes 563 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -749,6 +848,14 @@ covering:
 - All supported PMX structural sections and index sizes
 - Cross-reference and finite-value validation
 - Complete-file accounting and trailing bytes
+- Immutable complete PMX document records and section readers
+- Deterministic PMX 2.0/2.1 serialization
+- UTF-8/UTF-16LE output and uniform or mixed 1/2/4-byte index widths
+- BDEF1, BDEF2, BDEF4, SDEF, and QDEF round-trip coverage
+- Every supported morph type and complete PMX physics round-trip coverage
+- Cross-section writer validation and invalid-document write prevention
+- Safe output refusal, explicit overwrite, alias detection, and atomic output
+- `roundtrip` text/JSON CLI reporting and Windows Unicode paths
 - Texture-reference summaries
 - Dependency path portability and filesystem state
 - `scan` and `doctor` text/JSON output
@@ -779,16 +886,16 @@ repository does not require copyrighted model fixtures.
 ## GitHub Actions
 
 The workflow at `.github/workflows/validate.yml` runs on pushes and pull
-requests. It performs:
+requests across Ubuntu and Windows. It performs:
 
 1. Repository checkout
 2. Python 3.12 setup
 3. Dependency installation
 4. Python source compilation
 5. Full automated test discovery
-6. Exact `0.6.0` package-version assertion
-7. Top-level version, `scan --help`, `doctor --help`, `bones --help`, and
-   `rig --help` checks
+6. Exact `0.7.0` package-version assertion
+7. Top-level version, `scan --help`, `roundtrip --help`, `doctor --help`,
+   `bones --help`, and `rig --help` checks
 8. Private registry validation using legacy and explicit syntax
 9. Registered placeholder SHA-256 verification
 
@@ -815,6 +922,14 @@ mmd-asset-registry/
 |   |-- hashing.py
 |   |-- model_inspection.py
 |   |-- model_scanning.py
+|   |-- pmx/
+|   |   |-- document.py
+|   |   |-- errors.py
+|   |   |-- reader.py
+|   |   |-- roundtrip.py
+|   |   |-- validation.py
+|   |   |-- writer.py
+|   |   `-- sections/
 |   |-- reporting.py
 |   |-- rig_analysis.py
 |   |-- rig_cli.py
@@ -840,6 +955,11 @@ mmd-asset-registry/
 |   |-- test_doctor_cli.py
 |   |-- test_model_inspection.py
 |   |-- test_model_scanning.py
+|   |-- pmx_roundtrip_fixtures.py
+|   |-- test_pmx_document.py
+|   |-- test_pmx_roundtrip.py
+|   |-- test_pmx_roundtrip_cli.py
+|   |-- test_pmx_writer.py
 |   |-- test_pmx_*_scanning.py
 |   |-- test_release_readiness.py
 |   |-- test_reporting.py
@@ -851,15 +971,17 @@ mmd-asset-registry/
 |-- CHANGELOG.md
 |-- check_assets.py
 |-- README.md
+|-- RELEASE_CHECKLIST.md
 `-- requirements.txt
 ```
 
 ## Current limitations
 
-Version 0.6.0 does not:
+Version 0.7.0 does not:
 
 - Structurally scan PMD beyond header inspection
-- Write or edit PMX/PMD files
+- Edit PMX/PMD input files in place
+- Provide high-level model editing operations beyond verified PMX copy output
 - Repair or transform model data
 - Diagnose non-texture external dependencies
 - Register scan results back into `assets.yaml`
@@ -875,7 +997,7 @@ Version 0.6.0 does not:
 
 ## Roadmap
 
-Planned directions after 0.6.0:
+Planned directions after 0.7.0:
 
 - Multilingual PMX naming with external, reviewable dictionaries
 - Integration of exported canonical bone maps with animation pipelines
@@ -885,5 +1007,6 @@ Planned directions after 0.6.0:
 - Batch scan and doctor commands
 - Safe registry updates from scan results
 - First desktop model inspector GUI
-- Safe PMX metadata, material, and texture-path writing
+- Safe typed PMX metadata, material, and texture-path editing built on verified
+  copy output
 - Later bone, morph, transform, vertex, and weight editing workflows

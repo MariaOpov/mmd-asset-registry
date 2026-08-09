@@ -11,6 +11,7 @@ from typing import Any, Sequence
 import yaml
 
 from mmd_registry import __version__
+from mmd_registry.binary_reader import BinaryParseError
 from mmd_registry.bone_cli import run_bones_command
 from mmd_registry.constants import VALID_MODES
 from mmd_registry.dependency_diagnostics import (
@@ -22,6 +23,13 @@ from mmd_registry.model_inspection import inspect_model_header
 from mmd_registry.model_scanning import (
     PmxHeaderScanResult,
     scan_pmx_structure,
+)
+from mmd_registry.pmx.errors import PmxValidationError
+from mmd_registry.pmx.roundtrip import (
+    PmxRoundTripPathError,
+    PmxRoundTripResult,
+    PmxRoundTripVerificationError,
+    roundtrip_pmx,
 )
 from mmd_registry.reporting import (
     build_json_report,
@@ -41,6 +49,7 @@ COMMAND_NAMES = frozenset(
         "hash",
         "inspect",
         "scan",
+        "roundtrip",
         "doctor",
         "bones",
         "rig",
@@ -174,7 +183,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "Validate MMD assets, calculate SHA-256 hashes, inspect "
             "PMX/PMD headers, structurally scan PMX models, and "
             "diagnose texture dependencies, explore PMX bones, or "
-            "analyze PMX rigs."
+            "analyze PMX rigs, with explicit safe PMX round-trip output."
         ),
     )
 
@@ -250,6 +259,36 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the complete scan result as JSON.",
+    )
+
+    roundtrip_parser = subparsers.add_parser(
+        "roundtrip",
+        help="Write a verified PMX copy to a distinct output path.",
+        description=(
+            "Parse, validate, serialize, and semantically verify one PMX before "
+            "writing a distinct output file. The input is never modified."
+        ),
+    )
+    roundtrip_parser.add_argument(
+        "input",
+        help="Path to the source PMX file.",
+    )
+    roundtrip_parser.add_argument(
+        "output",
+        help="Path for the new PMX file.",
+    )
+    roundtrip_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Replace an existing distinct output file. Input and output may "
+            "never refer to the same file."
+        ),
+    )
+    roundtrip_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the verified round-trip result as JSON.",
     )
 
     doctor_parser = subparsers.add_parser(
@@ -718,6 +757,110 @@ def _run_scan(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _print_roundtrip_result(result: PmxRoundTripResult) -> None:
+    """Print one successful verified PMX round-trip report."""
+
+    print(f"Input: {result.input_path.as_posix()}")
+    print(f"Output: {result.output_path.as_posix()}")
+    print("Status: ok")
+    print(f"Version: {result.version:.1f}")
+    print(f"Encoding: {result.encoding}")
+    print(f"Model name: {result.model_name}")
+    print("Semantic equality: yes")
+    print(f"Byte-identical: {'yes' if result.byte_identical else 'no'}")
+    print(f"Input size: {result.input_size}")
+    print(f"Output size: {result.output_size}")
+    print(f"Input SHA-256: {result.input_sha256}")
+    print(f"Output SHA-256: {result.output_sha256}")
+    print("Sections:")
+    for name, count in result.section_counts:
+        print(f"  {name}: {count}")
+
+
+def _print_roundtrip_error(
+    input_path: Path,
+    output_path: Path,
+    message: str,
+    *,
+    json_output: bool,
+    error_type: str,
+) -> None:
+    """Print one stable path, document, or verification failure."""
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "input_path": input_path.as_posix(),
+                    "output_path": output_path.as_posix(),
+                    "error_type": error_type,
+                    "errors": [message],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    print(f"[ERROR] roundtrip: {message}", file=sys.stderr)
+
+
+def _run_roundtrip(arguments: argparse.Namespace) -> int:
+    """Write one explicitly requested and semantically verified PMX copy."""
+
+    input_path = Path(arguments.input)
+    output_path = Path(arguments.output)
+    try:
+        result = roundtrip_pmx(
+            input_path,
+            output_path,
+            overwrite=arguments.overwrite,
+        )
+    except PmxRoundTripPathError as error:
+        _print_roundtrip_error(
+            input_path,
+            output_path,
+            str(error),
+            json_output=arguments.json,
+            error_type="path_policy",
+        )
+        return 2
+    except (BinaryParseError, PmxValidationError) as error:
+        _print_roundtrip_error(
+            input_path,
+            output_path,
+            str(error),
+            json_output=arguments.json,
+            error_type="invalid_pmx",
+        )
+        return 1
+    except PmxRoundTripVerificationError as error:
+        _print_roundtrip_error(
+            input_path,
+            output_path,
+            str(error),
+            json_output=arguments.json,
+            error_type="verification",
+        )
+        return 3
+    except OSError as error:
+        _print_roundtrip_error(
+            input_path,
+            output_path,
+            f"File operation failed: {error}",
+            json_output=arguments.json,
+            error_type="io",
+        )
+        return 2
+
+    if arguments.json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        _print_roundtrip_result(result)
+    return 0
+
+
 def _doctor_status(
     scan_result: PmxHeaderScanResult,
     diagnostics: TextureDependencyDiagnostics | None,
@@ -958,6 +1101,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "scan":
         return _run_scan(arguments)
+
+    if arguments.command == "roundtrip":
+        return _run_roundtrip(arguments)
 
     if arguments.command == "doctor":
         return _run_doctor(arguments)

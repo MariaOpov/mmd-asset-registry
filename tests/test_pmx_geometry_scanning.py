@@ -107,6 +107,9 @@ class PmxGeometryScanningTests(unittest.TestCase):
         result = scan_pmx_structure(fixture)
 
         self.assertEqual(result.status, "error")
+        self.assertEqual(result.vertex_count, 1)
+        self.assertIsNone(result.surface_index_count)
+        self.assertIsNone(result.triangle_count)
         self.assertTrue(
             any("invalid PMX vertex deform type: 9" in error for error in result.errors)
         )

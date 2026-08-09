@@ -2,6 +2,67 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.0 - 2026-08-09
+
+### Added
+
+- Immutable edit plans, typed model/texture/material operations, and ordered
+  before/after audit records independent from CLI and filesystem layers.
+- Pure metadata editing for all four PMX model-information fields with exact
+  UTF-8 and UTF-16LE encoding validation and explicit no-op handling.
+- Safe replacement of one existing indexed texture path with portable relative
+  path policy and no add, delete, reorder, or texture-file operation.
+- Existing material name, memo, texture/sphere/toon reference, diffuse,
+  specular, ambient, drawing flag, edge color, and edge-scale editing without
+  exposing material surface partition changes.
+- A strict JSON edit-plan schema with exact JSON types, unknown-field and
+  duplicate-target rejection, contextual operation paths, Unicode support, and
+  optional expected source SHA-256.
+- A complete pure edit engine with deterministic audit merging, final-document
+  validation, serialize/reparse semantic verification, and stable text/JSON
+  previews.
+- An `edit` CLI command supporting no-output `--dry-run`, stable Unicode-safe
+  text/JSON reports, explicit distinct output, and opt-in `--overwrite`.
+- Verified atomic output with input/output alias rejection, symlink and hardlink
+  detection, no-clobber creation, temporary-file cleanup, source path/hash
+  re-verification, and stable exit codes.
+- A generated edit matrix covering PMX 2.0/2.1, UTF-8/UTF-16LE, uniform and
+  mixed 1/2/4-byte indices, deterministic output, and all seven combinations
+  of model, texture, and material operation categories.
+- An ephemeral private-model validation harness that creates and removes its
+  plan/output automatically, verifies only intended changes, checks every
+  unrelated section and reference, and emits reports without absolute paths.
+- Ubuntu and Windows release gates for edit command help, compatibility matrix,
+  private-validation harness tests, and the complete 740 automated tests.
+
+### Verified
+
+- All 31 generated header/index/category edit combinations produced identical
+  repeated previews, audit ordering, serialized bytes, and verified output.
+- A private production model using PMX 2.0 and UTF-16LE passed metadata plus
+  material text/property editing with three exact changed fields.
+- The private production model retained its 4,912,416-byte source size and
+  matching before/after SHA-256 while preserving 31,387 vertices, 114,390
+  surface indices, 11 texture declarations, 25 materials, 342 bones, 59
+  morphs, 12 display frames, 221 rigid bodies, and 299 joints.
+- Private output reparsing, complete reference validation, intended semantic
+  equality, unrelated-section identity, texture-file immutability, and
+  temporary plan/output cleanup all passed.
+- The local release suite passed all 740 tests without copyrighted binary
+  fixtures or private production assets in the repository.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Existing `validate`, `hash`, `inspect`, `scan`, `roundtrip`, `doctor`, `bones`,
+  and `rig` behavior remains compatible.
+- PMX input is always read-only; `edit` output must remain distinct even when
+  `--overwrite` is supplied.
+- Version 0.8 does not edit vertices, UVs, weights, bones, IK, morphs, display
+  frames, physics, texture/material list structure, or material surface counts.
+- No private PMX, texture, output, absolute local path, or derived binary was
+  committed or redistributed.
+
 ## 0.7.0 - 2026-08-09
 
 ### Added

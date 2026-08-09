@@ -10,6 +10,7 @@ from mmd_registry.pmx.editing.engine import (
     PmxEditResult,
     apply_set_model_info,
     apply_set_texture_path,
+    apply_update_material,
 )
 from mmd_registry.pmx.editing.errors import PmxEditPlanError
 from mmd_registry.pmx.editing.operations import (
@@ -40,6 +41,7 @@ __all__ = [
     "UpdateMaterial",
     "apply_set_model_info",
     "apply_set_texture_path",
+    "apply_update_material",
     "validate_portable_texture_path",
     "validate_pmx_edit_plan",
 ]

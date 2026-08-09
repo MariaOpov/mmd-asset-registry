@@ -7,10 +7,38 @@ from dataclasses import dataclass, replace
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.editing.audit import PmxEditAudit, PmxEditChange
 from mmd_registry.pmx.editing.errors import PmxEditPlanError
-from mmd_registry.pmx.editing.operations import SetModelInfo, SetTexturePath
+from mmd_registry.pmx.editing.operations import (
+    SetModelInfo,
+    SetTexturePath,
+    UpdateMaterial,
+)
 from mmd_registry.pmx.editing.path_policy import validate_portable_texture_path
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.validation import validate_pmx_document
+
+
+_MATERIAL_TEXT_REFERENCE_FIELDS = (
+    "local_name",
+    "universal_name",
+    "memo",
+    "texture_index",
+    "sphere_texture_index",
+    "sphere_mode",
+    "toon_reference_mode",
+    "toon_reference_index",
+)
+
+_MATERIAL_VISUAL_FIELDS = frozenset(
+    {
+        "diffuse",
+        "specular",
+        "specular_strength",
+        "ambient",
+        "drawing_flags",
+        "edge_color",
+        "edge_scale",
+    }
+)
 
 
 def _is_plain_int(value: object) -> bool:
@@ -189,6 +217,121 @@ def apply_set_texture_path(
         target_fields={
             ("textures", operation.texture_index, "path"): "path",
         },
+    )
+
+    return PmxEditResult(
+        document=edited_document,
+        audit=PmxEditAudit(changes=changes),
+    )
+
+
+def apply_update_material(
+    document: PmxDocument,
+    operation: UpdateMaterial,
+    *,
+    operation_index: int = 0,
+) -> PmxEditResult:
+    """Purely update supported text and reference fields of one material."""
+
+    if not isinstance(document, PmxDocument):
+        raise TypeError("document must be a PmxDocument instance.")
+    if not isinstance(operation, UpdateMaterial):
+        raise TypeError("operation must be an UpdateMaterial instance.")
+    _validate_operation_index(operation_index)
+
+    if operation.material_index >= len(document.materials):
+        raise PmxEditPlanError(
+            (
+                f"material index {operation.material_index} is out of range; "
+                f"document contains {len(document.materials)} materials."
+            ),
+            operation_index=operation_index,
+            field="material_index",
+        )
+
+    for target in operation.targets():
+        if target.payload_field in _MATERIAL_VISUAL_FIELDS:
+            raise PmxEditPlanError(
+                (
+                    f"material visual field {target.payload_field!r} is not "
+                    "supported by the text/reference editing operation."
+                ),
+                operation_index=operation_index,
+                field=target.payload_field,
+            )
+
+    material = document.materials[operation.material_index]
+    requested_updates = {
+        field_name: getattr(operation, field_name)
+        for field_name in _MATERIAL_TEXT_REFERENCE_FIELDS
+        if getattr(operation, field_name) is not None
+    }
+    effective_updates = {
+        field_name: value
+        for field_name, value in requested_updates.items()
+        if getattr(material, field_name) != value
+    }
+
+    final_toon_mode = requested_updates.get(
+        "toon_reference_mode",
+        material.toon_reference_mode,
+    )
+    final_toon_index = requested_updates.get(
+        "toon_reference_index",
+        material.toon_reference_index,
+    )
+    if final_toon_mode == "shared" and not 0 <= final_toon_index <= 9:
+        field_name = (
+            "toon_reference_index"
+            if "toon_reference_index" in requested_updates
+            else "toon_reference_mode"
+        )
+        raise PmxEditPlanError(
+            "shared toon reference index must be a value from 0 through 9.",
+            operation_index=operation_index,
+            field=field_name,
+        )
+
+    changes = tuple(
+        PmxEditChange(
+            category="material",
+            target_index=operation.material_index,
+            target_name=material.local_name,
+            field_path=f"materials[{operation.material_index}].{field_name}",
+            before=getattr(material, field_name),
+            after=effective_updates[field_name],
+            operation_index=operation_index,
+        )
+        for field_name in _MATERIAL_TEXT_REFERENCE_FIELDS
+        if field_name in effective_updates
+    )
+
+    edited_document = document
+    if effective_updates:
+        updated_material = replace(material, **effective_updates)
+        materials = (
+            *document.materials[: operation.material_index],
+            updated_material,
+            *document.materials[operation.material_index + 1 :],
+        )
+        edited_document = replace(document, materials=materials)
+
+    target_fields = {
+        ("materials", operation.material_index, field_name): field_name
+        for field_name in effective_updates
+    }
+    if (
+        "toon_reference_mode" in effective_updates
+        and "toon_reference_index" not in effective_updates
+    ):
+        target_fields[
+            ("materials", operation.material_index, "toon_reference_index")
+        ] = "toon_reference_mode"
+
+    _validate_edited_document(
+        edited_document,
+        operation_index=operation_index,
+        target_fields=target_fields,
     )
 
     return PmxEditResult(

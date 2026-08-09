@@ -1542,3 +1542,64 @@ class PmxSoftBody:
             "pinned_vertex_count": len(self.pinned_vertex_indices),
             "pinned_vertex_indices": list(self.pinned_vertex_indices),
         }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxDocument:
+    """One complete immutable PMX document ready for validation or writing."""
+
+    header: PmxHeader
+    model_info: PmxModelInfo
+    geometry: PmxGeometry
+    texture_paths: tuple[str, ...]
+    materials: tuple[PmxMaterial, ...]
+    bones: tuple[PmxBone, ...]
+    morphs: tuple[PmxMorph, ...]
+    display_frames: tuple[PmxDisplayFrame, ...]
+    rigid_bodies: tuple[PmxRigidBody, ...]
+    joints: tuple[PmxJoint, ...]
+    soft_bodies: tuple[PmxSoftBody, ...]
+    trailing_data: bytes = b""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.header, PmxHeader):
+            raise TypeError("header must be a PmxHeader instance.")
+        if not isinstance(self.model_info, PmxModelInfo):
+            raise TypeError("model_info must be a PmxModelInfo instance.")
+        if not isinstance(self.geometry, PmxGeometry):
+            raise TypeError("geometry must be a PmxGeometry instance.")
+
+        tuple_fields = (
+            ("texture_paths", str),
+            ("materials", PmxMaterial),
+            ("bones", PmxBone),
+            ("morphs", PmxMorph),
+            ("display_frames", PmxDisplayFrame),
+            ("rigid_bodies", PmxRigidBody),
+            ("joints", PmxJoint),
+            ("soft_bodies", PmxSoftBody),
+        )
+        for field_name, expected_type in tuple_fields:
+            value = getattr(self, field_name)
+            if not isinstance(value, tuple):
+                raise TypeError(f"{field_name} must be a tuple.")
+            if not all(isinstance(item, expected_type) for item in value):
+                raise TypeError(
+                    f"{field_name} must contain only "
+                    f"{expected_type.__name__} values."
+                )
+
+        if not isinstance(self.trailing_data, bytes):
+            raise TypeError("trailing_data must be immutable bytes.")
+
+    @property
+    def vertices(self) -> tuple[PmxVertex, ...]:
+        """Return the ordered PMX vertex records."""
+
+        return self.geometry.vertices
+
+    @property
+    def surface_indices(self) -> tuple[int, ...]:
+        """Return the ordered PMX triangle indices."""
+
+        return self.geometry.surface_indices

@@ -11,8 +11,14 @@ permissions:
 
 jobs:
   validate:
-    name: Python 3.12 validation
-    runs-on: ubuntu-latest
+    name: Python 3.12 validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
 
     steps:
       - name: Check out repository
@@ -37,9 +43,10 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.6.0'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.7.0'"
           python check_assets.py --version
           python check_assets.py scan --help
+          python check_assets.py roundtrip --help
           python check_assets.py doctor --help
           python check_assets.py bones --help
           python check_assets.py rig --help

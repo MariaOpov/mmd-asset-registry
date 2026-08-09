@@ -2,6 +2,60 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.7.0 - 2026-08-09
+
+### Added
+
+- A complete immutable `PmxDocument` retaining header settings, model text,
+  geometry and deform payloads, textures, materials, bones and IK, morph
+  offsets, display frames, rigid bodies, joints, soft bodies, and trailing
+  data required for serialization.
+- Modular typed PMX section readers and a complete document loader independent
+  from CLI, scanner-presentation, and UI layers.
+- A deterministic PMX writer with little-endian output, UTF-8 and UTF-16LE
+  encoding, PMX 2.0 and 2.1 section rules, and 1/2/4-byte index widths.
+- Cross-section validation for counts, index capacity, references, versioned
+  payloads, text encoding, finite floats, flag-controlled bone data, material
+  surface coverage, morph offsets, IK, and physics records.
+- Failure-safe file output that validates before writing, refuses accidental
+  overwrite by default, and uses atomic replacement for explicit overwrite.
+- A reusable `roundtrip_pmx` API that verifies parse → serialize → parse
+  semantic equality before creating a distinct output file.
+- A `roundtrip` CLI command with text and JSON reports, explicit input and
+  output paths, immutable-input policy, alias detection, and opt-in
+  `--overwrite` for a separate output.
+- A generated round-trip matrix covering PMX 2.0/2.1, UTF-8/UTF-16LE, uniform
+  and mixed 1/2/4-byte indices, BDEF1/BDEF2/BDEF4/SDEF/QDEF, all supported
+  morph types, materials, bones, IK, display frames, rigid bodies, every joint
+  type, and soft bodies.
+- Ubuntu and Windows GitHub Actions validation for the complete release suite.
+- Release-readiness coverage and a publication checklist, bringing the suite
+  to 563 automated tests without copyrighted binary fixtures.
+
+### Verified
+
+- All generated fixtures pass semantic parse → serialize → parse comparison,
+  deterministic repeat serialization, and byte-stability checks.
+- A private production-size PMX 2.0 UTF-16LE model containing 31,387 vertices,
+  38,130 triangles, 342 bones, 59 morphs, 221 rigid bodies, and 299 joints
+  passed complete reference validation and semantic round-trip comparison.
+- The private model produced byte-identical 4,912,416-byte source and output
+  files with the same SHA-256 digest; the input remained unchanged and the
+  temporary output was removed.
+- Unicode input/output paths and JSON output were verified through redirected
+  Windows streams.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Existing `validate`, `hash`, `inspect`, `scan`, `doctor`, `bones`, and `rig`
+  behavior remains compatible and read-only for model inputs.
+- PMD 1.0 remains supported for header inspection only.
+- PMX writing is explicit and copy-only: the writer does not repair, rename,
+  reparent, reweight, or modify an input model in place.
+- The private production model and its textures were not committed or
+  redistributed.
+
 ## 0.6.0 - 2026-08-08
 
 ### Added

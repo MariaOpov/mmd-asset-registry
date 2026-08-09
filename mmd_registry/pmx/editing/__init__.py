@@ -13,6 +13,10 @@ from mmd_registry.pmx.editing.engine import (
     apply_update_material,
 )
 from mmd_registry.pmx.editing.errors import PmxEditPlanError
+from mmd_registry.pmx.editing.json_loader import (
+    load_pmx_edit_plan,
+    parse_pmx_edit_plan_json,
+)
 from mmd_registry.pmx.editing.operations import (
     PmxEditOperation,
     SetModelInfo,
@@ -44,6 +48,8 @@ __all__ = [
     "apply_set_texture_path",
     "apply_update_material",
     "canonicalize_pmx_float32",
+    "load_pmx_edit_plan",
+    "parse_pmx_edit_plan_json",
     "validate_portable_texture_path",
     "validate_pmx_edit_plan",
 ]

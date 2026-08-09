@@ -4,26 +4,28 @@ A lightweight, safety-first Python toolkit for tracking MMD asset provenance,
 creator credits, local source files, SHA-256 integrity, model metadata,
 PMX structure, texture dependencies, bone hierarchies, bone semantics,
 rig diagnostics, canonical bone maps, complete typed PMX documents, and known
-usage restrictions.
+usage restrictions. It also provides bounded declarative editing for model
+metadata, indexed texture paths, and existing material properties.
 
 The project is designed as a validation and diagnostics gate before assets
 enter an automated MMD, Blender, or anime-video pipeline. All established
 inspection and analysis commands keep model and texture inputs read-only. The
-explicit `roundtrip` command can write a verified PMX copy to a distinct path;
-it never writes in place, repairs data, or redistributes an asset.
+explicit `roundtrip` and `edit` commands can write verified PMX output to a
+distinct path; neither command writes in place, repairs data, or redistributes
+an asset.
 
 ## Current version
 
 ```text
-Tool version: 0.7.0
+Tool version: 0.8.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.7.0
-adds a complete typed PMX document model, deterministic writer, round-trip
-validation, and explicit copy-only CLI output without changing the persistent
-registry schema.
+Tool version and registry schema are intentionally independent. Version 0.8.0
+adds strict edit plans, pure typed metadata/texture/material transformations,
+deterministic audit and preview reports, and verified atomic output without
+changing the persistent registry schema.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -54,6 +56,36 @@ The registry records this information in YAML and validates it before a
 pipeline continues. The scanner and doctor add technical evidence, but the
 tool does not automatically determine legal permission or replace review of
 the creator's original terms.
+
+## Version 0.8 features
+
+Version 0.8.0 introduces the first safety-bounded PMX editing core:
+
+- Immutable edit plans and operations for the four model-information fields,
+  one existing indexed texture path, and editable fields of one existing
+  material
+- Material text, texture/sphere/toon references, diffuse/specular/ambient
+  values, drawing flags, edge color, and edge scale editing
+- A strict UTF-8 JSON plan schema with exact types, unknown-field rejection,
+  duplicate-target rejection, and optional `expected_source_sha256`
+- Pure in-memory transformations that leave the source `PmxDocument` unchanged
+  and emit deterministic typed before/after audit records
+- Semantically verified text and JSON previews through `edit --dry-run`
+- Safe write mode that requires a distinct `.pmx` output, refuses overwrite by
+  default, detects symlink and hardlink aliases, and atomically commits only
+  verified serialized bytes
+- Source-path and SHA-256 verification immediately before output commit, with
+  temporary-file cleanup on validation, serialization, or filesystem failure
+- Generated edit coverage across PMX 2.0/2.1, UTF-8/UTF-16LE, uniform and mixed
+  1/2/4-byte index widths, and every model/texture/material category
+  combination
+- An ephemeral private-model validation harness that checks exact intended
+  changes, unchanged sections and references, untouched texture files, source
+  integrity, and automatic temporary plan/output cleanup
+- Ubuntu and Windows CI coverage plus 740 automated unit tests at release
+  readiness
+
+All version 0.7 capabilities remain available.
 
 ## Version 0.7 features
 
@@ -200,6 +232,7 @@ hash      Calculate or verify a file SHA-256 hash
 inspect   Inspect a PMX or PMD model header
 scan      Structurally scan a PMX model
 roundtrip Write a verified PMX copy to a distinct output path
+edit      Preview or safely write a strict declarative PMX edit plan
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
 rig       Resolve bone semantics, diagnose a rig, and build a bone map
@@ -216,13 +249,14 @@ validation.
 | Complete structural scan | Yes | Yes | No |
 | Complete document load and write | Yes | Yes | No |
 | Verified round-trip copy | Yes | Yes | No |
+| Safe declarative metadata/material edit | Yes | Yes | No |
 | Texture dependency doctor | Yes | Yes | No |
 | Bone Explorer | Yes | Yes | No |
 | Rig Analyzer | Yes | Yes | No |
 
 PMD 1.0 is currently supported for header inspection only. `scan`, `roundtrip`,
-`doctor`, `bones`, and `rig` reject PMD files instead of pretending to perform
-a partial structural operation.
+`edit`, `doctor`, `bones`, and `rig` reject PMD files instead of pretending to
+perform a partial structural operation.
 
 ## Validate a registry
 
@@ -387,10 +421,9 @@ needed; use text output for a compact summary.
 
 ## Write a verified PMX round-trip copy
 
-The `roundtrip` command is the only CLI operation that writes a model file. It
-requires separate input and output paths, validates the complete document, and
-performs parse → serialize → parse semantic verification before output is
-created:
+The `roundtrip` command writes an unchanged semantic copy. It requires separate
+input and output paths, validates the complete document, and performs parse →
+serialize → parse semantic verification before output is created:
 
 ```bash
 python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx
@@ -426,6 +459,68 @@ python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx --json
 Byte-identical output is verified when it occurs, but the architectural
 contract is semantic and structural equivalence. The writer does not repair,
 rename, reparent, translate, or otherwise reinterpret model data.
+
+## Preview or write a safe PMX edit plan
+
+The `edit` command accepts a strict UTF-8 JSON plan. Schema version `1` supports
+model information, one existing indexed texture path, and existing material
+text, references, and visual properties. A representative plan is:
+
+```json
+{
+  "schema_version": 1,
+  "expected_source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "operations": [
+    {
+      "op": "set_model_info",
+      "local_name": "Edited Model",
+      "universal_comments": "Reviewed metadata"
+    },
+    {
+      "op": "set_texture_path",
+      "texture_index": 0,
+      "path": "textures/body.png"
+    },
+    {
+      "op": "update_material",
+      "material_index": 0,
+      "memo": "Reviewed material",
+      "edge_scale": 1.0
+    }
+  ]
+}
+```
+
+Preview every operation without creating or modifying an output:
+
+```bash
+python check_assets.py edit path/to/input.pmx --plan edit.json --dry-run
+python check_assets.py edit path/to/input.pmx --plan edit.json --dry-run --json
+```
+
+Write a new distinct output after full validation and semantic verification:
+
+```bash
+python check_assets.py edit path/to/input.pmx path/to/output.pmx --plan edit.json
+```
+
+Replace an existing separate output only with explicit permission:
+
+```bash
+python check_assets.py edit path/to/input.pmx path/to/output.pmx --plan edit.json --overwrite
+```
+
+Write mode serializes entirely in memory, reparses and compares the intended
+document, verifies that the source path and SHA-256 remain unchanged, writes a
+temporary file in the output directory, and atomically commits it. Input and
+output aliases remain forbidden with `--overwrite`. A failure before commit
+does not expose a partial PMX output.
+
+Version 0.8 does not add, delete, or reorder textures or materials. It does not
+edit material surface partitions and does not edit vertices, bones, morphs,
+display frames, IK, weights, or physics. Texture-path editing changes only the
+selected PMX declaration; it never copies, renames, converts, or deletes a
+texture file.
 
 ## Explore PMX bones
 
@@ -640,7 +735,8 @@ Rig Analyzer returns exit code `1` when its structured report contains
 actionable warnings or errors. JSON output preserves Unicode names and paths
 and is configured as UTF-8 even when redirected by Windows CMD. A successful
 `roundtrip` reports semantic equality and output integrity before returning
-exit code `0`.
+exit code `0`. A successful `edit` preview or write reports the audit summary,
+source integrity, semantic verification, and whether output was written.
 
 ## Exit codes
 
@@ -667,6 +763,11 @@ Command examples:
 - `roundtrip` on malformed PMX data: `1`
 - `roundtrip` with an input/output alias or existing unapproved output: `2`
 - `roundtrip` internal semantic or output verification failure: `3`
+- `edit --dry-run` with a valid plan, including a no-op plan: `0`
+- `edit` with verified atomic distinct output: `0`
+- `edit` with an invalid PMX, plan, reference, or verification result: `1`
+- `edit` with missing output, unsafe alias, or unapproved overwrite: `2`
+- `edit` with an unexpected internal failure: `3`
 - `doctor` with all referenced textures present: `0`
 - `doctor` with a referenced texture missing: `1`
 - `bones` search with no matches: `0`
@@ -677,8 +778,8 @@ Command examples:
 - `rig` with actionable diagnostics: `1`
 - `rig --role` or `rig --unmapped` with no matches: `0`
 - Unsafe or conflicting `rig` options: `2`
-- Missing file passed to `hash`, `inspect`, `scan`, `roundtrip`, `doctor`,
-  `bones`, or `rig`: `2`
+- Missing file passed to `hash`, `inspect`, `scan`, `roundtrip`, `edit`,
+  `doctor`, `bones`, or `rig`: `2`
 - Unexpected scanner or diagnostics failure: `3`
 
 ## Registry schema 0.3
@@ -752,9 +853,9 @@ policy.
 ## Safety and trust boundaries
 
 The tool keeps model and texture inputs read-only. Only the explicit
-`roundtrip` command writes a PMX copy, and it requires a distinct output path,
-validates before writing, refuses overwrite by default, and never writes in
-place. The project does not:
+`roundtrip` and `edit` commands write PMX output. Both require a distinct output
+path, validate before writing, refuse overwrite by default, reject aliases,
+and never write in place. The project does not:
 
 - Modify or rewrite an input PMX/PMD file in place
 - Write any model from `validate`, `hash`, `inspect`, `scan`, `doctor`, `bones`,
@@ -763,8 +864,11 @@ place. The project does not:
 - Rename, reparent, reposition, or change the flags of bones
 - Apply inferred roles, aliases, hierarchy changes, or bone maps to a model
 - Automatically translate Japanese, Chinese, or Korean bone names
-- Change texture paths
 - Copy, rename, convert, or delete textures
+- Add, delete, or reorder texture or material records
+- Edit material surface partitions
+- Edit vertices, normals, UVs, weights, bones, IK, morphs, display frames, or
+  physics records
 - Import assets into Blender or MMD
 - Integrate directly with `mmd_tools`
 - Download assets or scrape creator pages
@@ -779,7 +883,7 @@ and encodability before a destination is created.
 
 ## Real-model verification
 
-Version 0.7.0 was verified against a production-size PMX 2.0 model without
+Version 0.8.0 was verified against a production-size PMX 2.0 model without
 committing or redistributing that model.
 
 Verification summary:
@@ -827,6 +931,14 @@ Round-trip output: byte-identical
 Input model unchanged: yes
 Temporary round-trip output removed: yes
 Private round-trip elapsed time: 9.823 seconds
+Private edit fields changed: 3
+Private edit metadata field: exact
+Private edit material text/property fields: exact
+Private edit output parse/reference validation: valid
+Private edit unrelated sections/counts: unchanged
+Private edit source SHA-256 before/after: matched
+Private edit temporary plan/output removed: yes
+Private texture files touched: no
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -834,13 +946,13 @@ contain the third-party production model or its textures.
 
 ## Automated tests
 
-Run all tests:
+Run all tests compactly:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -q
 ```
 
-At the release-readiness checkpoint, version 0.7.0 includes 563 unit tests
+At the release-readiness checkpoint, version 0.8.0 includes 740 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -856,6 +968,19 @@ covering:
 - Cross-section writer validation and invalid-document write prevention
 - Safe output refusal, explicit overwrite, alias detection, and atomic output
 - `roundtrip` text/JSON CLI reporting and Windows Unicode paths
+- Immutable typed edit plans, operations, audit records, and exact no-op rules
+- Strict UTF-8 edit-plan JSON loading, contextual errors, exact JSON types,
+  optional source SHA-256, and duplicate-target rejection
+- Pure model metadata, indexed texture path, material text/reference, and
+  material visual-property transformations
+- Deterministic edit previews, audit ordering, write reports, and serialized
+  output bytes
+- PMX edit output alias refusal, no-clobber creation, explicit atomic
+  overwrite, source re-verification, and temporary-file cleanup
+- PMX 2.0/2.1 × UTF-8/UTF-16LE × uniform/mixed index-width edit matrices and
+  all seven model/texture/material category combinations
+- Ephemeral private-model validation, cleanup-on-failure, privacy-safe reports,
+  and untouched texture files
 - Texture-reference summaries
 - Dependency path portability and filesystem state
 - `scan` and `doctor` text/JSON output
@@ -893,11 +1018,12 @@ requests across Ubuntu and Windows. It performs:
 3. Dependency installation
 4. Python source compilation
 5. Full automated test discovery
-6. Exact `0.7.0` package-version assertion
-7. Top-level version, `scan --help`, `roundtrip --help`, `doctor --help`,
-   `bones --help`, and `rig --help` checks
-8. Private registry validation using legacy and explicit syntax
-9. Registered placeholder SHA-256 verification
+6. Generated PMX edit matrix and private-validation harness tests
+7. Exact `0.8.0` package-version assertion
+8. Top-level version plus `scan`, `roundtrip`, `edit`, `doctor`, `bones`, and
+   `rig` help checks
+9. Private registry validation using legacy and explicit syntax
+10. Registered placeholder SHA-256 verification
 
 ## Project structure
 
@@ -924,6 +1050,15 @@ mmd-asset-registry/
 |   |-- model_scanning.py
 |   |-- pmx/
 |   |   |-- document.py
+|   |   |-- editing/
+|   |   |   |-- audit.py
+|   |   |   |-- engine.py
+|   |   |   |-- json_loader.py
+|   |   |   |-- operations.py
+|   |   |   |-- output.py
+|   |   |   |-- plan.py
+|   |   |   |-- preview.py
+|   |   |   `-- private_validation.py
 |   |   |-- errors.py
 |   |   |-- reader.py
 |   |   |-- roundtrip.py
@@ -957,6 +1092,9 @@ mmd-asset-registry/
 |   |-- test_model_scanning.py
 |   |-- pmx_roundtrip_fixtures.py
 |   |-- test_pmx_document.py
+|   |-- test_pmx_edit_generated_matrix.py
+|   |-- test_pmx_edit_safe_output.py
+|   |-- test_pmx_private_edit_validation.py
 |   |-- test_pmx_roundtrip.py
 |   |-- test_pmx_roundtrip_cli.py
 |   |-- test_pmx_writer.py
@@ -977,11 +1115,14 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.7.0 does not:
+Version 0.8.0 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
-- Provide high-level model editing operations beyond verified PMX copy output
+- Add, delete, or reorder textures or materials
+- Edit material surface partitions
+- Edit vertices, normals, UVs, weights, bones, IK, morphs, display frames, or
+  physics
 - Repair or transform model data
 - Diagnose non-texture external dependencies
 - Register scan results back into `assets.yaml`
@@ -997,7 +1138,7 @@ Version 0.7.0 does not:
 
 ## Roadmap
 
-Planned directions after 0.7.0:
+Planned directions after 0.8.0:
 
 - Multilingual PMX naming with external, reviewable dictionaries
 - Integration of exported canonical bone maps with animation pipelines
@@ -1007,6 +1148,5 @@ Planned directions after 0.7.0:
 - Batch scan and doctor commands
 - Safe registry updates from scan results
 - First desktop model inspector GUI
-- Safe typed PMX metadata, material, and texture-path editing built on verified
-  copy output
+- Batch edit-plan preview and review workflows
 - Later bone, morph, transform, vertex, and weight editing workflows

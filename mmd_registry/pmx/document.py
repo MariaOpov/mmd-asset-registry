@@ -25,11 +25,53 @@ MAX_PMX_GLOBAL_COUNT: Final[int] = 64
 MIN_PMX_ADDITIONAL_UV_COUNT: Final[int] = 0
 MAX_PMX_ADDITIONAL_UV_COUNT: Final[int] = 4
 
+PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
+PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
+PMX_BONE_FLAG_TRANSLATABLE: Final[int] = 0x0004
+PMX_BONE_FLAG_VISIBLE: Final[int] = 0x0008
+PMX_BONE_FLAG_ENABLED: Final[int] = 0x0010
+PMX_BONE_FLAG_IK: Final[int] = 0x0020
+PMX_BONE_FLAG_LOCAL_APPEND: Final[int] = 0x0080
+PMX_BONE_FLAG_INHERIT_ROTATION: Final[int] = 0x0100
+PMX_BONE_FLAG_INHERIT_TRANSLATION: Final[int] = 0x0200
+PMX_BONE_FLAG_FIXED_AXIS: Final[int] = 0x0400
+PMX_BONE_FLAG_LOCAL_AXES: Final[int] = 0x0800
+PMX_BONE_FLAG_AFTER_PHYSICS: Final[int] = 0x1000
+PMX_BONE_FLAG_EXTERNAL_PARENT: Final[int] = 0x2000
+
+PMX_BONE_FLAG_DEFINITIONS: Final[tuple[tuple[int, str], ...]] = (
+    (PMX_BONE_FLAG_TAIL_INDEX, "tail_index"),
+    (PMX_BONE_FLAG_ROTATABLE, "rotatable"),
+    (PMX_BONE_FLAG_TRANSLATABLE, "translatable"),
+    (PMX_BONE_FLAG_VISIBLE, "visible"),
+    (PMX_BONE_FLAG_ENABLED, "enabled"),
+    (PMX_BONE_FLAG_IK, "ik"),
+    (PMX_BONE_FLAG_LOCAL_APPEND, "local_append"),
+    (PMX_BONE_FLAG_INHERIT_ROTATION, "inherit_rotation"),
+    (PMX_BONE_FLAG_INHERIT_TRANSLATION, "inherit_translation"),
+    (PMX_BONE_FLAG_FIXED_AXIS, "fixed_axis"),
+    (PMX_BONE_FLAG_LOCAL_AXES, "local_axes"),
+    (PMX_BONE_FLAG_AFTER_PHYSICS, "after_physics"),
+    (PMX_BONE_FLAG_EXTERNAL_PARENT, "external_parent"),
+)
+
 
 def _is_plain_int(value: object) -> bool:
     """Return whether value is an integer but not a boolean."""
 
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def decode_pmx_bone_flags(flags: int) -> tuple[str, ...]:
+    """Return stable names for recognized bits in one PMX bone flag word."""
+
+    if not _is_plain_int(flags):
+        raise TypeError("flags must be an integer.")
+
+    if not 0 <= flags <= 0xFFFF:
+        raise ValueError("flags must fit in one unsigned 16-bit integer.")
+
+    return tuple(name for bit, name in PMX_BONE_FLAG_DEFINITIONS if flags & bit)
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,4 +549,200 @@ class PmxMaterial:
             "toon_reference_index": self.toon_reference_index,
             "memo": self.memo,
             "surface_index_count": self.surface_index_count,
+        }
+
+
+PmxBoneTailMode: TypeAlias = Literal["bone", "offset"]
+
+
+@dataclass(frozen=True, slots=True)
+class PmxIkLink:
+    """One complete PMX inverse-kinematics link record."""
+
+    bone_index: int
+    angle_limits_enabled: bool
+    lower_limit: PmxVector3 | None
+    upper_limit: PmxVector3 | None
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.bone_index, "bone_index")
+
+        if not isinstance(self.angle_limits_enabled, bool):
+            raise TypeError("angle_limits_enabled must be a boolean.")
+
+        if self.angle_limits_enabled:
+            if self.lower_limit is None or self.upper_limit is None:
+                raise ValueError(
+                    "enabled IK angle limits require lower and upper vectors."
+                )
+        elif self.lower_limit is not None or self.upper_limit is not None:
+            raise ValueError(
+                "disabled IK angle limits cannot retain lower or upper vectors."
+            )
+
+        for field_name in ("lower_limit", "upper_limit"):
+            value = getattr(self, field_name)
+
+            if value is not None:
+                _validate_float_tuple(
+                    value,
+                    field_name=field_name,
+                    length=3,
+                )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "bone_index": self.bone_index,
+            "angle_limits_enabled": self.angle_limits_enabled,
+            "lower_limit": (
+                list(self.lower_limit) if self.lower_limit is not None else None
+            ),
+            "upper_limit": (
+                list(self.upper_limit) if self.upper_limit is not None else None
+            ),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxIk:
+    """One complete PMX bone inverse-kinematics definition."""
+
+    target_bone_index: int
+    loop_count: int
+    angle_limit: float
+    links: tuple[PmxIkLink, ...]
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.target_bone_index, "target_bone_index")
+        _validate_integer(self.loop_count, "loop_count")
+        _validate_float(self.angle_limit, "angle_limit")
+
+        if not isinstance(self.links, tuple):
+            raise TypeError("links must be a tuple.")
+
+        if not all(isinstance(link, PmxIkLink) for link in self.links):
+            raise TypeError("links must contain only PmxIkLink records.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "target_bone_index": self.target_bone_index,
+            "loop_count": self.loop_count,
+            "angle_limit": self.angle_limit,
+            "link_count": len(self.links),
+            "links": [link.to_dict() for link in self.links],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxBone:
+    """One complete PMX bone record including all flag-controlled data."""
+
+    local_name: str
+    universal_name: str
+    position: PmxVector3
+    parent_bone_index: int
+    transform_layer: int
+    flags: int
+    flag_names: tuple[str, ...]
+    tail_mode: PmxBoneTailMode
+    tail_bone_index: int | None
+    tail_offset: PmxVector3 | None
+    inherit_parent_bone_index: int | None
+    inherit_weight: float | None
+    fixed_axis: PmxVector3 | None
+    local_axis_x: PmxVector3 | None
+    local_axis_z: PmxVector3 | None
+    external_parent_key: int | None
+    ik: PmxIk | None
+
+    def __post_init__(self) -> None:
+        for field_name in ("local_name", "universal_name"):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        _validate_float_tuple(
+            self.position,
+            field_name="position",
+            length=3,
+        )
+
+        for field_name in ("parent_bone_index", "transform_layer", "flags"):
+            _validate_integer(getattr(self, field_name), field_name)
+
+        if not 0 <= self.flags <= 0xFFFF:
+            raise ValueError("flags must fit in one unsigned 16-bit integer.")
+
+        if not isinstance(self.flag_names, tuple):
+            raise TypeError("flag_names must be a tuple.")
+
+        if not all(isinstance(name, str) for name in self.flag_names):
+            raise TypeError("flag_names must contain only strings.")
+
+        if self.tail_mode not in ("bone", "offset"):
+            raise ValueError("tail_mode must be either 'bone' or 'offset'.")
+
+        for field_name in (
+            "tail_bone_index",
+            "inherit_parent_bone_index",
+            "external_parent_key",
+        ):
+            value = getattr(self, field_name)
+
+            if value is not None:
+                _validate_integer(value, field_name)
+
+        for field_name in (
+            "tail_offset",
+            "fixed_axis",
+            "local_axis_x",
+            "local_axis_z",
+        ):
+            value = getattr(self, field_name)
+
+            if value is not None:
+                _validate_float_tuple(
+                    value,
+                    field_name=field_name,
+                    length=3,
+                )
+
+        if self.inherit_weight is not None:
+            _validate_float(self.inherit_weight, "inherit_weight")
+
+        if self.ik is not None and not isinstance(self.ik, PmxIk):
+            raise TypeError("ik must be a PmxIk record or None.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "position": list(self.position),
+            "parent_bone_index": self.parent_bone_index,
+            "transform_layer": self.transform_layer,
+            "flags": self.flags,
+            "flag_names": list(self.flag_names),
+            "tail_mode": self.tail_mode,
+            "tail_bone_index": self.tail_bone_index,
+            "tail_offset": (
+                list(self.tail_offset) if self.tail_offset is not None else None
+            ),
+            "inherit_parent_bone_index": self.inherit_parent_bone_index,
+            "inherit_weight": self.inherit_weight,
+            "fixed_axis": (
+                list(self.fixed_axis) if self.fixed_axis is not None else None
+            ),
+            "local_axis_x": (
+                list(self.local_axis_x) if self.local_axis_x is not None else None
+            ),
+            "local_axis_z": (
+                list(self.local_axis_z) if self.local_axis_z is not None else None
+            ),
+            "external_parent_key": self.external_parent_key,
+            "ik": self.ik.to_dict() if self.ik is not None else None,
         }

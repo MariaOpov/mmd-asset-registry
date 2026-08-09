@@ -285,6 +285,8 @@ class PmxBoneScanningTests(unittest.TestCase):
         result = scan_pmx_structure(fixture)
 
         self.assertEqual(result.status, "error")
+        self.assertEqual(result.bone_count, 1)
+        self.assertEqual(result.bones, [])
         self.assertTrue(
             any(
                 "bones[0]" in error

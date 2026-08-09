@@ -12,12 +12,37 @@ from mmd_registry.binary_reader import (
     BinaryReader,
 )
 from mmd_registry.pmx.document import (
+    PMX_BONE_FLAG_AFTER_PHYSICS,
+    PMX_BONE_FLAG_ENABLED,
+    PMX_BONE_FLAG_EXTERNAL_PARENT,
+    PMX_BONE_FLAG_FIXED_AXIS,
+    PMX_BONE_FLAG_IK,
+    PMX_BONE_FLAG_INHERIT_ROTATION,
+    PMX_BONE_FLAG_INHERIT_TRANSLATION,
+    PMX_BONE_FLAG_LOCAL_APPEND,
+    PMX_BONE_FLAG_LOCAL_AXES,
+    PMX_BONE_FLAG_ROTATABLE,
+    PMX_BONE_FLAG_TAIL_INDEX,
+    PMX_BONE_FLAG_TRANSLATABLE,
+    PMX_BONE_FLAG_VISIBLE,
+    PmxBone,
     PmxHeader,
+    PmxIk,
+    PmxIkLink,
     PmxIndexSizes,
     PmxMaterial,
     PmxModelInfo,
 )
 from mmd_registry.pmx.errors import raise_pmx_error as _raise_pmx_error
+from mmd_registry.pmx.sections.bones import (
+    MAX_PMX_BONE_COUNT,
+    MAX_PMX_IK_LINK_COUNT,
+    MAX_PMX_IK_LOOP_COUNT,
+    MAX_PMX_TOTAL_IK_LINK_COUNT,
+    PmxBoneReadState,
+    read_pmx_bones,
+    validate_pmx_bone_index as _validate_pmx_bone_index,
+)
 from mmd_registry.pmx.sections.geometry import (
     MAX_PMX_SURFACE_INDEX_COUNT,
     PmxGeometryReadState,
@@ -42,10 +67,6 @@ from mmd_registry.pmx.sections.textures import (
 )
 
 
-MAX_PMX_BONE_COUNT: Final[int] = 200_000
-MAX_PMX_IK_LOOP_COUNT: Final[int] = 1_000_000
-MAX_PMX_IK_LINK_COUNT: Final[int] = 100_000
-MAX_PMX_TOTAL_IK_LINK_COUNT: Final[int] = 1_000_000
 MAX_PMX_MORPH_COUNT: Final[int] = 200_000
 MAX_PMX_MORPH_OFFSET_COUNT: Final[int] = 2_000_000
 MAX_PMX_TOTAL_MORPH_OFFSET_COUNT: Final[int] = 5_000_000
@@ -61,120 +82,7 @@ MAX_PMX_SOFT_BODY_PIN_COUNT: Final[int] = 500_000
 MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT: Final[int] = 1_000_000
 MAX_PMX_SOFT_BODY_PARAMETER_COUNT: Final[int] = 1_000_000
 
-PMX_BONE_FLAG_TAIL_INDEX: Final[int] = 0x0001
-PMX_BONE_FLAG_ROTATABLE: Final[int] = 0x0002
-PMX_BONE_FLAG_TRANSLATABLE: Final[int] = 0x0004
-PMX_BONE_FLAG_VISIBLE: Final[int] = 0x0008
-PMX_BONE_FLAG_ENABLED: Final[int] = 0x0010
-PMX_BONE_FLAG_IK: Final[int] = 0x0020
-PMX_BONE_FLAG_LOCAL_APPEND: Final[int] = 0x0080
-PMX_BONE_FLAG_INHERIT_ROTATION: Final[int] = 0x0100
-PMX_BONE_FLAG_INHERIT_TRANSLATION: Final[int] = 0x0200
-PMX_BONE_FLAG_FIXED_AXIS: Final[int] = 0x0400
-PMX_BONE_FLAG_LOCAL_AXES: Final[int] = 0x0800
-PMX_BONE_FLAG_AFTER_PHYSICS: Final[int] = 0x1000
-PMX_BONE_FLAG_EXTERNAL_PARENT: Final[int] = 0x2000
-
 ScanStatus = Literal["ok", "warning", "error"]
-
-
-@dataclass(frozen=True, slots=True)
-class PmxIkLink:
-    """Structural metadata for one PMX inverse-kinematics link."""
-
-    bone_index: int
-    angle_limits_enabled: bool
-    lower_limit: tuple[float, float, float] | None
-    upper_limit: tuple[float, float, float] | None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "bone_index": self.bone_index,
-            "angle_limits_enabled": self.angle_limits_enabled,
-            "lower_limit": (
-                list(self.lower_limit) if self.lower_limit is not None else None
-            ),
-            "upper_limit": (
-                list(self.upper_limit) if self.upper_limit is not None else None
-            ),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxIk:
-    """Structural metadata for one PMX bone IK definition."""
-
-    target_bone_index: int
-    loop_count: int
-    angle_limit: float
-    links: tuple[PmxIkLink, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "target_bone_index": self.target_bone_index,
-            "loop_count": self.loop_count,
-            "angle_limit": self.angle_limit,
-            "link_count": len(self.links),
-            "links": [link.to_dict() for link in self.links],
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxBone:
-    """Structural metadata extracted from one PMX bone record."""
-
-    local_name: str
-    universal_name: str
-    position: tuple[float, float, float]
-    parent_bone_index: int
-    transform_layer: int
-    flags: int
-    flag_names: tuple[str, ...]
-    tail_mode: Literal["bone", "offset"]
-    tail_bone_index: int | None
-    tail_offset: tuple[float, float, float] | None
-    inherit_parent_bone_index: int | None
-    inherit_weight: float | None
-    fixed_axis: tuple[float, float, float] | None
-    local_axis_x: tuple[float, float, float] | None
-    local_axis_z: tuple[float, float, float] | None
-    external_parent_key: int | None
-    ik: PmxIk | None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "position": list(self.position),
-            "parent_bone_index": self.parent_bone_index,
-            "transform_layer": self.transform_layer,
-            "flags": self.flags,
-            "flag_names": list(self.flag_names),
-            "tail_mode": self.tail_mode,
-            "tail_bone_index": self.tail_bone_index,
-            "tail_offset": (
-                list(self.tail_offset) if self.tail_offset is not None else None
-            ),
-            "inherit_parent_bone_index": (self.inherit_parent_bone_index),
-            "inherit_weight": self.inherit_weight,
-            "fixed_axis": (
-                list(self.fixed_axis) if self.fixed_axis is not None else None
-            ),
-            "local_axis_x": (
-                list(self.local_axis_x) if self.local_axis_x is not None else None
-            ),
-            "local_axis_z": (
-                list(self.local_axis_z) if self.local_axis_z is not None else None
-            ),
-            "external_parent_key": self.external_parent_key,
-            "ik": (self.ik.to_dict() if self.ik is not None else None),
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -962,473 +870,25 @@ def _read_pmx_vec3(
     )
 
 
-def _decode_pmx_bone_flags(flags: int) -> tuple[str, ...]:
-    """Return stable names for recognized PMX bone flags."""
-
-    flag_definitions = (
-        (PMX_BONE_FLAG_TAIL_INDEX, "tail_index"),
-        (PMX_BONE_FLAG_ROTATABLE, "rotatable"),
-        (PMX_BONE_FLAG_TRANSLATABLE, "translatable"),
-        (PMX_BONE_FLAG_VISIBLE, "visible"),
-        (PMX_BONE_FLAG_ENABLED, "enabled"),
-        (PMX_BONE_FLAG_IK, "ik"),
-        (PMX_BONE_FLAG_LOCAL_APPEND, "local_append"),
-        (PMX_BONE_FLAG_INHERIT_ROTATION, "inherit_rotation"),
-        (
-            PMX_BONE_FLAG_INHERIT_TRANSLATION,
-            "inherit_translation",
-        ),
-        (PMX_BONE_FLAG_FIXED_AXIS, "fixed_axis"),
-        (PMX_BONE_FLAG_LOCAL_AXES, "local_axes"),
-        (PMX_BONE_FLAG_AFTER_PHYSICS, "after_physics"),
-        (PMX_BONE_FLAG_EXTERNAL_PARENT, "external_parent"),
-    )
-
-    return tuple(name for bit, name in flag_definitions if flags & bit)
-
-
-def _minimum_pmx_bone_size(
-    *,
-    bone_index_size: int,
-) -> int:
-    """Return the smallest possible PMX bone-record size."""
-
-    text_length_fields = 8
-    position_size = 12
-    parent_index_size = bone_index_size
-    transform_layer_size = 4
-    flags_size = 2
-    minimum_tail_size = min(
-        bone_index_size,
-        12,
-    )
-
-    return (
-        text_length_fields
-        + position_size
-        + parent_index_size
-        + transform_layer_size
-        + flags_size
-        + minimum_tail_size
-    )
-
-
-def _validate_pmx_bone_index(
-    value: int,
-    *,
-    bone_count: int,
-    section: str,
-    record_index: int,
-    label: str,
-    offset: int,
-    allow_sentinel: bool,
-) -> None:
-    """Validate one signed PMX bone index."""
-
-    minimum_value = -1 if allow_sentinel else 0
-
-    if value < minimum_value or value >= bone_count:
-        if bone_count == 0:
-            expected = (
-                "expected only -1 because no bones are declared"
-                if allow_sentinel
-                else "no valid bone index exists"
-            )
-        elif allow_sentinel:
-            expected = f"expected -1 or a value from 0 through {bone_count - 1}"
-        else:
-            expected = f"expected a value from 0 through {bone_count - 1}"
-
-        _raise_pmx_error(
-            section=section,
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=(
-                f"index {value} is invalid for bone count {bone_count}; {expected}."
-            ),
-        )
-
-
-def _read_pmx_ik(
-    reader: BinaryReader,
-    *,
-    bone_index_size: int,
-    bone_count: int,
-    bone_record_index: int,
-) -> PmxIk:
-    """Read one PMX inverse-kinematics definition."""
-
-    target_offset = reader.offset
-    target_bone_index = reader.read_index(
-        bone_index_size,
-        signed=True,
-        label="IK target bone index",
-    )
-    _validate_pmx_bone_index(
-        target_bone_index,
-        bone_count=bone_count,
-        section="bones",
-        record_index=bone_record_index,
-        label="IK target bone index",
-        offset=target_offset,
-        allow_sentinel=False,
-    )
-
-    loop_count_offset = reader.offset
-    loop_count = _read_pmx_int32(
-        reader,
-        "IK loop count",
-    )
-
-    if loop_count < 0:
-        _raise_pmx_error(
-            section="bones",
-            record_index=bone_record_index,
-            offset=loop_count_offset,
-            operation="validating IK loop count",
-            reason=(f"value {loop_count} cannot be negative."),
-        )
-
-    if loop_count > MAX_PMX_IK_LOOP_COUNT:
-        _raise_pmx_error(
-            section="bones",
-            record_index=bone_record_index,
-            offset=loop_count_offset,
-            operation="validating IK loop count",
-            reason=(
-                f"value {loop_count} exceeds the safety limit "
-                f"of {MAX_PMX_IK_LOOP_COUNT}."
-            ),
-        )
-
-    angle_limit_offset = reader.offset
-    angle_limit = reader.read_float32(
-        "IK angle limit",
-    )
-
-    if not math.isfinite(angle_limit):
-        _raise_pmx_error(
-            section="bones",
-            record_index=bone_record_index,
-            offset=angle_limit_offset,
-            operation="validating IK angle limit",
-            reason="value must be a finite floating-point number.",
-        )
-
-    with reader.context(
-        "bones",
-        record_index=bone_record_index,
-    ):
-        link_count = reader.read_bounded_count(
-            "IK link count",
-            max_count=MAX_PMX_IK_LINK_COUNT,
-            minimum_item_size=(bone_index_size + 1),
-        )
-
-    links: list[PmxIkLink] = []
-
-    for link_index in range(link_count):
-        link_section = f"bones[{bone_record_index}].ik_links"
-
-        with reader.context(
-            link_section,
-            record_index=link_index,
-        ):
-            link_bone_offset = reader.offset
-            link_bone_index = reader.read_index(
-                bone_index_size,
-                signed=True,
-                label="IK link bone index",
-            )
-            _validate_pmx_bone_index(
-                link_bone_index,
-                bone_count=bone_count,
-                section=link_section,
-                record_index=link_index,
-                label="IK link bone index",
-                offset=link_bone_offset,
-                allow_sentinel=False,
-            )
-
-            limit_flag_offset = reader.offset
-            limit_flag = reader.read_uint8("IK link angle-limit flag")
-
-            if limit_flag not in {0, 1}:
-                _raise_pmx_error(
-                    section=link_section,
-                    record_index=link_index,
-                    offset=limit_flag_offset,
-                    operation=("validating IK link angle-limit flag"),
-                    reason=(f"invalid flag {limit_flag}; expected 0 or 1."),
-                )
-
-            if limit_flag == 1:
-                lower_limit = _read_pmx_vec3(
-                    reader,
-                    "IK link lower angle limit",
-                )
-                upper_limit = _read_pmx_vec3(
-                    reader,
-                    "IK link upper angle limit",
-                )
-            else:
-                lower_limit = None
-                upper_limit = None
-
-        links.append(
-            PmxIkLink(
-                bone_index=link_bone_index,
-                angle_limits_enabled=(limit_flag == 1),
-                lower_limit=lower_limit,
-                upper_limit=upper_limit,
-            )
-        )
-
-    return PmxIk(
-        target_bone_index=target_bone_index,
-        loop_count=loop_count,
-        angle_limit=angle_limit,
-        links=tuple(links),
-    )
-
-
-def _read_pmx_bone(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-    bone_count: int,
-) -> PmxBone:
-    """Read one PMX bone and all flag-controlled fields."""
-
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="bones",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading bone",
-            reason="PMX text encoding is unavailable.",
-        )
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="bones",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading bone",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    encoding = result.encoding
-    bone_index_size = result.index_sizes.bone
-    require_even_length = encoding == "utf-16-le"
-
-    with reader.context(
-        "bones",
-        record_index=record_index,
-    ):
-        local_name = reader.read_length_prefixed_text(
-            "local bone name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal bone name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        position = _read_pmx_vec3(
-            reader,
-            "bone position",
-        )
-
-        parent_offset = reader.offset
-        parent_bone_index = reader.read_index(
-            bone_index_size,
-            signed=True,
-            label="parent bone index",
-        )
-        _validate_pmx_bone_index(
-            parent_bone_index,
-            bone_count=bone_count,
-            section="bones",
-            record_index=record_index,
-            label="parent bone index",
-            offset=parent_offset,
-            allow_sentinel=True,
-        )
-
-        transform_layer = _read_pmx_int32(
-            reader,
-            "bone transform layer",
-        )
-        flags = _read_pmx_uint16(
-            reader,
-            "bone flags",
-        )
-
-        if flags & PMX_BONE_FLAG_TAIL_INDEX:
-            tail_mode: Literal["bone", "offset"] = "bone"
-            tail_offset = None
-            tail_index_offset = reader.offset
-            tail_bone_index = reader.read_index(
-                bone_index_size,
-                signed=True,
-                label="tail bone index",
-            )
-            _validate_pmx_bone_index(
-                tail_bone_index,
-                bone_count=bone_count,
-                section="bones",
-                record_index=record_index,
-                label="tail bone index",
-                offset=tail_index_offset,
-                allow_sentinel=True,
-            )
-        else:
-            tail_mode = "offset"
-            tail_bone_index = None
-            tail_offset = _read_pmx_vec3(
-                reader,
-                "bone tail offset",
-            )
-
-        inherit_parent_bone_index = None
-        inherit_weight = None
-
-        if flags & (PMX_BONE_FLAG_INHERIT_ROTATION | PMX_BONE_FLAG_INHERIT_TRANSLATION):
-            inherit_index_offset = reader.offset
-            inherit_parent_bone_index = reader.read_index(
-                bone_index_size,
-                signed=True,
-                label="inherit parent bone index",
-            )
-            _validate_pmx_bone_index(
-                inherit_parent_bone_index,
-                bone_count=bone_count,
-                section="bones",
-                record_index=record_index,
-                label="inherit parent bone index",
-                offset=inherit_index_offset,
-                allow_sentinel=True,
-            )
-            inherit_weight = reader.read_float32("bone inherit weight")
-
-        fixed_axis = None
-        if flags & PMX_BONE_FLAG_FIXED_AXIS:
-            fixed_axis = _read_pmx_vec3(
-                reader,
-                "bone fixed axis",
-            )
-
-        local_axis_x = None
-        local_axis_z = None
-        if flags & PMX_BONE_FLAG_LOCAL_AXES:
-            local_axis_x = _read_pmx_vec3(
-                reader,
-                "bone local x axis",
-            )
-            local_axis_z = _read_pmx_vec3(
-                reader,
-                "bone local z axis",
-            )
-
-        external_parent_key = None
-        if flags & PMX_BONE_FLAG_EXTERNAL_PARENT:
-            external_parent_key = _read_pmx_int32(
-                reader,
-                "external parent key",
-            )
-
-        ik = None
-        if flags & PMX_BONE_FLAG_IK:
-            ik = _read_pmx_ik(
-                reader,
-                bone_index_size=bone_index_size,
-                bone_count=bone_count,
-                bone_record_index=record_index,
-            )
-
-    return PmxBone(
-        local_name=local_name,
-        universal_name=universal_name,
-        position=position,
-        parent_bone_index=parent_bone_index,
-        transform_layer=transform_layer,
-        flags=flags,
-        flag_names=_decode_pmx_bone_flags(flags),
-        tail_mode=tail_mode,
-        tail_bone_index=tail_bone_index,
-        tail_offset=tail_offset,
-        inherit_parent_bone_index=inherit_parent_bone_index,
-        inherit_weight=inherit_weight,
-        fixed_axis=fixed_axis,
-        local_axis_x=local_axis_x,
-        local_axis_z=local_axis_z,
-        external_parent_key=external_parent_key,
-        ik=ik,
-    )
-
-
 def _scan_pmx_bones(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read PMX bones and validate all available bone references."""
+    """Read bones while preserving the legacy list projection."""
 
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="bones",
-            offset=reader.offset,
-            operation="starting bone scan",
-            reason="PMX index sizes are unavailable.",
-        )
+    bone_state = PmxBoneReadState()
 
-    bone_index_size = result.index_sizes.bone
-    minimum_bone_size = _minimum_pmx_bone_size(
-        bone_index_size=bone_index_size,
-    )
-
-    with reader.context("bones"):
-        bone_count = reader.read_bounded_count(
-            "bone count",
-            max_count=MAX_PMX_BONE_COUNT,
-            minimum_item_size=minimum_bone_size,
-        )
-
-    result.bone_count = bone_count
-    bones: list[PmxBone] = []
-    total_ik_links = 0
-
-    for record_index in range(bone_count):
-        bone = _read_pmx_bone(
+    try:
+        read_pmx_bones(
             reader,
-            result,
-            record_index=record_index,
-            bone_count=bone_count,
+            header=header,
+            state=bone_state,
         )
-        bones.append(bone)
-
-        if bone.ik is not None:
-            total_ik_links += len(bone.ik.links)
-
-            if total_ik_links > MAX_PMX_TOTAL_IK_LINK_COUNT:
-                _raise_pmx_error(
-                    section="bones",
-                    record_index=record_index,
-                    offset=reader.offset,
-                    operation="validating total IK link count",
-                    reason=(
-                        f"cumulative IK link count {total_ik_links} "
-                        "exceeds the safety limit of "
-                        f"{MAX_PMX_TOTAL_IK_LINK_COUNT}."
-                    ),
-                )
-
-    result.bones = bones
+    finally:
+        result.bone_count = bone_state.bone_count
+        result.bones = list(bone_state.bones)
 
 
 def _read_pmx_vec4(
@@ -3934,6 +3394,7 @@ def scan_pmx_structure(
                 _scan_pmx_bones(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_morphs(
                     reader,

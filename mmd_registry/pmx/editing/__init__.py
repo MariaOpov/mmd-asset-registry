@@ -6,6 +6,7 @@ from mmd_registry.pmx.editing.audit import (
     PmxEditCategory,
     PmxEditChange,
 )
+from mmd_registry.pmx.editing.engine import PmxEditResult, apply_set_model_info
 from mmd_registry.pmx.editing.errors import PmxEditPlanError
 from mmd_registry.pmx.editing.operations import (
     PmxEditOperation,
@@ -28,8 +29,10 @@ __all__ = [
     "PmxEditOperation",
     "PmxEditPlan",
     "PmxEditPlanError",
+    "PmxEditResult",
     "SetModelInfo",
     "SetTexturePath",
     "UpdateMaterial",
+    "apply_set_model_info",
     "validate_pmx_edit_plan",
 ]

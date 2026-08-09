@@ -1093,3 +1093,452 @@ class PmxDisplayFrame:
             "element_count": len(self.elements),
             "elements": [element.to_dict() for element in self.elements],
         }
+
+
+PmxRigidBodyShape: TypeAlias = Literal[0, 1, 2]
+PmxRigidBodyPhysicsMode: TypeAlias = Literal[0, 1, 2]
+PmxJointType: TypeAlias = Literal[0, 1, 2, 3, 4, 5]
+PmxSoftBodyShape: TypeAlias = Literal[0, 1]
+PmxSoftBodyAerodynamicsModel: TypeAlias = Literal[0, 1, 2, 3, 4]
+
+
+@dataclass(frozen=True, slots=True)
+class PmxRigidBody:
+    """One complete PMX rigid-body record."""
+
+    local_name: str
+    universal_name: str
+    bone_index: int
+    collision_group: int
+    collision_mask: int
+    shape: PmxRigidBodyShape
+    shape_name: str
+    size: PmxVector3
+    position: PmxVector3
+    rotation: PmxVector3
+    mass: float
+    linear_damping: float
+    angular_damping: float
+    restitution: float
+    friction: float
+    physics_mode: PmxRigidBodyPhysicsMode
+    physics_mode_name: str
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "local_name",
+            "universal_name",
+            "shape_name",
+            "physics_mode_name",
+        ):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        for field_name in (
+            "bone_index",
+            "collision_group",
+            "collision_mask",
+            "shape",
+            "physics_mode",
+        ):
+            _validate_integer(getattr(self, field_name), field_name)
+
+        if not 0 <= self.collision_group <= 15:
+            raise ValueError("collision_group must be a value from 0 through 15.")
+        if not 0 <= self.collision_mask <= 0xFFFF:
+            raise ValueError("collision_mask must fit in one unsigned 16-bit integer.")
+        if self.shape not in (0, 1, 2):
+            raise ValueError("shape must be a value from 0 through 2.")
+        if self.physics_mode not in (0, 1, 2):
+            raise ValueError("physics_mode must be a value from 0 through 2.")
+
+        for field_name in ("size", "position", "rotation"):
+            _validate_float_tuple(
+                getattr(self, field_name),
+                field_name=field_name,
+                length=3,
+            )
+
+        for field_name in (
+            "mass",
+            "linear_damping",
+            "angular_damping",
+            "restitution",
+            "friction",
+        ):
+            _validate_float(getattr(self, field_name), field_name)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "bone_index": self.bone_index,
+            "collision_group": self.collision_group,
+            "collision_mask": self.collision_mask,
+            "shape": self.shape,
+            "shape_name": self.shape_name,
+            "size": list(self.size),
+            "position": list(self.position),
+            "rotation": list(self.rotation),
+            "mass": self.mass,
+            "linear_damping": self.linear_damping,
+            "angular_damping": self.angular_damping,
+            "restitution": self.restitution,
+            "friction": self.friction,
+            "physics_mode": self.physics_mode,
+            "physics_mode_name": self.physics_mode_name,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxJoint:
+    """One complete PMX joint record."""
+
+    local_name: str
+    universal_name: str
+    joint_type: PmxJointType
+    joint_type_name: str
+    rigid_body_a_index: int
+    rigid_body_b_index: int
+    position: PmxVector3
+    rotation: PmxVector3
+    translation_limit_minimum: PmxVector3
+    translation_limit_maximum: PmxVector3
+    rotation_limit_minimum: PmxVector3
+    rotation_limit_maximum: PmxVector3
+    translation_spring: PmxVector3
+    rotation_spring: PmxVector3
+
+    def __post_init__(self) -> None:
+        for field_name in ("local_name", "universal_name", "joint_type_name"):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        for field_name in (
+            "joint_type",
+            "rigid_body_a_index",
+            "rigid_body_b_index",
+        ):
+            _validate_integer(getattr(self, field_name), field_name)
+
+        if self.joint_type not in (0, 1, 2, 3, 4, 5):
+            raise ValueError("joint_type must be a value from 0 through 5.")
+
+        for field_name in (
+            "position",
+            "rotation",
+            "translation_limit_minimum",
+            "translation_limit_maximum",
+            "rotation_limit_minimum",
+            "rotation_limit_maximum",
+            "translation_spring",
+            "rotation_spring",
+        ):
+            _validate_float_tuple(
+                getattr(self, field_name),
+                field_name=field_name,
+                length=3,
+            )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "joint_type": self.joint_type,
+            "joint_type_name": self.joint_type_name,
+            "rigid_body_a_index": self.rigid_body_a_index,
+            "rigid_body_b_index": self.rigid_body_b_index,
+            "position": list(self.position),
+            "rotation": list(self.rotation),
+            "translation_limit_minimum": list(self.translation_limit_minimum),
+            "translation_limit_maximum": list(self.translation_limit_maximum),
+            "rotation_limit_minimum": list(self.rotation_limit_minimum),
+            "rotation_limit_maximum": list(self.rotation_limit_maximum),
+            "translation_spring": list(self.translation_spring),
+            "rotation_spring": list(self.rotation_spring),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyAnchor:
+    """One PMX 2.1 soft-body anchor reference."""
+
+    rigid_body_index: int
+    vertex_index: int
+    near_mode: bool
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.rigid_body_index, "rigid_body_index")
+        _validate_integer(self.vertex_index, "vertex_index")
+        if not isinstance(self.near_mode, bool):
+            raise TypeError("near_mode must be a boolean.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "rigid_body_index": self.rigid_body_index,
+            "vertex_index": self.vertex_index,
+            "near_mode": self.near_mode,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyConfig:
+    """Bullet soft-body configuration values stored by PMX 2.1."""
+
+    aerodynamics_model: PmxSoftBodyAerodynamicsModel
+    aerodynamics_model_name: str
+    velocity_correction_factor: float
+    damping_coefficient: float
+    drag_coefficient: float
+    lift_coefficient: float
+    pressure_coefficient: float
+    volume_conservation_coefficient: float
+    dynamic_friction_coefficient: float
+    pose_matching_coefficient: float
+    rigid_contact_hardness: float
+    kinetic_contact_hardness: float
+    soft_contact_hardness: float
+    anchor_hardness: float
+
+    def __post_init__(self) -> None:
+        _validate_integer(self.aerodynamics_model, "aerodynamics_model")
+        if self.aerodynamics_model not in (0, 1, 2, 3, 4):
+            raise ValueError("aerodynamics_model must be a value from 0 through 4.")
+        if not isinstance(self.aerodynamics_model_name, str):
+            raise TypeError("aerodynamics_model_name must be a string.")
+
+        for field_name in (
+            "velocity_correction_factor",
+            "damping_coefficient",
+            "drag_coefficient",
+            "lift_coefficient",
+            "pressure_coefficient",
+            "volume_conservation_coefficient",
+            "dynamic_friction_coefficient",
+            "pose_matching_coefficient",
+            "rigid_contact_hardness",
+            "kinetic_contact_hardness",
+            "soft_contact_hardness",
+            "anchor_hardness",
+        ):
+            _validate_float(getattr(self, field_name), field_name)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "aerodynamics_model": self.aerodynamics_model,
+            "aerodynamics_model_name": self.aerodynamics_model_name,
+            "velocity_correction_factor": self.velocity_correction_factor,
+            "damping_coefficient": self.damping_coefficient,
+            "drag_coefficient": self.drag_coefficient,
+            "lift_coefficient": self.lift_coefficient,
+            "pressure_coefficient": self.pressure_coefficient,
+            "volume_conservation_coefficient": (
+                self.volume_conservation_coefficient
+            ),
+            "dynamic_friction_coefficient": self.dynamic_friction_coefficient,
+            "pose_matching_coefficient": self.pose_matching_coefficient,
+            "rigid_contact_hardness": self.rigid_contact_hardness,
+            "kinetic_contact_hardness": self.kinetic_contact_hardness,
+            "soft_contact_hardness": self.soft_contact_hardness,
+            "anchor_hardness": self.anchor_hardness,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyClusterConfig:
+    """PMX 2.1 soft-body cluster hardness and split values."""
+
+    soft_rigid_hardness: float
+    soft_kinetic_hardness: float
+    soft_soft_hardness: float
+    soft_rigid_impulse_split: float
+    soft_kinetic_impulse_split: float
+    soft_soft_impulse_split: float
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "soft_rigid_hardness",
+            "soft_kinetic_hardness",
+            "soft_soft_hardness",
+            "soft_rigid_impulse_split",
+            "soft_kinetic_impulse_split",
+            "soft_soft_impulse_split",
+        ):
+            _validate_float(getattr(self, field_name), field_name)
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "soft_rigid_hardness": self.soft_rigid_hardness,
+            "soft_kinetic_hardness": self.soft_kinetic_hardness,
+            "soft_soft_hardness": self.soft_soft_hardness,
+            "soft_rigid_impulse_split": self.soft_rigid_impulse_split,
+            "soft_kinetic_impulse_split": self.soft_kinetic_impulse_split,
+            "soft_soft_impulse_split": self.soft_soft_impulse_split,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyIterationConfig:
+    """PMX 2.1 soft-body solver iteration counts."""
+
+    velocity: int
+    position: int
+    drift: int
+    cluster: int
+
+    def __post_init__(self) -> None:
+        for field_name in ("velocity", "position", "drift", "cluster"):
+            _validate_integer(getattr(self, field_name), field_name)
+
+    def to_dict(self) -> dict[str, int]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "velocity": self.velocity,
+            "position": self.position,
+            "drift": self.drift,
+            "cluster": self.cluster,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBodyMaterialConfig:
+    """PMX 2.1 soft-body material stiffness coefficients."""
+
+    linear_stiffness: float
+    area_angular_stiffness: float
+    volume_stiffness: float
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "linear_stiffness",
+            "area_angular_stiffness",
+            "volume_stiffness",
+        ):
+            _validate_float(getattr(self, field_name), field_name)
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "linear_stiffness": self.linear_stiffness,
+            "area_angular_stiffness": self.area_angular_stiffness,
+            "volume_stiffness": self.volume_stiffness,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxSoftBody:
+    """One complete PMX 2.1 soft-body record."""
+
+    local_name: str
+    universal_name: str
+    shape: PmxSoftBodyShape
+    shape_name: str
+    material_index: int
+    collision_group: int
+    collision_mask: int
+    flags: int
+    flag_names: tuple[str, ...]
+    bending_link_distance: int
+    cluster_count: int
+    total_mass: float
+    collision_margin: float
+    config: PmxSoftBodyConfig
+    cluster_config: PmxSoftBodyClusterConfig
+    iteration_config: PmxSoftBodyIterationConfig
+    material_config: PmxSoftBodyMaterialConfig
+    anchors: tuple[PmxSoftBodyAnchor, ...]
+    pinned_vertex_indices: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in ("local_name", "universal_name", "shape_name"):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be a string.")
+
+        for field_name in (
+            "shape",
+            "material_index",
+            "collision_group",
+            "collision_mask",
+            "flags",
+            "bending_link_distance",
+            "cluster_count",
+        ):
+            _validate_integer(getattr(self, field_name), field_name)
+
+        if self.shape not in (0, 1):
+            raise ValueError("shape must be 0 or 1.")
+        if not 0 <= self.collision_group <= 15:
+            raise ValueError("collision_group must be a value from 0 through 15.")
+        if not 0 <= self.collision_mask <= 0xFFFF:
+            raise ValueError("collision_mask must fit in one unsigned 16-bit integer.")
+        if not 0 <= self.flags <= 0xFF:
+            raise ValueError("flags must fit in one unsigned byte.")
+
+        if not isinstance(self.flag_names, tuple):
+            raise TypeError("flag_names must be a tuple.")
+        if not all(isinstance(name, str) for name in self.flag_names):
+            raise TypeError("flag_names must contain only strings.")
+
+        _validate_float(self.total_mass, "total_mass")
+        _validate_float(self.collision_margin, "collision_margin")
+
+        nested_types = (
+            ("config", PmxSoftBodyConfig),
+            ("cluster_config", PmxSoftBodyClusterConfig),
+            ("iteration_config", PmxSoftBodyIterationConfig),
+            ("material_config", PmxSoftBodyMaterialConfig),
+        )
+        for field_name, expected_type in nested_types:
+            if not isinstance(getattr(self, field_name), expected_type):
+                raise TypeError(
+                    f"{field_name} must be a {expected_type.__name__} record."
+                )
+
+        if not isinstance(self.anchors, tuple):
+            raise TypeError("anchors must be a tuple.")
+        if not all(isinstance(anchor, PmxSoftBodyAnchor) for anchor in self.anchors):
+            raise TypeError("anchors must contain only PmxSoftBodyAnchor records.")
+
+        if not isinstance(self.pinned_vertex_indices, tuple):
+            raise TypeError("pinned_vertex_indices must be a tuple.")
+        for vertex_index in self.pinned_vertex_indices:
+            _validate_integer(vertex_index, "pinned vertex index")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable legacy scanner representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "shape": self.shape,
+            "shape_name": self.shape_name,
+            "material_index": self.material_index,
+            "collision_group": self.collision_group,
+            "collision_mask": self.collision_mask,
+            "flags": self.flags,
+            "flag_names": list(self.flag_names),
+            "bending_link_distance": self.bending_link_distance,
+            "cluster_count": self.cluster_count,
+            "total_mass": self.total_mass,
+            "collision_margin": self.collision_margin,
+            "config": self.config.to_dict(),
+            "cluster_config": self.cluster_config.to_dict(),
+            "iteration_config": self.iteration_config.to_dict(),
+            "material_config": self.material_config.to_dict(),
+            "anchor_count": len(self.anchors),
+            "anchors": [anchor.to_dict() for anchor in self.anchors],
+            "pinned_vertex_count": len(self.pinned_vertex_indices),
+            "pinned_vertex_indices": list(self.pinned_vertex_indices),
+        }

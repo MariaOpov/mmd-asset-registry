@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Any, Literal
 
 from mmd_registry.binary_reader import (
     BinaryParseError,
@@ -36,11 +35,19 @@ from mmd_registry.pmx.document import (
     PmxIkLink,
     PmxImpulseMorphOffset,
     PmxIndexSizes,
+    PmxJoint,
     PmxMaterial,
     PmxMaterialMorphOffset,
     PmxModelInfo,
     PmxMorph,
     PmxMorphOffset,
+    PmxRigidBody,
+    PmxSoftBody,
+    PmxSoftBodyAnchor,
+    PmxSoftBodyClusterConfig,
+    PmxSoftBodyConfig,
+    PmxSoftBodyIterationConfig,
+    PmxSoftBodyMaterialConfig,
     PmxUvMorphOffset,
     PmxVertexMorphOffset,
 )
@@ -78,12 +85,32 @@ from mmd_registry.pmx.sections.materials import (
     PmxMaterialReadState,
     read_pmx_materials,
 )
+from mmd_registry.pmx.sections.joints import (
+    MAX_PMX_JOINT_COUNT,
+    PmxJointReadState,
+    read_pmx_joints,
+)
 from mmd_registry.pmx.sections.morphs import (
     MAX_PMX_MORPH_COUNT,
     MAX_PMX_MORPH_OFFSET_COUNT,
     MAX_PMX_TOTAL_MORPH_OFFSET_COUNT,
     PmxMorphReadState,
     read_pmx_morphs,
+)
+from mmd_registry.pmx.sections.rigid_bodies import (
+    MAX_PMX_RIGID_BODY_COUNT,
+    PmxRigidBodyReadState,
+    read_pmx_rigid_bodies,
+)
+from mmd_registry.pmx.sections.soft_bodies import (
+    MAX_PMX_SOFT_BODY_ANCHOR_COUNT,
+    MAX_PMX_SOFT_BODY_COUNT,
+    MAX_PMX_SOFT_BODY_PARAMETER_COUNT,
+    MAX_PMX_SOFT_BODY_PIN_COUNT,
+    MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT,
+    MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT,
+    PmxSoftBodyReadState,
+    read_pmx_soft_bodies,
 )
 from mmd_registry.pmx.sections.textures import (
     MAX_PMX_TEXTURE_COUNT,
@@ -92,274 +119,7 @@ from mmd_registry.pmx.sections.textures import (
 )
 
 
-MAX_PMX_RIGID_BODY_COUNT: Final[int] = 200_000
-MAX_PMX_JOINT_COUNT: Final[int] = 200_000
-MAX_PMX_SOFT_BODY_COUNT: Final[int] = 100_000
-MAX_PMX_SOFT_BODY_ANCHOR_COUNT: Final[int] = 500_000
-MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT: Final[int] = 1_000_000
-MAX_PMX_SOFT_BODY_PIN_COUNT: Final[int] = 500_000
-MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT: Final[int] = 1_000_000
-MAX_PMX_SOFT_BODY_PARAMETER_COUNT: Final[int] = 1_000_000
-
 ScanStatus = Literal["ok", "warning", "error"]
-
-
-@dataclass(frozen=True, slots=True)
-class PmxRigidBody:
-    """Structural metadata extracted from one PMX rigid body."""
-
-    local_name: str
-    universal_name: str
-    bone_index: int
-    collision_group: int
-    collision_mask: int
-    shape: int
-    shape_name: str
-    size: tuple[float, float, float]
-    position: tuple[float, float, float]
-    rotation: tuple[float, float, float]
-    mass: float
-    linear_damping: float
-    angular_damping: float
-    restitution: float
-    friction: float
-    physics_mode: int
-    physics_mode_name: str
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "bone_index": self.bone_index,
-            "collision_group": self.collision_group,
-            "collision_mask": self.collision_mask,
-            "shape": self.shape,
-            "shape_name": self.shape_name,
-            "size": list(self.size),
-            "position": list(self.position),
-            "rotation": list(self.rotation),
-            "mass": self.mass,
-            "linear_damping": self.linear_damping,
-            "angular_damping": self.angular_damping,
-            "restitution": self.restitution,
-            "friction": self.friction,
-            "physics_mode": self.physics_mode,
-            "physics_mode_name": self.physics_mode_name,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxJoint:
-    """Structural metadata extracted from one PMX joint."""
-
-    local_name: str
-    universal_name: str
-    joint_type: int
-    joint_type_name: str
-    rigid_body_a_index: int
-    rigid_body_b_index: int
-    position: tuple[float, float, float]
-    rotation: tuple[float, float, float]
-    translation_limit_minimum: tuple[float, float, float]
-    translation_limit_maximum: tuple[float, float, float]
-    rotation_limit_minimum: tuple[float, float, float]
-    rotation_limit_maximum: tuple[float, float, float]
-    translation_spring: tuple[float, float, float]
-    rotation_spring: tuple[float, float, float]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "joint_type": self.joint_type,
-            "joint_type_name": self.joint_type_name,
-            "rigid_body_a_index": self.rigid_body_a_index,
-            "rigid_body_b_index": self.rigid_body_b_index,
-            "position": list(self.position),
-            "rotation": list(self.rotation),
-            "translation_limit_minimum": list(self.translation_limit_minimum),
-            "translation_limit_maximum": list(self.translation_limit_maximum),
-            "rotation_limit_minimum": list(self.rotation_limit_minimum),
-            "rotation_limit_maximum": list(self.rotation_limit_maximum),
-            "translation_spring": list(self.translation_spring),
-            "rotation_spring": list(self.rotation_spring),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBodyAnchor:
-    """One PMX 2.1 soft-body anchor reference."""
-
-    rigid_body_index: int
-    vertex_index: int
-    near_mode: bool
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "rigid_body_index": self.rigid_body_index,
-            "vertex_index": self.vertex_index,
-            "near_mode": self.near_mode,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBodyConfig:
-    """Bullet soft-body configuration values stored by PMX 2.1."""
-
-    aerodynamics_model: int
-    aerodynamics_model_name: str
-    velocity_correction_factor: float
-    damping_coefficient: float
-    drag_coefficient: float
-    lift_coefficient: float
-    pressure_coefficient: float
-    volume_conservation_coefficient: float
-    dynamic_friction_coefficient: float
-    pose_matching_coefficient: float
-    rigid_contact_hardness: float
-    kinetic_contact_hardness: float
-    soft_contact_hardness: float
-    anchor_hardness: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "aerodynamics_model": self.aerodynamics_model,
-            "aerodynamics_model_name": self.aerodynamics_model_name,
-            "velocity_correction_factor": (self.velocity_correction_factor),
-            "damping_coefficient": self.damping_coefficient,
-            "drag_coefficient": self.drag_coefficient,
-            "lift_coefficient": self.lift_coefficient,
-            "pressure_coefficient": self.pressure_coefficient,
-            "volume_conservation_coefficient": (self.volume_conservation_coefficient),
-            "dynamic_friction_coefficient": (self.dynamic_friction_coefficient),
-            "pose_matching_coefficient": (self.pose_matching_coefficient),
-            "rigid_contact_hardness": self.rigid_contact_hardness,
-            "kinetic_contact_hardness": self.kinetic_contact_hardness,
-            "soft_contact_hardness": self.soft_contact_hardness,
-            "anchor_hardness": self.anchor_hardness,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBodyClusterConfig:
-    """PMX 2.1 soft-body cluster hardness and split values."""
-
-    soft_rigid_hardness: float
-    soft_kinetic_hardness: float
-    soft_soft_hardness: float
-    soft_rigid_impulse_split: float
-    soft_kinetic_impulse_split: float
-    soft_soft_impulse_split: float
-
-    def to_dict(self) -> dict[str, float]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "soft_rigid_hardness": self.soft_rigid_hardness,
-            "soft_kinetic_hardness": self.soft_kinetic_hardness,
-            "soft_soft_hardness": self.soft_soft_hardness,
-            "soft_rigid_impulse_split": (self.soft_rigid_impulse_split),
-            "soft_kinetic_impulse_split": (self.soft_kinetic_impulse_split),
-            "soft_soft_impulse_split": self.soft_soft_impulse_split,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBodyIterationConfig:
-    """PMX 2.1 soft-body solver iteration counts."""
-
-    velocity: int
-    position: int
-    drift: int
-    cluster: int
-
-    def to_dict(self) -> dict[str, int]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "velocity": self.velocity,
-            "position": self.position,
-            "drift": self.drift,
-            "cluster": self.cluster,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBodyMaterialConfig:
-    """PMX 2.1 soft-body material stiffness coefficients."""
-
-    linear_stiffness: float
-    area_angular_stiffness: float
-    volume_stiffness: float
-
-    def to_dict(self) -> dict[str, float]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "linear_stiffness": self.linear_stiffness,
-            "area_angular_stiffness": self.area_angular_stiffness,
-            "volume_stiffness": self.volume_stiffness,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxSoftBody:
-    """Structural metadata extracted from one PMX 2.1 soft body."""
-
-    local_name: str
-    universal_name: str
-    shape: int
-    shape_name: str
-    material_index: int
-    collision_group: int
-    collision_mask: int
-    flags: int
-    flag_names: tuple[str, ...]
-    bending_link_distance: int
-    cluster_count: int
-    total_mass: float
-    collision_margin: float
-    config: PmxSoftBodyConfig
-    cluster_config: PmxSoftBodyClusterConfig
-    iteration_config: PmxSoftBodyIterationConfig
-    material_config: PmxSoftBodyMaterialConfig
-    anchors: tuple[PmxSoftBodyAnchor, ...]
-    pinned_vertex_indices: tuple[int, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "shape": self.shape,
-            "shape_name": self.shape_name,
-            "material_index": self.material_index,
-            "collision_group": self.collision_group,
-            "collision_mask": self.collision_mask,
-            "flags": self.flags,
-            "flag_names": list(self.flag_names),
-            "bending_link_distance": self.bending_link_distance,
-            "cluster_count": self.cluster_count,
-            "total_mass": self.total_mass,
-            "collision_margin": self.collision_margin,
-            "config": self.config.to_dict(),
-            "cluster_config": self.cluster_config.to_dict(),
-            "iteration_config": self.iteration_config.to_dict(),
-            "material_config": self.material_config.to_dict(),
-            "anchor_count": len(self.anchors),
-            "anchors": [anchor.to_dict() for anchor in self.anchors],
-            "pinned_vertex_count": len(self.pinned_vertex_indices),
-            "pinned_vertex_indices": list(self.pinned_vertex_indices),
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -639,45 +399,6 @@ def _scan_pmx_materials(
         result.materials = list(material_state.materials)
 
 
-def _read_pmx_int32(
-    reader: BinaryReader,
-    label: str,
-) -> int:
-    """Read one little-endian signed 32-bit PMX integer."""
-
-    return int.from_bytes(
-        reader.read_exact(4, label),
-        byteorder="little",
-        signed=True,
-    )
-
-
-def _read_pmx_uint16(
-    reader: BinaryReader,
-    label: str,
-) -> int:
-    """Read one little-endian unsigned 16-bit PMX integer."""
-
-    return int.from_bytes(
-        reader.read_exact(2, label),
-        byteorder="little",
-        signed=False,
-    )
-
-
-def _read_pmx_vec3(
-    reader: BinaryReader,
-    label: str,
-) -> tuple[float, float, float]:
-    """Read one PMX vec3 as three little-endian floats."""
-
-    return (
-        reader.read_float32(f"{label} x"),
-        reader.read_float32(f"{label} y"),
-        reader.read_float32(f"{label} z"),
-    )
-
-
 def _scan_pmx_bones(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
@@ -822,311 +543,6 @@ def _scan_pmx_display_frames(
         result.display_frames = list(frame_state.display_frames)
 
 
-def _minimum_pmx_rigid_body_size(
-    index_sizes: PmxIndexSizes,
-) -> int:
-    """Return the fixed minimum size of one PMX rigid-body record."""
-
-    text_length_fields = 8
-    bone_index_size = index_sizes.bone
-    collision_group_size = 1
-    collision_mask_size = 2
-    shape_size = 1
-    vector_fields_size = 36
-    physical_scalar_fields_size = 20
-    physics_mode_size = 1
-
-    return (
-        text_length_fields
-        + bone_index_size
-        + collision_group_size
-        + collision_mask_size
-        + shape_size
-        + vector_fields_size
-        + physical_scalar_fields_size
-        + physics_mode_size
-    )
-
-
-def _validate_pmx_finite_scalar(
-    value: float,
-    *,
-    section: str,
-    record_index: int,
-    label: str,
-    offset: int,
-    nonnegative: bool,
-) -> None:
-    """Validate one finite PMX rigid-body scalar."""
-
-    if not math.isfinite(value):
-        _raise_pmx_error(
-            section=section,
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=f"{label} must be finite.",
-        )
-
-    if nonnegative and value < 0.0:
-        _raise_pmx_error(
-            section=section,
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=f"{label} cannot be negative: {value}.",
-        )
-
-
-def _validate_pmx_finite_vec3(
-    value: tuple[float, float, float],
-    *,
-    section: str,
-    record_index: int,
-    label: str,
-    offset: int,
-    nonnegative: bool,
-) -> None:
-    """Validate one finite PMX rigid-body vec3."""
-
-    component_names = ("x", "y", "z")
-
-    for component_index, component in enumerate(value):
-        component_label = f"{label} {component_names[component_index]}"
-        _validate_pmx_finite_scalar(
-            component,
-            section=section,
-            record_index=record_index,
-            label=component_label,
-            offset=offset + component_index * 4,
-            nonnegative=nonnegative,
-        )
-
-
-def _decode_pmx_rigid_body_shape(
-    value: int,
-    *,
-    record_index: int,
-    offset: int,
-) -> str:
-    """Validate and decode one PMX rigid-body shape value."""
-
-    shape_names = {
-        0: "sphere",
-        1: "box",
-        2: "capsule",
-    }
-
-    try:
-        return shape_names[value]
-    except KeyError:
-        _raise_pmx_error(
-            section="rigid_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation="validating rigid-body shape",
-            reason=(
-                f"invalid rigid-body shape {value}; expected "
-                "0 for sphere, 1 for box, or 2 for capsule."
-            ),
-        )
-
-
-def _decode_pmx_rigid_body_physics_mode(
-    value: int,
-    *,
-    record_index: int,
-    offset: int,
-) -> str:
-    """Validate and decode one PMX rigid-body physics mode."""
-
-    mode_names = {
-        0: "bone_follow",
-        1: "physics",
-        2: "physics_with_bone_alignment",
-    }
-
-    try:
-        return mode_names[value]
-    except KeyError:
-        _raise_pmx_error(
-            section="rigid_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation="validating rigid-body physics mode",
-            reason=(
-                f"invalid physics mode {value}; expected a value from 0 through 2."
-            ),
-        )
-
-
-def _read_pmx_rigid_body(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-) -> PmxRigidBody:
-    """Read and validate one PMX rigid-body record."""
-
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="rigid_bodies",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading rigid body",
-            reason="PMX text encoding is unavailable.",
-        )
-
-    if result.index_sizes is None or result.bone_count is None:
-        _raise_pmx_error(
-            section="rigid_bodies",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading rigid body",
-            reason="PMX index sizes or bone count are unavailable.",
-        )
-
-    require_even_length = result.encoding == "utf-16-le"
-
-    with reader.context("rigid_bodies", record_index=record_index):
-        local_name = reader.read_length_prefixed_text(
-            "local rigid-body name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal rigid-body name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        bone_index_offset = reader.offset
-        bone_index = reader.read_index(
-            result.index_sizes.bone,
-            signed=True,
-            label="rigid-body bone index",
-        )
-        _validate_pmx_bone_index(
-            bone_index,
-            bone_count=result.bone_count,
-            section="rigid_bodies",
-            record_index=record_index,
-            label="rigid-body bone index",
-            offset=bone_index_offset,
-            allow_sentinel=True,
-        )
-
-        collision_group_offset = reader.offset
-        collision_group = reader.read_uint8("rigid-body collision group")
-        if collision_group > 15:
-            _raise_pmx_error(
-                section="rigid_bodies",
-                record_index=record_index,
-                offset=collision_group_offset,
-                operation="validating rigid-body collision group",
-                reason=(
-                    f"collision group {collision_group} is invalid; "
-                    "expected a value from 0 through 15."
-                ),
-            )
-
-        collision_mask = _read_pmx_uint16(
-            reader,
-            "rigid-body collision mask",
-        )
-
-        shape_offset = reader.offset
-        shape = reader.read_uint8("rigid-body shape")
-        shape_name = _decode_pmx_rigid_body_shape(
-            shape,
-            record_index=record_index,
-            offset=shape_offset,
-        )
-
-        size_offset = reader.offset
-        size = _read_pmx_vec3(reader, "rigid-body size")
-        _validate_pmx_finite_vec3(
-            size,
-            section="rigid_bodies",
-            record_index=record_index,
-            label="rigid-body size",
-            offset=size_offset,
-            nonnegative=True,
-        )
-
-        position_offset = reader.offset
-        position = _read_pmx_vec3(reader, "rigid-body position")
-        _validate_pmx_finite_vec3(
-            position,
-            section="rigid_bodies",
-            record_index=record_index,
-            label="rigid-body position",
-            offset=position_offset,
-            nonnegative=False,
-        )
-
-        rotation_offset = reader.offset
-        rotation = _read_pmx_vec3(reader, "rigid-body rotation")
-        _validate_pmx_finite_vec3(
-            rotation,
-            section="rigid_bodies",
-            record_index=record_index,
-            label="rigid-body rotation",
-            offset=rotation_offset,
-            nonnegative=False,
-        )
-
-        scalar_fields: list[tuple[str, float, int]] = []
-        for scalar_label in (
-            "rigid-body mass",
-            "rigid-body linear damping",
-            "rigid-body angular damping",
-            "rigid-body restitution",
-            "rigid-body friction",
-        ):
-            scalar_offset = reader.offset
-            scalar_value = reader.read_float32(scalar_label)
-            _validate_pmx_finite_scalar(
-                scalar_value,
-                section="rigid_bodies",
-                record_index=record_index,
-                label=scalar_label,
-                offset=scalar_offset,
-                nonnegative=True,
-            )
-            scalar_fields.append((scalar_label, scalar_value, scalar_offset))
-
-        physics_mode_offset = reader.offset
-        physics_mode = reader.read_uint8("rigid-body physics mode")
-        physics_mode_name = _decode_pmx_rigid_body_physics_mode(
-            physics_mode,
-            record_index=record_index,
-            offset=physics_mode_offset,
-        )
-
-    return PmxRigidBody(
-        local_name=local_name,
-        universal_name=universal_name,
-        bone_index=bone_index,
-        collision_group=collision_group,
-        collision_mask=collision_mask,
-        shape=shape,
-        shape_name=shape_name,
-        size=size,
-        position=position,
-        rotation=rotation,
-        mass=scalar_fields[0][1],
-        linear_damping=scalar_fields[1][1],
-        angular_damping=scalar_fields[2][1],
-        restitution=scalar_fields[3][1],
-        friction=scalar_fields[4][1],
-        physics_mode=physics_mode,
-        physics_mode_name=physics_mode_name,
-    )
-
-
 def _validate_pmx_impulse_rigid_body_references(
     result: PmxHeaderScanResult,
     *,
@@ -1161,34 +577,32 @@ def _validate_pmx_impulse_rigid_body_references(
 def _scan_pmx_rigid_bodies(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read PMX rigid bodies and resolve impulse-morph references."""
+    """Read rigid bodies and resolve impulse-morph references."""
 
-    if result.index_sizes is None:
+    if result.bone_count is None:
         _raise_pmx_error(
             section="rigid_bodies",
             offset=reader.offset,
             operation="starting rigid-body scan",
-            reason="PMX index sizes are unavailable.",
+            reason="PMX bone count is unavailable.",
         )
 
     count_offset = reader.offset
-    with reader.context("rigid_bodies"):
-        rigid_body_count = reader.read_bounded_count(
-            "rigid-body count",
-            max_count=MAX_PMX_RIGID_BODY_COUNT,
-            minimum_item_size=_minimum_pmx_rigid_body_size(result.index_sizes),
-        )
+    rigid_body_state = PmxRigidBodyReadState()
 
-    result.rigid_body_count = rigid_body_count
-    result.rigid_bodies = [
-        _read_pmx_rigid_body(
+    try:
+        read_pmx_rigid_bodies(
             reader,
-            result,
-            record_index=record_index,
+            header=header,
+            bone_count=result.bone_count,
+            state=rigid_body_state,
         )
-        for record_index in range(rigid_body_count)
-    ]
+    finally:
+        result.rigid_body_count = rigid_body_state.rigid_body_count
+        result.rigid_bodies = list(rigid_body_state.rigid_bodies)
 
     _validate_pmx_impulse_rigid_body_references(
         result,
@@ -1196,898 +610,84 @@ def _scan_pmx_rigid_bodies(
     )
 
 
-def _minimum_pmx_joint_size(
-    index_sizes: PmxIndexSizes,
-) -> int:
-    """Return the fixed minimum size of one PMX joint record."""
-
-    text_length_fields = 8
-    joint_type_size = 1
-    rigid_body_indices_size = index_sizes.rigid_body * 2
-    vector_fields_size = 8 * 12
-
-    return (
-        text_length_fields
-        + joint_type_size
-        + rigid_body_indices_size
-        + vector_fields_size
-    )
-
-
-def _decode_pmx_joint_type(
-    value: int,
-    *,
-    version: float,
-    record_index: int,
-    offset: int,
-) -> str:
-    """Validate and decode one PMX joint type."""
-
-    type_names = {
-        0: "spring_6dof",
-        1: "6dof",
-        2: "point_to_point",
-        3: "cone_twist",
-        4: "slider",
-        5: "hinge",
-    }
-
-    try:
-        type_name = type_names[value]
-    except KeyError:
-        _raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=offset,
-            operation="validating joint type",
-            reason=(f"invalid joint type {value}; expected a value from 0 through 5."),
-        )
-
-    if version == 2.0 and value != 0:
-        _raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=offset,
-            operation="validating joint type",
-            reason=(
-                f"joint type {value} ({type_name}) requires PMX 2.1; "
-                "PMX 2.0 supports only type 0 (spring_6dof)."
-            ),
-        )
-
-    return type_name
-
-
-def _validate_pmx_joint_limit_pair(
-    minimum: tuple[float, float, float],
-    maximum: tuple[float, float, float],
-    *,
-    record_index: int,
-    label: str,
-    minimum_offset: int,
-) -> None:
-    """Validate component-wise PMX joint lower and upper limits."""
-
-    component_names = ("x", "y", "z")
-
-    for component_index, (minimum_value, maximum_value) in enumerate(
-        zip(minimum, maximum)
-    ):
-        if minimum_value <= maximum_value:
-            continue
-
-        component_name = component_names[component_index]
-        _raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=minimum_offset + component_index * 4,
-            operation=f"validating {label} limits",
-            reason=(
-                f"{label} minimum {component_name} value "
-                f"{minimum_value} exceeds maximum {component_name} "
-                f"value {maximum_value}."
-            ),
-        )
-
-
-def _read_pmx_joint(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-) -> PmxJoint:
-    """Read and validate one PMX joint record."""
-
-    if result.encoding is None or result.version is None:
-        _raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading joint",
-            reason="PMX text encoding or version is unavailable.",
-        )
-
-    if result.index_sizes is None or result.rigid_body_count is None:
-        _raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading joint",
-            reason="PMX index sizes or rigid-body count are unavailable.",
-        )
-
-    require_even_length = result.encoding == "utf-16-le"
-
-    with reader.context("joints", record_index=record_index):
-        local_name = reader.read_length_prefixed_text(
-            "local joint name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal joint name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        joint_type_offset = reader.offset
-        joint_type = reader.read_uint8("joint type")
-        joint_type_name = _decode_pmx_joint_type(
-            joint_type,
-            version=result.version,
-            record_index=record_index,
-            offset=joint_type_offset,
-        )
-
-        rigid_body_a_offset = reader.offset
-        rigid_body_a_index = reader.read_index(
-            result.index_sizes.rigid_body,
-            signed=True,
-            label="joint rigid-body A index",
-        )
-        _validate_pmx_index_range(
-            rigid_body_a_index,
-            count=result.rigid_body_count,
-            section="joints",
-            record_index=record_index,
-            label="joint rigid-body A index",
-            offset=rigid_body_a_offset,
-            allow_sentinel=True,
-        )
-
-        rigid_body_b_offset = reader.offset
-        rigid_body_b_index = reader.read_index(
-            result.index_sizes.rigid_body,
-            signed=True,
-            label="joint rigid-body B index",
-        )
-        _validate_pmx_index_range(
-            rigid_body_b_index,
-            count=result.rigid_body_count,
-            section="joints",
-            record_index=record_index,
-            label="joint rigid-body B index",
-            offset=rigid_body_b_offset,
-            allow_sentinel=True,
-        )
-
-        vector_fields: list[tuple[str, tuple[float, float, float], int]] = []
-        for vector_label in (
-            "joint position",
-            "joint rotation",
-            "joint translation limit minimum",
-            "joint translation limit maximum",
-            "joint rotation limit minimum",
-            "joint rotation limit maximum",
-            "joint translation spring",
-            "joint rotation spring",
-        ):
-            vector_offset = reader.offset
-            vector_value = _read_pmx_vec3(reader, vector_label)
-            _validate_pmx_finite_vec3(
-                vector_value,
-                section="joints",
-                record_index=record_index,
-                label=vector_label,
-                offset=vector_offset,
-                nonnegative=False,
-            )
-            vector_fields.append((vector_label, vector_value, vector_offset))
-
-    _validate_pmx_joint_limit_pair(
-        vector_fields[2][1],
-        vector_fields[3][1],
-        record_index=record_index,
-        label="joint translation limit",
-        minimum_offset=vector_fields[2][2],
-    )
-    _validate_pmx_joint_limit_pair(
-        vector_fields[4][1],
-        vector_fields[5][1],
-        record_index=record_index,
-        label="joint rotation limit",
-        minimum_offset=vector_fields[4][2],
-    )
-
-    return PmxJoint(
-        local_name=local_name,
-        universal_name=universal_name,
-        joint_type=joint_type,
-        joint_type_name=joint_type_name,
-        rigid_body_a_index=rigid_body_a_index,
-        rigid_body_b_index=rigid_body_b_index,
-        position=vector_fields[0][1],
-        rotation=vector_fields[1][1],
-        translation_limit_minimum=vector_fields[2][1],
-        translation_limit_maximum=vector_fields[3][1],
-        rotation_limit_minimum=vector_fields[4][1],
-        rotation_limit_maximum=vector_fields[5][1],
-        translation_spring=vector_fields[6][1],
-        rotation_spring=vector_fields[7][1],
-    )
-
-
 def _scan_pmx_joints(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read and validate the PMX joint section."""
+    """Read joints while preserving the legacy list projection."""
 
-    if result.index_sizes is None:
+    if result.rigid_body_count is None:
         _raise_pmx_error(
             section="joints",
             offset=reader.offset,
             operation="starting joint scan",
-            reason="PMX index sizes are unavailable.",
+            reason="PMX rigid-body count is unavailable.",
         )
 
-    with reader.context("joints"):
-        joint_count = reader.read_bounded_count(
-            "joint count",
-            max_count=MAX_PMX_JOINT_COUNT,
-            minimum_item_size=_minimum_pmx_joint_size(result.index_sizes),
-        )
-
-    result.joint_count = joint_count
-    result.joints = [
-        _read_pmx_joint(
-            reader,
-            result,
-            record_index=record_index,
-        )
-        for record_index in range(joint_count)
-    ]
-
-
-def _minimum_pmx_soft_body_size(
-    index_sizes: PmxIndexSizes,
-) -> int:
-    """Return the fixed minimum size of one PMX 2.1 soft body."""
-
-    text_length_fields = 8
-    shape_size = 1
-    material_index_size = index_sizes.material
-    collision_fields_size = 4
-    integer_parameter_size = 8
-    mass_and_margin_size = 8
-    aerodynamics_model_size = 4
-    config_float_size = 12 * 4
-    cluster_float_size = 6 * 4
-    iteration_size = 4 * 4
-    material_config_size = 3 * 4
-    anchor_and_pin_count_size = 8
-
-    return (
-        text_length_fields
-        + shape_size
-        + material_index_size
-        + collision_fields_size
-        + integer_parameter_size
-        + mass_and_margin_size
-        + aerodynamics_model_size
-        + config_float_size
-        + cluster_float_size
-        + iteration_size
-        + material_config_size
-        + anchor_and_pin_count_size
-    )
-
-
-def _decode_pmx_soft_body_shape(
-    value: int,
-    *,
-    record_index: int,
-    offset: int,
-) -> str:
-    """Validate and decode one PMX 2.1 soft-body shape."""
-
-    shape_names = {
-        0: "tri_mesh",
-        1: "rope",
-    }
+    joint_state = PmxJointReadState()
 
     try:
-        return shape_names[value]
-    except KeyError:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation="validating soft-body shape",
-            reason=(f"invalid soft-body shape {value}; expected 0 or 1."),
-        )
-
-
-def _decode_pmx_soft_body_flags(
-    value: int,
-    *,
-    record_index: int,
-    offset: int,
-) -> tuple[str, ...]:
-    """Validate and decode PMX 2.1 soft-body flag bits."""
-
-    known_mask = 0x07
-    unknown_bits = value & ~known_mask
-    if unknown_bits:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation="validating soft-body flags",
-            reason=(f"soft-body flags contain unknown bits 0x{unknown_bits:02x}."),
-        )
-
-    definitions = (
-        (0x01, "generate_bending_links"),
-        (0x02, "generate_clusters"),
-        (0x04, "randomize_constraints"),
-    )
-    return tuple(name for bit, name in definitions if value & bit)
-
-
-def _decode_pmx_soft_body_aerodynamics_model(
-    value: int,
-    *,
-    record_index: int,
-    offset: int,
-) -> str:
-    """Validate and decode a PMX 2.1 aerodynamics model."""
-
-    model_names = {
-        0: "vertex_point",
-        1: "vertex_two_sided",
-        2: "vertex_one_sided",
-        3: "face_two_sided",
-        4: "face_one_sided",
-    }
-
-    try:
-        return model_names[value]
-    except KeyError:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation="validating soft-body aerodynamics model",
-            reason=(
-                f"invalid soft-body aerodynamics model {value}; "
-                "expected a value from 0 through 4."
-            ),
-        )
-
-
-def _read_pmx_soft_body_float(
-    reader: BinaryReader,
-    *,
-    record_index: int,
-    label: str,
-    nonnegative: bool,
-) -> float:
-    """Read and validate one soft-body float field."""
-
-    offset = reader.offset
-    value = reader.read_float32(label)
-    _validate_pmx_finite_scalar(
-        value,
-        section="soft_bodies",
-        record_index=record_index,
-        label=label,
-        offset=offset,
-        nonnegative=nonnegative,
-    )
-    return value
-
-
-def _read_pmx_soft_body_parameter_count(
-    reader: BinaryReader,
-    *,
-    record_index: int,
-    label: str,
-) -> int:
-    """Read one bounded nonnegative PMX soft-body integer parameter."""
-
-    offset = reader.offset
-    value = _read_pmx_int32(reader, label)
-
-    if value < 0:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=f"{label} cannot be negative: {value}.",
-        )
-
-    if value > MAX_PMX_SOFT_BODY_PARAMETER_COUNT:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=(
-                f"{label} {value} exceeds the safety limit of "
-                f"{MAX_PMX_SOFT_BODY_PARAMETER_COUNT}."
-            ),
-        )
-
-    return value
-
-
-def _read_pmx_soft_body_anchor(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    soft_body_index: int,
-    anchor_index: int,
-) -> PmxSoftBodyAnchor:
-    """Read and validate one PMX 2.1 soft-body anchor."""
-
-    if (
-        result.index_sizes is None
-        or result.rigid_body_count is None
-        or result.vertex_count is None
-    ):
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=soft_body_index,
-            offset=reader.offset,
-            operation="reading soft-body anchor",
-            reason="PMX index sizes or referenced counts are unavailable.",
-        )
-
-    with reader.context(
-        f"soft_bodies[{soft_body_index}].anchors",
-        record_index=anchor_index,
-    ):
-        rigid_body_offset = reader.offset
-        rigid_body_index = reader.read_index(
-            result.index_sizes.rigid_body,
-            signed=True,
-            label="soft-body anchor rigid-body index",
-        )
-        _validate_pmx_index_range(
-            rigid_body_index,
-            count=result.rigid_body_count,
-            section=f"soft_bodies[{soft_body_index}].anchors",
-            record_index=anchor_index,
-            label="soft-body anchor rigid-body index",
-            offset=rigid_body_offset,
-            allow_sentinel=False,
-        )
-
-        vertex_offset = reader.offset
-        vertex_index = reader.read_index(
-            result.index_sizes.vertex,
-            signed=False,
-            label="soft-body anchor vertex index",
-        )
-        _validate_pmx_index_range(
-            vertex_index,
-            count=result.vertex_count,
-            section=f"soft_bodies[{soft_body_index}].anchors",
-            record_index=anchor_index,
-            label="soft-body anchor vertex index",
-            offset=vertex_offset,
-            allow_sentinel=False,
-        )
-
-        near_mode_offset = reader.offset
-        near_mode_value = reader.read_uint8("soft-body anchor near-mode flag")
-        if near_mode_value not in (0, 1):
-            _raise_pmx_error(
-                section=f"soft_bodies[{soft_body_index}].anchors",
-                record_index=anchor_index,
-                offset=near_mode_offset,
-                operation="validating soft-body anchor near-mode flag",
-                reason=(
-                    f"invalid soft-body anchor near-mode flag "
-                    f"{near_mode_value}; expected 0 or 1."
-                ),
-            )
-
-    return PmxSoftBodyAnchor(
-        rigid_body_index=rigid_body_index,
-        vertex_index=vertex_index,
-        near_mode=bool(near_mode_value),
-    )
-
-
-def _read_pmx_soft_body(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-) -> PmxSoftBody:
-    """Read and validate one PMX 2.1 soft-body record."""
-
-    if result.encoding is None or result.index_sizes is None:
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading soft body",
-            reason="PMX encoding or index sizes are unavailable.",
-        )
-
-    if (
-        result.material_count is None
-        or result.rigid_body_count is None
-        or result.vertex_count is None
-    ):
-        _raise_pmx_error(
-            section="soft_bodies",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading soft body",
-            reason="PMX referenced section counts are unavailable.",
-        )
-
-    require_even_length = result.encoding == "utf-16-le"
-
-    with reader.context("soft_bodies", record_index=record_index):
-        local_name = reader.read_length_prefixed_text(
-            "local soft-body name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal soft-body name",
-            encoding=result.encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        shape_offset = reader.offset
-        shape = reader.read_uint8("soft-body shape")
-        shape_name = _decode_pmx_soft_body_shape(
-            shape,
-            record_index=record_index,
-            offset=shape_offset,
-        )
-
-        material_offset = reader.offset
-        material_index = reader.read_index(
-            result.index_sizes.material,
-            signed=True,
-            label="soft-body material index",
-        )
-        _validate_pmx_index_range(
-            material_index,
-            count=result.material_count,
-            section="soft_bodies",
-            record_index=record_index,
-            label="soft-body material index",
-            offset=material_offset,
-            allow_sentinel=True,
-        )
-
-        collision_group_offset = reader.offset
-        collision_group = reader.read_uint8("soft-body collision group")
-        if collision_group > 15:
-            _raise_pmx_error(
-                section="soft_bodies",
-                record_index=record_index,
-                offset=collision_group_offset,
-                operation="validating soft-body collision group",
-                reason=(
-                    f"soft-body collision group {collision_group} is "
-                    "outside the supported range 0 through 15."
-                ),
-            )
-
-        collision_mask = _read_pmx_uint16(
+        read_pmx_joints(
             reader,
-            "soft-body collision mask",
+            header=header,
+            rigid_body_count=result.rigid_body_count,
+            state=joint_state,
         )
-
-        flags_offset = reader.offset
-        flags = reader.read_uint8("soft-body flags")
-        flag_names = _decode_pmx_soft_body_flags(
-            flags,
-            record_index=record_index,
-            offset=flags_offset,
-        )
-
-        bending_link_distance = _read_pmx_soft_body_parameter_count(
-            reader,
-            record_index=record_index,
-            label="soft-body bending-link distance",
-        )
-        cluster_count = _read_pmx_soft_body_parameter_count(
-            reader,
-            record_index=record_index,
-            label="soft-body cluster count",
-        )
-
-        total_mass = _read_pmx_soft_body_float(
-            reader,
-            record_index=record_index,
-            label="soft-body total mass",
-            nonnegative=True,
-        )
-        collision_margin = _read_pmx_soft_body_float(
-            reader,
-            record_index=record_index,
-            label="soft-body collision margin",
-            nonnegative=True,
-        )
-
-        aerodynamics_offset = reader.offset
-        aerodynamics_model = _read_pmx_int32(
-            reader,
-            "soft-body aerodynamics model",
-        )
-        aerodynamics_model_name = _decode_pmx_soft_body_aerodynamics_model(
-            aerodynamics_model,
-            record_index=record_index,
-            offset=aerodynamics_offset,
-        )
-
-        config_labels = (
-            "soft-body velocity correction factor",
-            "soft-body damping coefficient",
-            "soft-body drag coefficient",
-            "soft-body lift coefficient",
-            "soft-body pressure coefficient",
-            "soft-body volume conservation coefficient",
-            "soft-body dynamic friction coefficient",
-            "soft-body pose matching coefficient",
-            "soft-body rigid contact hardness",
-            "soft-body kinetic contact hardness",
-            "soft-body soft contact hardness",
-            "soft-body anchor hardness",
-        )
-        config_values = tuple(
-            _read_pmx_soft_body_float(
-                reader,
-                record_index=record_index,
-                label=label,
-                nonnegative=False,
-            )
-            for label in config_labels
-        )
-
-        cluster_labels = (
-            "soft-body soft-rigid cluster hardness",
-            "soft-body soft-kinetic cluster hardness",
-            "soft-body soft-soft cluster hardness",
-            "soft-body soft-rigid impulse split",
-            "soft-body soft-kinetic impulse split",
-            "soft-body soft-soft impulse split",
-        )
-        cluster_values = tuple(
-            _read_pmx_soft_body_float(
-                reader,
-                record_index=record_index,
-                label=label,
-                nonnegative=False,
-            )
-            for label in cluster_labels
-        )
-
-        iteration_values = tuple(
-            _read_pmx_soft_body_parameter_count(
-                reader,
-                record_index=record_index,
-                label=label,
-            )
-            for label in (
-                "soft-body velocity iteration count",
-                "soft-body position iteration count",
-                "soft-body drift iteration count",
-                "soft-body cluster iteration count",
-            )
-        )
-
-        material_values = tuple(
-            _read_pmx_soft_body_float(
-                reader,
-                record_index=record_index,
-                label=label,
-                nonnegative=False,
-            )
-            for label in (
-                "soft-body linear stiffness",
-                "soft-body area-angular stiffness",
-                "soft-body volume stiffness",
-            )
-        )
-
-        anchor_count = reader.read_bounded_count(
-            "soft-body anchor count",
-            max_count=MAX_PMX_SOFT_BODY_ANCHOR_COUNT,
-            minimum_item_size=(
-                result.index_sizes.rigid_body + result.index_sizes.vertex + 1
-            ),
-        )
-
-        anchors = tuple(
-            _read_pmx_soft_body_anchor(
-                reader,
-                result,
-                soft_body_index=record_index,
-                anchor_index=anchor_index,
-            )
-            for anchor_index in range(anchor_count)
-        )
-
-        pinned_vertex_count = reader.read_bounded_count(
-            "soft-body pinned-vertex count",
-            max_count=MAX_PMX_SOFT_BODY_PIN_COUNT,
-            minimum_item_size=result.index_sizes.vertex,
-        )
-
-        pinned_vertex_indices: list[int] = []
-        for pin_index in range(pinned_vertex_count):
-            with reader.context(
-                f"soft_bodies[{record_index}].pinned_vertices",
-                record_index=pin_index,
-            ):
-                pin_offset = reader.offset
-                vertex_index = reader.read_index(
-                    result.index_sizes.vertex,
-                    signed=False,
-                    label="soft-body pinned vertex index",
-                )
-                _validate_pmx_index_range(
-                    vertex_index,
-                    count=result.vertex_count,
-                    section=(f"soft_bodies[{record_index}].pinned_vertices"),
-                    record_index=pin_index,
-                    label="soft-body pinned vertex index",
-                    offset=pin_offset,
-                    allow_sentinel=False,
-                )
-                pinned_vertex_indices.append(vertex_index)
-
-    return PmxSoftBody(
-        local_name=local_name,
-        universal_name=universal_name,
-        shape=shape,
-        shape_name=shape_name,
-        material_index=material_index,
-        collision_group=collision_group,
-        collision_mask=collision_mask,
-        flags=flags,
-        flag_names=flag_names,
-        bending_link_distance=bending_link_distance,
-        cluster_count=cluster_count,
-        total_mass=total_mass,
-        collision_margin=collision_margin,
-        config=PmxSoftBodyConfig(
-            aerodynamics_model=aerodynamics_model,
-            aerodynamics_model_name=aerodynamics_model_name,
-            velocity_correction_factor=config_values[0],
-            damping_coefficient=config_values[1],
-            drag_coefficient=config_values[2],
-            lift_coefficient=config_values[3],
-            pressure_coefficient=config_values[4],
-            volume_conservation_coefficient=config_values[5],
-            dynamic_friction_coefficient=config_values[6],
-            pose_matching_coefficient=config_values[7],
-            rigid_contact_hardness=config_values[8],
-            kinetic_contact_hardness=config_values[9],
-            soft_contact_hardness=config_values[10],
-            anchor_hardness=config_values[11],
-        ),
-        cluster_config=PmxSoftBodyClusterConfig(
-            soft_rigid_hardness=cluster_values[0],
-            soft_kinetic_hardness=cluster_values[1],
-            soft_soft_hardness=cluster_values[2],
-            soft_rigid_impulse_split=cluster_values[3],
-            soft_kinetic_impulse_split=cluster_values[4],
-            soft_soft_impulse_split=cluster_values[5],
-        ),
-        iteration_config=PmxSoftBodyIterationConfig(
-            velocity=iteration_values[0],
-            position=iteration_values[1],
-            drift=iteration_values[2],
-            cluster=iteration_values[3],
-        ),
-        material_config=PmxSoftBodyMaterialConfig(
-            linear_stiffness=material_values[0],
-            area_angular_stiffness=material_values[1],
-            volume_stiffness=material_values[2],
-        ),
-        anchors=anchors,
-        pinned_vertex_indices=tuple(pinned_vertex_indices),
-    )
+    finally:
+        result.joint_count = joint_state.joint_count
+        result.joints = list(joint_state.joints)
 
 
 def _scan_pmx_soft_bodies(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read and validate the optional PMX 2.1 soft-body section."""
+    """Read soft bodies while preserving the legacy list projection."""
 
-    if result.version is None or result.index_sizes is None:
+    if result.material_count is None:
         _raise_pmx_error(
             section="soft_bodies",
             offset=reader.offset,
             operation="starting soft-body scan",
-            reason="PMX version or index sizes are unavailable.",
+            reason="PMX material count is unavailable.",
+        )
+    if result.rigid_body_count is None:
+        _raise_pmx_error(
+            section="soft_bodies",
+            offset=reader.offset,
+            operation="starting soft-body scan",
+            reason="PMX rigid-body count is unavailable.",
+        )
+    if result.vertex_count is None:
+        _raise_pmx_error(
+            section="soft_bodies",
+            offset=reader.offset,
+            operation="starting soft-body scan",
+            reason="PMX vertex count is unavailable.",
         )
 
-    if result.version == 2.0:
-        result.soft_body_count = 0
-        result.soft_bodies = []
-        return
+    soft_body_state = PmxSoftBodyReadState()
 
-    with reader.context("soft_bodies"):
-        count_offset = reader.offset
-        soft_body_count = reader.read_bounded_count(
-            "soft-body count",
-            max_count=MAX_PMX_SOFT_BODY_COUNT,
-            minimum_item_size=_minimum_pmx_soft_body_size(result.index_sizes),
-        )
-
-    result.soft_body_count = soft_body_count
-    soft_bodies: list[PmxSoftBody] = []
-    total_anchor_count = 0
-    total_pin_count = 0
-
-    for record_index in range(soft_body_count):
-        soft_body = _read_pmx_soft_body(
+    try:
+        read_pmx_soft_bodies(
             reader,
-            result,
-            record_index=record_index,
+            header=header,
+            material_count=result.material_count,
+            rigid_body_count=result.rigid_body_count,
+            vertex_count=result.vertex_count,
+            state=soft_body_state,
+            max_total_anchor_count=(
+                MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT
+            ),
+            max_total_pin_count=MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT,
         )
-        total_anchor_count += len(soft_body.anchors)
-        total_pin_count += len(soft_body.pinned_vertex_indices)
-
-        if total_anchor_count > MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT:
-            _raise_pmx_error(
-                section="soft_bodies",
-                record_index=record_index,
-                offset=count_offset,
-                operation="validating total soft-body anchor count",
-                reason=(
-                    f"soft bodies declare {total_anchor_count} total "
-                    "anchors, exceeding the safety limit of "
-                    f"{MAX_PMX_TOTAL_SOFT_BODY_ANCHOR_COUNT}."
-                ),
-            )
-
-        if total_pin_count > MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT:
-            _raise_pmx_error(
-                section="soft_bodies",
-                record_index=record_index,
-                offset=count_offset,
-                operation="validating total soft-body pinned-vertex count",
-                reason=(
-                    f"soft bodies declare {total_pin_count} total pinned "
-                    "vertices, exceeding the safety limit of "
-                    f"{MAX_PMX_TOTAL_SOFT_BODY_PIN_COUNT}."
-                ),
-            )
-
-        soft_bodies.append(soft_body)
-
-    result.soft_body_count = soft_body_count
-    result.soft_bodies = soft_bodies
+    finally:
+        result.soft_body_count = soft_body_state.soft_body_count
+        result.soft_bodies = list(soft_body_state.soft_bodies)
 
 
 def _build_pmx_section_summary(
@@ -2351,14 +951,17 @@ def scan_pmx_structure(
                 _scan_pmx_rigid_bodies(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_joints(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_soft_bodies(
                     reader,
                     result,
+                    header=header,
                 )
                 _finalize_pmx_structure_scan(
                     reader,

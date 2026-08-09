@@ -11,7 +11,12 @@ from mmd_registry.binary_reader import (
     BinaryParseError,
     BinaryReader,
 )
-from mmd_registry.pmx.document import PmxHeader, PmxIndexSizes, PmxModelInfo
+from mmd_registry.pmx.document import (
+    PmxHeader,
+    PmxIndexSizes,
+    PmxMaterial,
+    PmxModelInfo,
+)
 from mmd_registry.pmx.errors import raise_pmx_error as _raise_pmx_error
 from mmd_registry.pmx.sections.geometry import (
     MAX_PMX_SURFACE_INDEX_COUNT,
@@ -25,12 +30,18 @@ from mmd_registry.pmx.sections.header import (
     read_pmx_magic,
     validate_pmx_magic,
 )
+from mmd_registry.pmx.sections.materials import (
+    MAX_PMX_MATERIAL_COUNT,
+    PmxMaterialReadState,
+    read_pmx_materials,
+)
+from mmd_registry.pmx.sections.textures import (
+    MAX_PMX_TEXTURE_COUNT,
+    PmxTextureReadState,
+    read_pmx_textures,
+)
 
 
-MAX_PMX_TEXTURE_COUNT: Final[int] = 100_000
-MAX_PMX_TEXTURE_PATH_BYTES: Final[int] = 64 * 1024
-MAX_PMX_MATERIAL_COUNT: Final[int] = 100_000
-MAX_PMX_MATERIAL_MEMO_BYTES: Final[int] = 1024 * 1024
 MAX_PMX_BONE_COUNT: Final[int] = 200_000
 MAX_PMX_IK_LOOP_COUNT: Final[int] = 1_000_000
 MAX_PMX_IK_LINK_COUNT: Final[int] = 100_000
@@ -65,36 +76,6 @@ PMX_BONE_FLAG_AFTER_PHYSICS: Final[int] = 0x1000
 PMX_BONE_FLAG_EXTERNAL_PARENT: Final[int] = 0x2000
 
 ScanStatus = Literal["ok", "warning", "error"]
-
-
-@dataclass(frozen=True, slots=True)
-class PmxMaterial:
-    """Structural metadata extracted from one PMX material record."""
-
-    local_name: str
-    universal_name: str
-    texture_index: int
-    sphere_texture_index: int
-    sphere_mode: int
-    toon_reference_mode: Literal["texture", "shared"]
-    toon_reference_index: int
-    memo: str
-    surface_index_count: int
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "texture_index": self.texture_index,
-            "sphere_texture_index": self.sphere_texture_index,
-            "sphere_mode": self.sphere_mode,
-            "toon_reference_mode": self.toon_reference_mode,
-            "toon_reference_index": self.toon_reference_index,
-            "memo": self.memo,
-            "surface_index_count": self.surface_index_count,
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -885,301 +866,38 @@ def _scan_pmx_geometry(
 def _scan_pmx_textures(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read raw PMX texture paths without resolving dependencies."""
+    """Read texture paths while preserving the legacy list projection."""
 
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="textures",
-            offset=reader.offset,
-            operation="starting texture scan",
-            reason="PMX text encoding is unavailable.",
+    texture_state = PmxTextureReadState()
+
+    try:
+        read_pmx_textures(
+            reader,
+            header=header,
+            state=texture_state,
         )
-
-    encoding = result.encoding
-    require_even_length = encoding == "utf-16-le"
-
-    with reader.context("textures"):
-        texture_count = reader.read_bounded_count(
-            "texture count",
-            max_count=MAX_PMX_TEXTURE_COUNT,
-            minimum_item_size=4,
-        )
-
-    texture_paths: list[str] = []
-
-    for record_index in range(texture_count):
-        with reader.context(
-            "textures",
-            record_index=record_index,
-        ):
-            texture_path = reader.read_length_prefixed_text(
-                "texture path",
-                encoding=encoding,
-                max_length=MAX_PMX_TEXTURE_PATH_BYTES,
-                require_even_length=require_even_length,
-            )
-
-        texture_paths.append(texture_path)
-
-    result.texture_count = texture_count
-    result.texture_paths = texture_paths
-
-
-def _minimum_pmx_material_size(
-    *,
-    texture_index_size: int,
-) -> int:
-    """Return the smallest possible PMX material-record size."""
-
-    text_length_fields = 8
-    shading_and_edge_fields = 65
-    texture_indices = texture_index_size * 2
-    sphere_and_toon_fields = 3
-    memo_length_field = 4
-    surface_count_field = 4
-
-    return (
-        text_length_fields
-        + shading_and_edge_fields
-        + texture_indices
-        + sphere_and_toon_fields
-        + memo_length_field
-        + surface_count_field
-    )
-
-
-def _validate_material_texture_index(
-    value: int,
-    *,
-    texture_count: int,
-    record_index: int,
-    label: str,
-    offset: int,
-) -> None:
-    """Validate a material texture index, permitting the -1 sentinel."""
-
-    if value < -1 or value >= texture_count:
-        if texture_count == 0:
-            expected = "expected only -1 because no textures are declared"
-        else:
-            expected = f"expected -1 or a value from 0 through {texture_count - 1}"
-
-        _raise_pmx_error(
-            section="materials",
-            record_index=record_index,
-            offset=offset,
-            operation=f"validating {label}",
-            reason=(
-                f"index {value} is invalid for texture count "
-                f"{texture_count}; {expected}."
-            ),
-        )
-
-
-def _read_pmx_material(
-    reader: BinaryReader,
-    result: PmxHeaderScanResult,
-    *,
-    record_index: int,
-) -> PmxMaterial:
-    """Read one PMX material while retaining structural metadata."""
-
-    if result.encoding is None:
-        _raise_pmx_error(
-            section="materials",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading material",
-            reason="PMX text encoding is unavailable.",
-        )
-
-    if result.index_sizes is None:
-        _raise_pmx_error(
-            section="materials",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading material",
-            reason="PMX index sizes are unavailable.",
-        )
-
-    if result.texture_count is None:
-        _raise_pmx_error(
-            section="materials",
-            record_index=record_index,
-            offset=reader.offset,
-            operation="reading material",
-            reason="PMX texture count is unavailable.",
-        )
-
-    encoding = result.encoding
-    texture_index_size = result.index_sizes.texture
-    texture_count = result.texture_count
-    require_even_length = encoding == "utf-16-le"
-
-    with reader.context(
-        "materials",
-        record_index=record_index,
-    ):
-        local_name = reader.read_length_prefixed_text(
-            "local material name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-        universal_name = reader.read_length_prefixed_text(
-            "universal material name",
-            encoding=encoding,
-            max_length=MAX_PMX_NAME_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        reader.skip(16, "material diffuse color")
-        reader.skip(12, "material specular color")
-        reader.skip(4, "material specular strength")
-        reader.skip(12, "material ambient color")
-        reader.read_uint8("material drawing flags")
-        reader.skip(16, "material edge color")
-        reader.skip(4, "material edge scale")
-
-        texture_index_offset = reader.offset
-        texture_index = reader.read_index(
-            texture_index_size,
-            signed=True,
-            label="material texture index",
-        )
-        _validate_material_texture_index(
-            texture_index,
-            texture_count=texture_count,
-            record_index=record_index,
-            label="material texture index",
-            offset=texture_index_offset,
-        )
-
-        sphere_texture_index_offset = reader.offset
-        sphere_texture_index = reader.read_index(
-            texture_index_size,
-            signed=True,
-            label="material sphere texture index",
-        )
-        _validate_material_texture_index(
-            sphere_texture_index,
-            texture_count=texture_count,
-            record_index=record_index,
-            label="material sphere texture index",
-            offset=sphere_texture_index_offset,
-        )
-
-        sphere_mode_offset = reader.offset
-        sphere_mode = reader.read_uint8("material sphere mode")
-
-        if sphere_mode > 3:
-            _raise_pmx_error(
-                section="materials",
-                record_index=record_index,
-                offset=sphere_mode_offset,
-                operation="validating material sphere mode",
-                reason=(
-                    f"invalid sphere mode {sphere_mode}; "
-                    "expected a value from 0 through 3."
-                ),
-            )
-
-        toon_mode_offset = reader.offset
-        toon_mode = reader.read_uint8("material toon reference mode")
-
-        if toon_mode == 0:
-            toon_reference_mode: Literal["texture", "shared"] = "texture"
-            toon_reference_offset = reader.offset
-            toon_reference_index = reader.read_index(
-                texture_index_size,
-                signed=True,
-                label="material toon texture index",
-            )
-            _validate_material_texture_index(
-                toon_reference_index,
-                texture_count=texture_count,
-                record_index=record_index,
-                label="material toon texture index",
-                offset=toon_reference_offset,
-            )
-
-        elif toon_mode == 1:
-            toon_reference_mode = "shared"
-            toon_reference_offset = reader.offset
-            toon_reference_index = reader.read_uint8("material shared toon index")
-
-            if toon_reference_index > 9:
-                _raise_pmx_error(
-                    section="materials",
-                    record_index=record_index,
-                    offset=toon_reference_offset,
-                    operation="validating shared toon index",
-                    reason=(
-                        f"invalid shared toon index "
-                        f"{toon_reference_index}; expected a "
-                        "value from 0 through 9."
-                    ),
-                )
-
-        else:
-            _raise_pmx_error(
-                section="materials",
-                record_index=record_index,
-                offset=toon_mode_offset,
-                operation="validating material toon reference mode",
-                reason=(f"invalid toon reference mode {toon_mode}; expected 0 or 1."),
-            )
-
-        memo = reader.read_length_prefixed_text(
-            "material memo",
-            encoding=encoding,
-            max_length=MAX_PMX_MATERIAL_MEMO_BYTES,
-            require_even_length=require_even_length,
-        )
-
-        surface_count_offset = reader.offset
-        surface_index_count = reader.read_bounded_count(
-            "material surface index count",
-            max_count=MAX_PMX_SURFACE_INDEX_COUNT,
-        )
-
-        if surface_index_count % 3 != 0:
-            _raise_pmx_error(
-                section="materials",
-                record_index=record_index,
-                offset=surface_count_offset,
-                operation=("validating material surface index count"),
-                reason=(
-                    f"surface index count {surface_index_count} must be divisible by 3."
-                ),
-            )
-
-    return PmxMaterial(
-        local_name=local_name,
-        universal_name=universal_name,
-        texture_index=texture_index,
-        sphere_texture_index=sphere_texture_index,
-        sphere_mode=sphere_mode,
-        toon_reference_mode=toon_reference_mode,
-        toon_reference_index=toon_reference_index,
-        memo=memo,
-        surface_index_count=surface_index_count,
-    )
+    finally:
+        result.texture_count = texture_state.texture_count
+        result.texture_paths = list(texture_state.texture_paths)
 
 
 def _scan_pmx_materials(
     reader: BinaryReader,
     result: PmxHeaderScanResult,
+    *,
+    header: PmxHeader,
 ) -> None:
-    """Read PMX materials and validate their surface coverage."""
+    """Read materials while preserving the legacy list projection."""
 
-    if result.index_sizes is None:
+    if result.texture_count is None:
         _raise_pmx_error(
             section="materials",
             offset=reader.offset,
             operation="starting material scan",
-            reason="PMX index sizes are unavailable.",
+            reason="PMX texture count is unavailable.",
         )
 
     if result.surface_index_count is None:
@@ -1190,57 +908,19 @@ def _scan_pmx_materials(
             reason="PMX surface index count is unavailable.",
         )
 
-    count_offset = reader.offset
-    minimum_material_size = _minimum_pmx_material_size(
-        texture_index_size=result.index_sizes.texture,
-    )
+    material_state = PmxMaterialReadState()
 
-    with reader.context("materials"):
-        material_count = reader.read_bounded_count(
-            "material count",
-            max_count=MAX_PMX_MATERIAL_COUNT,
-            minimum_item_size=minimum_material_size,
-        )
-
-    result.material_count = material_count
-    materials: list[PmxMaterial] = []
-    total_surface_indices = 0
-
-    for record_index in range(material_count):
-        material = _read_pmx_material(
+    try:
+        read_pmx_materials(
             reader,
-            result,
-            record_index=record_index,
+            header=header,
+            texture_count=result.texture_count,
+            surface_index_count=result.surface_index_count,
+            state=material_state,
         )
-        materials.append(material)
-        total_surface_indices += material.surface_index_count
-
-        if total_surface_indices > result.surface_index_count:
-            _raise_pmx_error(
-                section="materials",
-                record_index=record_index,
-                offset=reader.offset,
-                operation="validating material surface coverage",
-                reason=(
-                    f"cumulative material surface index count "
-                    f"{total_surface_indices} exceeds model surface "
-                    f"index count {result.surface_index_count}."
-                ),
-            )
-
-    result.materials = materials
-
-    if total_surface_indices != result.surface_index_count:
-        _raise_pmx_error(
-            section="materials",
-            offset=count_offset,
-            operation="validating material surface coverage",
-            reason=(
-                f"materials cover {total_surface_indices} surface "
-                f"indices, but the model declares "
-                f"{result.surface_index_count}."
-            ),
-        )
+    finally:
+        result.material_count = material_state.material_count
+        result.materials = list(material_state.materials)
 
 
 def _read_pmx_int32(
@@ -4244,10 +3924,12 @@ def scan_pmx_structure(
                 _scan_pmx_textures(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_materials(
                     reader,
                     result,
+                    header=header,
                 )
                 _scan_pmx_bones(
                     reader,

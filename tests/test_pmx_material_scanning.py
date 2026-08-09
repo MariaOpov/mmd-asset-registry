@@ -263,6 +263,8 @@ class PmxMaterialScanningTests(unittest.TestCase):
         result = scan_pmx_structure(fixture)
 
         self.assertEqual(result.status, "error")
+        self.assertEqual(result.material_count, 1)
+        self.assertEqual(result.materials, [])
         self.assertTrue(
             any("invalid sphere mode 4" in error for error in result.errors)
         )

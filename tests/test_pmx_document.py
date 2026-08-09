@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import FrozenInstanceError
 
+from mmd_registry import model_scanning
 from mmd_registry.pmx import (
     PmxHeader,
     PmxIndexSizes,
@@ -41,6 +42,19 @@ class PmxDocumentFoundationTests(unittest.TestCase):
                 )
 
                 self.assertEqual(index_sizes.vertex, size)
+
+    def test_index_sizes_have_stable_legacy_json_shape(self) -> None:
+        self.assertEqual(
+            standard_index_sizes().to_dict(),
+            {
+                "vertex": 4,
+                "texture": 1,
+                "material": 2,
+                "bone": 2,
+                "morph": 1,
+                "rigid_body": 4,
+            },
+        )
 
     def test_index_sizes_reject_invalid_widths_and_booleans(self) -> None:
         for value in (0, 3, 8, True):
@@ -154,6 +168,15 @@ class PmxDocumentFoundationTests(unittest.TestCase):
 
         self.assertEqual(model_info.local_name, "モデル")
         self.assertEqual(model_info.local_comments, "一行目\n二行目")
+        self.assertEqual(
+            model_info.to_dict(),
+            {
+                "local_name": "モデル",
+                "universal_name": "Model",
+                "local_comments": "一行目\n二行目",
+                "universal_comments": "Line one\nLine two",
+            },
+        )
 
     def test_model_info_rejects_non_string_fields(self) -> None:
         with self.assertRaisesRegex(TypeError, "local_name must be a string"):
@@ -182,6 +205,10 @@ class PmxDocumentFoundationTests(unittest.TestCase):
 
         with self.assertRaises(FrozenInstanceError):
             model_info.local_name = "Changed"  # type: ignore[misc]
+
+    def test_legacy_scanner_reexports_the_core_types(self) -> None:
+        self.assertIs(model_scanning.PmxIndexSizes, PmxIndexSizes)
+        self.assertIs(model_scanning.PmxModelInfo, PmxModelInfo)
 
 
 if __name__ == "__main__":

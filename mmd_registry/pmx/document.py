@@ -60,6 +60,18 @@ class PmxIndexSizes:
                     f"{sorted(VALID_PMX_INDEX_SIZES)}; got {value!r}."
                 )
 
+    def to_dict(self) -> dict[str, int]:
+        """Return the stable legacy-compatible JSON representation."""
+
+        return {
+            "vertex": self.vertex,
+            "texture": self.texture,
+            "material": self.material,
+            "bone": self.bone,
+            "morph": self.morph,
+            "rigid_body": self.rigid_body,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PmxHeader:
@@ -142,3 +154,13 @@ class PmxModelInfo:
         ):
             if not isinstance(getattr(self, field_name), str):
                 raise TypeError(f"{field_name} must be a string.")
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the stable legacy-compatible JSON representation."""
+
+        return {
+            "local_name": self.local_name,
+            "universal_name": self.universal_name,
+            "local_comments": self.local_comments,
+            "universal_comments": self.universal_comments,
+        }

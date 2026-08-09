@@ -12,6 +12,7 @@ from mmd_registry.binary_reader import (
     BinaryReader,
     VALID_INDEX_SIZES,
 )
+from mmd_registry.pmx.document import PmxIndexSizes, PmxModelInfo
 
 
 PMX_MAGIC: Final[bytes] = b"PMX "
@@ -66,50 +67,6 @@ PMX_BONE_FLAG_AFTER_PHYSICS: Final[int] = 0x1000
 PMX_BONE_FLAG_EXTERNAL_PARENT: Final[int] = 0x2000
 
 ScanStatus = Literal["ok", "warning", "error"]
-
-
-@dataclass(frozen=True, slots=True)
-class PmxIndexSizes:
-    """Index widths declared by the PMX global settings."""
-
-    vertex: int
-    texture: int
-    material: int
-    bone: int
-    morph: int
-    rigid_body: int
-
-    def to_dict(self) -> dict[str, int]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "vertex": self.vertex,
-            "texture": self.texture,
-            "material": self.material,
-            "bone": self.bone,
-            "morph": self.morph,
-            "rigid_body": self.rigid_body,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PmxModelInfo:
-    """The four length-prefixed text fields in PMX model information."""
-
-    local_name: str
-    universal_name: str
-    local_comments: str
-    universal_comments: str
-
-    def to_dict(self) -> dict[str, str]:
-        """Return a JSON-serializable representation."""
-
-        return {
-            "local_name": self.local_name,
-            "universal_name": self.universal_name,
-            "local_comments": self.local_comments,
-            "universal_comments": self.universal_comments,
-        }
 
 
 @dataclass(frozen=True, slots=True)

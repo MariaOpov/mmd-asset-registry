@@ -70,6 +70,12 @@ from mmd_registry.pmx.document import (
 )
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.reader import load_pmx, read_pmx_document
+from mmd_registry.pmx.roundtrip import (
+    PmxRoundTripPathError,
+    PmxRoundTripResult,
+    PmxRoundTripVerificationError,
+    roundtrip_pmx,
+)
 from mmd_registry.pmx.validation import validate_pmx_document
 from mmd_registry.pmx.writer import serialize_pmx, write_pmx
 
@@ -120,6 +126,9 @@ __all__ = [
     "PmxRigidBody",
     "PmxRigidBodyPhysicsMode",
     "PmxRigidBodyShape",
+    "PmxRoundTripPathError",
+    "PmxRoundTripResult",
+    "PmxRoundTripVerificationError",
     "PmxSdef",
     "PmxSoftBody",
     "PmxSoftBodyAerodynamicsModel",
@@ -143,6 +152,7 @@ __all__ = [
     "decode_pmx_bone_flags",
     "load_pmx",
     "read_pmx_document",
+    "roundtrip_pmx",
     "serialize_pmx",
     "validate_pmx_document",
     "write_pmx",

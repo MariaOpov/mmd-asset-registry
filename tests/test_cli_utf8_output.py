@@ -201,6 +201,26 @@ class CliUtf8OutputTests(unittest.TestCase):
             "Bip001 L CalfD",
         )
 
+    def test_roundtrip_json_redirection_writes_utf8(self) -> None:
+        """Unicode PMX input and output paths survive redirected JSON."""
+
+        output_path = self.project_root / "出力モデル.pmx"
+        exit_code, stdout, stderr = self.run_main_with_legacy_streams(
+            [
+                "roundtrip",
+                str(self.bone_model_path),
+                str(output_path),
+                "--json",
+            ]
+        )
+        payload = json.loads(stdout.decode("utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, b"")
+        self.assertTrue(payload["input_path"].endswith("骨格モデル.pmx"))
+        self.assertTrue(payload["output_path"].endswith("出力モデル.pmx"))
+        self.assertTrue(output_path.is_file())
+
     def test_internal_error_redirection_writes_utf8_stderr(self) -> None:
         """Unexpected Unicode errors also survive stderr redirection."""
 

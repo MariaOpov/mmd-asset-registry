@@ -12,12 +12,13 @@ from mmd_registry.pmx.editing.operations import (
     SetTexturePath,
     UpdateMaterial,
 )
+from mmd_registry.pmx.editing.numeric import canonicalize_pmx_float32
 from mmd_registry.pmx.editing.path_policy import validate_portable_texture_path
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.validation import validate_pmx_document
 
 
-_MATERIAL_TEXT_REFERENCE_FIELDS = (
+_MATERIAL_EDITABLE_FIELDS = (
     "local_name",
     "universal_name",
     "memo",
@@ -26,19 +27,22 @@ _MATERIAL_TEXT_REFERENCE_FIELDS = (
     "sphere_mode",
     "toon_reference_mode",
     "toon_reference_index",
+    "diffuse",
+    "specular",
+    "specular_strength",
+    "ambient",
+    "drawing_flags",
+    "edge_color",
+    "edge_scale",
 )
 
-_MATERIAL_VISUAL_FIELDS = frozenset(
-    {
-        "diffuse",
-        "specular",
-        "specular_strength",
-        "ambient",
-        "drawing_flags",
-        "edge_color",
-        "edge_scale",
-    }
+_MATERIAL_FLOAT_VECTOR_FIELDS = (
+    "diffuse",
+    "specular",
+    "ambient",
+    "edge_color",
 )
+_MATERIAL_FLOAT_FIELDS = ("specular_strength", "edge_scale")
 
 
 def _is_plain_int(value: object) -> bool:
@@ -91,6 +95,48 @@ def _validate_edited_document(
                 field=payload_field,
             ) from error
         raise
+
+
+def _canonicalize_material_float_updates(
+    updates: dict[str, object],
+    *,
+    operation_index: int,
+) -> dict[str, object]:
+    """Canonicalize targeted material floats to their stored PMX values."""
+
+    canonical = dict(updates)
+    for field_name in _MATERIAL_EDITABLE_FIELDS:
+        value = canonical.get(field_name)
+        if value is None:
+            continue
+
+        if field_name in _MATERIAL_FLOAT_VECTOR_FIELDS:
+            components: list[float] = []
+            for component_index, component in enumerate(value):
+                try:
+                    components.append(canonicalize_pmx_float32(component))
+                except ValueError as error:
+                    raise PmxEditPlanError(
+                        str(error),
+                        operation_index=operation_index,
+                        field=f"{field_name}[{component_index}]",
+                    ) from error
+            canonical[field_name] = tuple(components)
+            continue
+
+        if field_name not in _MATERIAL_FLOAT_FIELDS:
+            continue
+
+        try:
+            canonical[field_name] = canonicalize_pmx_float32(value)
+        except ValueError as error:
+            raise PmxEditPlanError(
+                str(error),
+                operation_index=operation_index,
+                field=field_name,
+            ) from error
+
+    return canonical
 
 
 def apply_set_model_info(
@@ -231,7 +277,7 @@ def apply_update_material(
     *,
     operation_index: int = 0,
 ) -> PmxEditResult:
-    """Purely update supported text and reference fields of one material."""
+    """Purely update supported fields of one material."""
 
     if not isinstance(document, PmxDocument):
         raise TypeError("document must be a PmxDocument instance.")
@@ -249,23 +295,16 @@ def apply_update_material(
             field="material_index",
         )
 
-    for target in operation.targets():
-        if target.payload_field in _MATERIAL_VISUAL_FIELDS:
-            raise PmxEditPlanError(
-                (
-                    f"material visual field {target.payload_field!r} is not "
-                    "supported by the text/reference editing operation."
-                ),
-                operation_index=operation_index,
-                field=target.payload_field,
-            )
-
     material = document.materials[operation.material_index]
     requested_updates = {
         field_name: getattr(operation, field_name)
-        for field_name in _MATERIAL_TEXT_REFERENCE_FIELDS
+        for field_name in _MATERIAL_EDITABLE_FIELDS
         if getattr(operation, field_name) is not None
     }
+    requested_updates = _canonicalize_material_float_updates(
+        requested_updates,
+        operation_index=operation_index,
+    )
     effective_updates = {
         field_name: value
         for field_name, value in requested_updates.items()
@@ -302,7 +341,7 @@ def apply_update_material(
             after=effective_updates[field_name],
             operation_index=operation_index,
         )
-        for field_name in _MATERIAL_TEXT_REFERENCE_FIELDS
+        for field_name in _MATERIAL_EDITABLE_FIELDS
         if field_name in effective_updates
     )
 

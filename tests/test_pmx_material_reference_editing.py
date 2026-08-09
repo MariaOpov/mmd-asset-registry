@@ -341,22 +341,6 @@ class PmxMaterialReferenceEditingTests(unittest.TestCase):
                 surface_index_count=3,
             )
 
-    def test_visual_fields_remain_outside_checkpoint_scope(self) -> None:
-        source = load_document()
-
-        with self.assertRaisesRegex(
-            PmxEditPlanError,
-            r"operations\[1\]\.diffuse.*visual field",
-        ):
-            apply_update_material(
-                source,
-                UpdateMaterial(
-                    material_index=0,
-                    diffuse=(0.5, 0.5, 0.5, 1.0),
-                ),
-                operation_index=1,
-            )
-
     def test_rejects_wrong_argument_types_and_operation_index(self) -> None:
         source = load_document()
         operation = UpdateMaterial(material_index=0, memo="Changed")

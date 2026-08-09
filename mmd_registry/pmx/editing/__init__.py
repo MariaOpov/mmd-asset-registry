@@ -19,6 +19,7 @@ from mmd_registry.pmx.editing.operations import (
     SetTexturePath,
     UpdateMaterial,
 )
+from mmd_registry.pmx.editing.numeric import canonicalize_pmx_float32
 from mmd_registry.pmx.editing.plan import (
     PMX_EDIT_PLAN_SCHEMA_VERSION,
     PmxEditPlan,
@@ -42,6 +43,7 @@ __all__ = [
     "apply_set_model_info",
     "apply_set_texture_path",
     "apply_update_material",
+    "canonicalize_pmx_float32",
     "validate_portable_texture_path",
     "validate_pmx_edit_plan",
 ]

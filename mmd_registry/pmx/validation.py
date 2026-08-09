@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import struct
 from dataclasses import fields, is_dataclass
 from typing import Iterable
 
@@ -211,11 +212,31 @@ def _validate_text(
 
 
 def _validate_finite_tree(value: object, path: str = "") -> None:
-    """Reject non-finite floats anywhere in the immutable document tree."""
+    """Reject floats PMX cannot store anywhere in the document tree."""
 
     if isinstance(value, float):
         if not math.isfinite(value):
             _fail("document", path, "floating-point value must be finite.")
+        try:
+            encoded = struct.pack("<f", value)
+        except (OverflowError, struct.error):
+            _fail(
+                "document",
+                path,
+                (
+                    "floating-point value must fit the finite IEEE-754 "
+                    "float32 range."
+                ),
+            )
+        if not math.isfinite(struct.unpack("<f", encoded)[0]):
+            _fail(
+                "document",
+                path,
+                (
+                    "floating-point value must fit the finite IEEE-754 "
+                    "float32 range."
+                ),
+            )
         return
 
     if isinstance(value, tuple):

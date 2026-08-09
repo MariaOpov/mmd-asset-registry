@@ -191,7 +191,7 @@ def render_pmx_edit_preview_text(
     status = (
         "no changes"
         if audit.changed_fields == 0
-        else f"{audit.changed_fields} fields changed"
+        else _changed_count(audit.changed_fields, "field", "fields")
     )
     lines = [
         "PMX EDIT PREVIEW",

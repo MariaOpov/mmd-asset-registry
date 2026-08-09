@@ -78,6 +78,22 @@ class CliUtf8OutputTests(unittest.TestCase):
                 )
             )
         )
+        self.edit_plan_path = self.project_root / "編集計画.json"
+        self.edit_plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "operations": [
+                        {
+                            "op": "set_model_info",
+                            "local_name": "芙拉薇娅モデル 🌸",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
@@ -220,6 +236,31 @@ class CliUtf8OutputTests(unittest.TestCase):
         self.assertTrue(payload["input_path"].endswith("骨格モデル.pmx"))
         self.assertTrue(payload["output_path"].endswith("出力モデル.pmx"))
         self.assertTrue(output_path.is_file())
+
+    def test_edit_json_redirection_writes_utf8_without_output(self) -> None:
+        """Unicode edit paths and values survive redirected dry-run JSON."""
+
+        output_path = self.project_root / "未作成.pmx"
+        exit_code, stdout, stderr = self.run_main_with_legacy_streams(
+            [
+                "edit",
+                str(self.bone_model_path),
+                str(output_path),
+                "--plan",
+                str(self.edit_plan_path),
+                "--dry-run",
+                "--json",
+            ]
+        )
+        payload = json.loads(stdout.decode("utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, b"")
+        self.assertEqual(
+            payload["audit"]["changes"][0]["after"],
+            "芙拉薇娅モデル 🌸",
+        )
+        self.assertFalse(output_path.exists())
 
     def test_internal_error_redirection_writes_utf8_stderr(self) -> None:
         """Unexpected Unicode errors also survive stderr redirection."""

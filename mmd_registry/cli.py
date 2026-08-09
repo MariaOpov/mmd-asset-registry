@@ -24,6 +24,14 @@ from mmd_registry.model_scanning import (
     PmxHeaderScanResult,
     scan_pmx_structure,
 )
+from mmd_registry.pmx.editing import (
+    PmxEditPlanError,
+    PmxEditVerificationError,
+    dry_run_pmx_edit,
+    load_pmx_edit_plan,
+    render_pmx_edit_preview_json,
+    render_pmx_edit_preview_text,
+)
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.roundtrip import (
     PmxRoundTripPathError,
@@ -53,6 +61,7 @@ COMMAND_NAMES = frozenset(
         "doctor",
         "bones",
         "rig",
+        "edit",
     }
 )
 
@@ -289,6 +298,51 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the verified round-trip result as JSON.",
+    )
+
+    edit_parser = subparsers.add_parser(
+        "edit",
+        help="Preview a declarative PMX edit plan without writing output.",
+        description=(
+            "Load and validate a strict JSON edit plan, apply it entirely in "
+            "memory, and print a semantically verified dry-run preview."
+        ),
+    )
+    edit_parser.add_argument(
+        "input",
+        help="Path to the source PMX file.",
+    )
+    edit_parser.add_argument(
+        "output",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional future output path. Dry-run never creates or modifies it."
+        ),
+    )
+    edit_parser.add_argument(
+        "--plan",
+        required=True,
+        metavar="PATH",
+        help="Path to the strict UTF-8 JSON edit plan.",
+    )
+    edit_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview and verify all edits without writing a PMX output.",
+    )
+    edit_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Reserved for a separate output path in write mode; never writes "
+            "during dry-run."
+        ),
+    )
+    edit_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the dry-run preview as stable Unicode-safe JSON.",
     )
 
     doctor_parser = subparsers.add_parser(
@@ -861,6 +915,142 @@ def _run_roundtrip(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _print_edit_error(
+    input_path: Path,
+    plan_path: Path,
+    output_path: Path | None,
+    message: str,
+    *,
+    json_output: bool,
+    error_type: str,
+    dry_run: bool,
+) -> None:
+    """Print one stable edit path, data, verification, or internal failure."""
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "dry_run": dry_run,
+                    "input_path": input_path.as_posix(),
+                    "plan_path": plan_path.as_posix(),
+                    "output_path": (
+                        output_path.as_posix()
+                        if output_path is not None
+                        else None
+                    ),
+                    "error_type": error_type,
+                    "errors": [message],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    print(f"[ERROR] edit: {message}", file=sys.stderr)
+
+
+def _edit_path_error(path: Path, label: str) -> str | None:
+    """Return one role-specific error for an unreadable edit input path."""
+
+    if not path.exists():
+        return f"{label} file does not exist: {path}"
+    if not path.is_file():
+        return f"{label} path is not a file: {path}"
+    return None
+
+
+def _run_edit(arguments: argparse.Namespace) -> int:
+    """Run one verified PMX edit preview without creating output."""
+
+    input_path = Path(arguments.input)
+    plan_path = Path(arguments.plan)
+    output_path = Path(arguments.output) if arguments.output is not None else None
+
+    def print_error(message: str, error_type: str) -> None:
+        _print_edit_error(
+            input_path,
+            plan_path,
+            output_path,
+            message,
+            json_output=arguments.json,
+            error_type=error_type,
+            dry_run=arguments.dry_run,
+        )
+
+    if arguments.overwrite and output_path is None:
+        print_error("--overwrite requires an output path.", "usage")
+        return 2
+    if not arguments.dry_run:
+        if output_path is None:
+            print_error(
+                "Output path is required unless --dry-run is used.",
+                "usage",
+            )
+        else:
+            print_error(
+                "PMX write mode is not available until safe output support.",
+                "usage",
+            )
+        return 2
+
+    for path, label in ((input_path, "Input"), (plan_path, "Plan")):
+        path_error = _edit_path_error(path, label)
+        if path_error is not None:
+            print_error(path_error, "path_policy")
+            return 2
+
+    try:
+        source_bytes = input_path.read_bytes()
+    except OSError as error:
+        print_error(f"Unable to read input file: {error}", "io")
+        return 2
+
+    try:
+        plan = load_pmx_edit_plan(plan_path)
+    except PmxEditPlanError as error:
+        print_error(str(error), "invalid_plan")
+        return 1
+    except OSError as error:
+        print_error(f"Unable to read plan file: {error}", "io")
+        return 2
+    except Exception as error:
+        print_error(f"Internal plan-load failure: {error}", "internal")
+        return 3
+
+    try:
+        preview = dry_run_pmx_edit(source_bytes, plan)
+    except PmxEditPlanError as error:
+        print_error(str(error), "invalid_plan")
+        return 1
+    except (BinaryParseError, PmxValidationError) as error:
+        print_error(str(error), "invalid_pmx")
+        return 1
+    except PmxEditVerificationError as error:
+        print_error(str(error), "verification")
+        return 1
+    except Exception as error:
+        print_error(f"Internal edit failure: {error}", "internal")
+        return 3
+
+    try:
+        if arguments.json:
+            sys.stdout.write(render_pmx_edit_preview_json(preview))
+        else:
+            sys.stdout.write(
+                render_pmx_edit_preview_text(
+                    preview,
+                    include_changes=False,
+                )
+            )
+    except Exception as error:
+        print_error(f"Internal preview-render failure: {error}", "internal")
+        return 3
+    return 0
+
+
 def _doctor_status(
     scan_result: PmxHeaderScanResult,
     diagnostics: TextureDependencyDiagnostics | None,
@@ -1104,6 +1294,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "roundtrip":
         return _run_roundtrip(arguments)
+
+    if arguments.command == "edit":
+        return _run_edit(arguments)
 
     if arguments.command == "doctor":
         return _run_doctor(arguments)

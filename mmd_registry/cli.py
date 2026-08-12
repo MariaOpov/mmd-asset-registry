@@ -42,6 +42,17 @@ from mmd_registry.pmx.editing import (
     render_pmx_edit_write_text,
     write_pmx_edit,
 )
+from mmd_registry.pmx.editing.catalog import get_pmx_edit_operation_catalog
+from mmd_registry.pmx.editing.explain import (
+    explain_pmx_edit_plan,
+    render_pmx_edit_plan_explanation_json,
+    render_pmx_edit_plan_explanation_text,
+)
+from mmd_registry.pmx.editing.operations import PmxEditFieldSpec
+from mmd_registry.pmx.editing.template import (
+    get_pmx_edit_plan_template,
+    render_pmx_edit_plan_template_json,
+)
 from mmd_registry.pmx.errors import PmxValidationError
 from mmd_registry.pmx.roundtrip import (
     PmxRoundTripPathError,
@@ -72,6 +83,7 @@ COMMAND_NAMES = frozenset(
         "bones",
         "rig",
         "edit",
+        "edit-plan",
     }
 )
 
@@ -355,6 +367,65 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the preview or write result as stable Unicode-safe JSON.",
+    )
+
+
+    edit_plan_parser = subparsers.add_parser(
+        "edit-plan",
+        help="Author and explain declarative PMX edit plans.",
+        description=(
+            "Inspect the supported edit-operation catalog, generate safe "
+            "non-executable starter templates, or explain a strict JSON edit "
+            "plan without loading or modifying a PMX model."
+        ),
+    )
+    edit_plan_subparsers = edit_plan_parser.add_subparsers(
+        dest="edit_plan_action",
+        metavar="ACTION",
+        required=True,
+    )
+
+    edit_plan_catalog_parser = edit_plan_subparsers.add_parser(
+        "catalog",
+        help="Show the deterministic supported-operation catalog.",
+    )
+    edit_plan_catalog_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the catalog as stable Unicode-safe JSON.",
+    )
+
+    edit_plan_template_parser = edit_plan_subparsers.add_parser(
+        "template",
+        help="Print a safe non-executable edit-plan starter template.",
+    )
+    edit_plan_template_parser.add_argument(
+        "operation_type",
+        nargs="?",
+        default=None,
+        choices=tuple(
+            entry.operation_type
+            for entry in get_pmx_edit_operation_catalog().operations
+        ),
+        metavar="OPERATION",
+        help=(
+            "Optional supported operation type. Omit it for a plan skeleton."
+        ),
+    )
+
+    edit_plan_explain_parser = edit_plan_subparsers.add_parser(
+        "explain",
+        help="Explain one strict JSON edit plan without executing it.",
+    )
+    edit_plan_explain_parser.add_argument(
+        "plan",
+        metavar="PLAN",
+        help="Path to the strict UTF-8 JSON edit plan.",
+    )
+    edit_plan_explain_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the explanation as stable Unicode-safe JSON.",
     )
 
     doctor_parser = subparsers.add_parser(
@@ -1221,6 +1292,219 @@ def _run_edit(arguments: argparse.Namespace) -> int:
     return 0
 
 
+
+def _render_edit_plan_catalog_field(field: PmxEditFieldSpec) -> str:
+    """Render one catalog field without inventing schema information."""
+
+    parts = [
+        field.json_type.value,
+        "required" if field.required else "optional",
+        field.role.value,
+    ]
+    if field.array_length is not None:
+        parts.append(f"length={field.array_length}")
+    if field.minimum is not None:
+        parts.append(f"minimum={field.minimum}")
+    if field.maximum is not None:
+        parts.append(f"maximum={field.maximum}")
+    if field.choices:
+        choices = ",".join(
+            json.dumps(choice, ensure_ascii=False)
+            for choice in field.choices
+        )
+        parts.append(f"choices={choices}")
+    if field.finite:
+        parts.append("finite")
+    return "; ".join(parts)
+
+
+def _render_edit_plan_catalog_text() -> str:
+    """Render the operation catalog in deterministic authoring order."""
+
+    catalog = get_pmx_edit_operation_catalog()
+    lines = [
+        "PMX EDIT OPERATION CATALOG",
+        f"Operations: {len(catalog.operations)}",
+    ]
+
+    for index, entry in enumerate(catalog.operations):
+        lines.extend(
+            (
+                "",
+                f"[{index}] {entry.operation_type}",
+                f"    Purpose: {entry.purpose}",
+                f"    Target: {entry.target_kind.value}",
+                f"    Effect: {entry.effect_kind.value}",
+                "    Fields:",
+            )
+        )
+        lines.extend(
+            (
+                f"      - {field.name}: "
+                f"{_render_edit_plan_catalog_field(field)}"
+            )
+            for field in entry.fields
+        )
+        lines.append("    Constraints:")
+        if entry.constraints:
+            lines.extend(
+                f"      - {constraint}"
+                for constraint in entry.constraints
+            )
+        else:
+            lines.append("      - (none)")
+
+    return "\n".join(lines) + "\n"
+
+
+def _run_edit_plan_catalog(arguments: argparse.Namespace) -> int:
+    """Print the deterministic PMX edit-operation catalog."""
+
+    catalog = get_pmx_edit_operation_catalog()
+    if arguments.json:
+        sys.stdout.write(
+            json.dumps(
+                catalog.to_dict(),
+                ensure_ascii=False,
+                allow_nan=False,
+                indent=2,
+            )
+            + "\n"
+        )
+    else:
+        sys.stdout.write(_render_edit_plan_catalog_text())
+    return 0
+
+
+def _run_edit_plan_template(arguments: argparse.Namespace) -> int:
+    """Print one deliberately non-executable edit-plan starter template."""
+
+    template = get_pmx_edit_plan_template(arguments.operation_type)
+    sys.stdout.write(render_pmx_edit_plan_template_json(template))
+    return 0
+
+
+def _print_edit_plan_authoring_error(
+    *,
+    action: str,
+    diagnostic: PmxEditDiagnostic,
+    json_output: bool,
+    error_type: str,
+) -> None:
+    """Render one stable authoring-only CLI failure without path leakage."""
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "command": "edit-plan",
+                    "action": action,
+                    "error_type": error_type,
+                    "errors": [diagnostic.message],
+                    "error": diagnostic.to_dict(),
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+                indent=2,
+            )
+        )
+        return
+
+    rendered = render_pmx_edit_diagnostic_text(diagnostic).rstrip("\n")
+    print(
+        f"[ERROR] edit-plan {action}: {rendered}",
+        file=sys.stderr,
+    )
+
+
+def _run_edit_plan_explain(arguments: argparse.Namespace) -> int:
+    """Explain one strict JSON edit plan without PMX I/O."""
+
+    plan_path = Path(arguments.plan)
+
+    def print_error(
+        diagnostic: PmxEditDiagnostic,
+        error_type: str,
+    ) -> None:
+        _print_edit_plan_authoring_error(
+            action="explain",
+            diagnostic=diagnostic,
+            json_output=arguments.json,
+            error_type=error_type,
+        )
+
+    try:
+        plan = load_pmx_edit_plan(plan_path)
+    except PmxEditPlanDecodeError as error:
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=PmxEditPhase.PLAN_DECODE,
+            ),
+            "invalid_plan",
+        )
+        return 1
+    except PmxEditPlanError as error:
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=PmxEditPhase.PLAN_VALIDATE,
+            ),
+            "invalid_plan",
+        )
+        return 1
+    except OSError as error:
+        print_error(
+            _new_edit_io_diagnostic(
+                PmxEditPhase.PLAN_READ,
+                "Unable to read edit-plan file.",
+                error,
+            ),
+            "io",
+        )
+        return 2
+
+    try:
+        explanation = explain_pmx_edit_plan(plan)
+    except PmxEditPlanError as error:
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=PmxEditPhase.PLAN_VALIDATE,
+            ),
+            "invalid_plan",
+        )
+        return 1
+
+    if arguments.json:
+        sys.stdout.write(
+            render_pmx_edit_plan_explanation_json(explanation)
+        )
+    else:
+        sys.stdout.write(
+            render_pmx_edit_plan_explanation_text(explanation)
+        )
+    return 0
+
+
+def _run_edit_plan(arguments: argparse.Namespace) -> int:
+    """Dispatch one authoring-only edit-plan CLI action."""
+
+    if arguments.edit_plan_action == "catalog":
+        return _run_edit_plan_catalog(arguments)
+
+    if arguments.edit_plan_action == "template":
+        return _run_edit_plan_template(arguments)
+
+    if arguments.edit_plan_action == "explain":
+        return _run_edit_plan_explain(arguments)
+
+    raise RuntimeError(
+        f"Unsupported edit-plan action: {arguments.edit_plan_action}"
+    )
+
+
 def _doctor_status(
     scan_result: PmxHeaderScanResult,
     diagnostics: TextureDependencyDiagnostics | None,
@@ -1468,6 +1752,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     if arguments.command == "edit":
         return _run_edit(arguments)
 
+    if arguments.command == "edit-plan":
+        return _run_edit_plan(arguments)
+
     if arguments.command == "doctor":
         return _run_doctor(arguments)
 
@@ -1521,6 +1808,45 @@ def _print_unexpected_edit_error(*, json_output: bool) -> None:
     print(f"[ERROR] edit: {rendered}", file=sys.stderr)
 
 
+
+def _print_unexpected_edit_plan_error(
+    *,
+    action: str | None,
+    json_output: bool,
+) -> None:
+    """Render one process-boundary authoring failure without internals."""
+
+    diagnostic = _new_edit_diagnostic(
+        PmxEditPhase.INTERNAL,
+        "Unexpected internal edit-plan failure.",
+    )
+    action_label = action if action is not None else "unknown"
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "command": "edit-plan",
+                    "action": action_label,
+                    "error_type": "internal",
+                    "errors": [diagnostic.message],
+                    "error": diagnostic.to_dict(),
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+                indent=2,
+            )
+        )
+        return
+
+    rendered = render_pmx_edit_diagnostic_text(diagnostic).rstrip("\n")
+    print(
+        f"[ERROR] edit-plan {action_label}: {rendered}",
+        file=sys.stderr,
+    )
+
+
 def main() -> None:
     """Command-line entry point."""
 
@@ -1532,6 +1858,18 @@ def main() -> None:
         normalized_arguments = normalize_arguments(None)
         if normalized_arguments and normalized_arguments[0] == "edit":
             _print_unexpected_edit_error(
+                json_output="--json" in normalized_arguments,
+            )
+        elif (
+            normalized_arguments
+            and normalized_arguments[0] == "edit-plan"
+        ):
+            _print_unexpected_edit_plan_error(
+                action=(
+                    normalized_arguments[1]
+                    if len(normalized_arguments) > 1
+                    else None
+                ),
                 json_output="--json" in normalized_arguments,
             )
         else:

@@ -278,6 +278,72 @@ def _filesystem_candidate(
     return None
 
 
+def _components_have_exact_spelling(
+    *,
+    start_directory: Path,
+    components: tuple[str, ...],
+) -> bool:
+    """Require exact on-disk component spelling without case guessing."""
+
+    current = start_directory
+    for component in components:
+        if component in ("", "."):
+            continue
+        if component == "..":
+            current = current.parent
+            continue
+
+        try:
+            with os.scandir(current) as entries:
+                if not any(entry.name == component for entry in entries):
+                    return False
+        except (FileNotFoundError, NotADirectoryError):
+            return False
+
+        current = current / component
+
+    return True
+
+
+def _candidate_has_exact_spelling(
+    *,
+    model_directory: Path,
+    lexical: TexturePathLexicalAnalysis,
+    candidate: Path,
+) -> bool:
+    """Reject host-only case folding or other spelling substitutions."""
+
+    if lexical.kind is TexturePathKind.RELATIVE:
+        components: list[str] = []
+        for component in PurePosixPath(lexical.normalized_path).parts:
+            if component in ("", "."):
+                continue
+            if component == "..":
+                if not components:
+                    return False
+                components.pop()
+                continue
+            components.append(component)
+
+        if not components:
+            return False
+        return _components_have_exact_spelling(
+            start_directory=model_directory,
+            components=tuple(components),
+        )
+
+    native = candidate.absolute()
+    anchor = native.anchor
+    if not anchor:
+        return False
+    parts = native.parts
+    components = tuple(parts[1:]) if parts and parts[0] == anchor else tuple(parts)
+    return _components_have_exact_spelling(
+        start_directory=Path(anchor),
+        components=components,
+    )
+
+
 def _outside_model_directory(candidate: Path, model_directory: Path) -> bool:
     candidate_resolved = candidate.resolve(strict=False)
     model_directory_resolved = model_directory.resolve(strict=False)
@@ -316,7 +382,12 @@ def collect_texture_filesystem_evidence(
     try:
         resolved = candidate.resolve(strict=False)
         outside = _outside_model_directory(candidate, model_directory)
-        exists = resolved.exists()
+        spelling_matches = _candidate_has_exact_spelling(
+            model_directory=model_directory,
+            lexical=lexical,
+            candidate=candidate,
+        )
+        exists = spelling_matches and resolved.exists()
         is_file = resolved.is_file() if exists else False
     except (OSError, RuntimeError, ValueError):
         return TextureFilesystemEvidence(

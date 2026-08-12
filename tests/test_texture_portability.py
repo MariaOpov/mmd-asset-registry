@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from mmd_registry.texture_portability import (
     TexturePortabilityIssueCode,
@@ -109,6 +110,39 @@ class TexturePortabilityTests(unittest.TestCase):
         self.assertIsNone(report.entries[0].candidate_path)
         self.assertIn("not_a_file", report.entries[1].issue_codes)
         self.assertIsNone(report.entries[1].candidate_path)
+
+    def test_exact_component_spelling_is_required_even_if_host_lookup_succeeds(self) -> None:
+        self.write_texture("textures/body.png")
+
+        with (
+            mock.patch.object(Path, "exists", return_value=True),
+            mock.patch.object(Path, "is_file", return_value=True),
+        ):
+            report = analyze_texture_portability(
+                self.model_path,
+                ("textures/BODY.PNG",),
+            )
+
+        entry = report.entries[0]
+        self.assertFalse(entry.filesystem.exists)
+        self.assertFalse(entry.filesystem.is_file)
+        self.assertIn("missing_file", entry.issue_codes)
+        self.assertIsNone(entry.candidate_path)
+
+    def test_exact_spelling_check_collapses_bounded_parent_components(self) -> None:
+        self.write_texture("textures/body.png")
+
+        report = analyze_texture_portability(
+            self.model_path,
+            ("textures/sub/../body.png",),
+        )
+
+        entry = report.entries[0]
+        self.assertTrue(entry.filesystem.exists)
+        self.assertTrue(entry.filesystem.is_file)
+        self.assertFalse(entry.filesystem.outside_model_directory)
+        self.assertIn("parent_reference", entry.issue_codes)
+        self.assertIsNone(entry.candidate_path)
 
     def test_absolute_rooted_unc_drive_empty_nul_are_lexically_stable(self) -> None:
         declarations = (

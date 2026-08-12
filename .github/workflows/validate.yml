@@ -38,7 +38,7 @@ jobs:
       - name: Compile Python source
         run: python -m compileall mmd_registry tests check_assets.py
 
-      - name: Run PMX edit compatibility and authoring safety matrix
+      - name: Run PMX edit and texture portability safety matrix
         run: >
           python -m unittest -q
           tests.test_pmx_edit_generated_matrix
@@ -51,13 +51,18 @@ jobs:
           tests.test_pmx_edit_operation_catalog
           tests.test_pmx_edit_negative_safety
           tests.test_pmx_private_failure_validation
+          tests.test_texture_path_semantics
+          tests.test_texture_portability
+          tests.test_texture_rewrite
+          tests.test_texture_portability_cli
+          tests.test_texture_portability_generated_matrix
 
       - name: Run automated tests
         run: python -m unittest discover -s tests -q
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.8.2'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.8.3'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help
@@ -66,6 +71,7 @@ jobs:
           python check_assets.py edit-plan catalog --help
           python check_assets.py edit-plan template --help
           python check_assets.py edit-plan explain --help
+          python check_assets.py texture-portability --help
           python check_assets.py doctor --help
           python check_assets.py bones --help
           python check_assets.py rig --help

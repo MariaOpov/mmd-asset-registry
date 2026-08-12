@@ -17,16 +17,17 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.2
+Tool version: 0.8.3
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.2
-adds deterministic edit-operation discovery, intentionally incomplete starter
-templates, and plan explanation without adding new edit operations or loading a
-PMX model. It also hardens authoring diagnostics while keeping the existing
-`edit` execution contract and persistent registry schema unchanged.
+Tool version and registry schema are intentionally independent. Version 0.8.3
+adds deterministic cross-platform texture-path semantics, portability analysis,
+safe rewrite proposals, and strict edit-plan generation without adding new edit
+operation types. Model and texture inputs remain read-only; generated plans stay
+inside the existing verified `edit` workflow and registry schema `0.3` remains
+unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -85,6 +86,32 @@ Version 0.8.0 introduces the first safety-bounded PMX editing core:
   integrity, and automatic temporary plan/output cleanup
 - Ubuntu and Windows CI coverage plus 740 automated unit tests at release
   readiness
+
+Version 0.8.3 adds deterministic texture portability and path workflow
+without expanding the PMX editing surface:
+
+- Host-independent lexical classification for relative, POSIX absolute, Windows
+  absolute, drive-relative, rooted, and UNC texture declarations
+- Original declarations preserved separately from normalized paths and rewrite
+  candidates so host path handling cannot silently reinterpret PMX data
+- Filesystem evidence separated from lexical semantics, including containment,
+  existence, regular-file state, and exact on-disk component spelling
+- Safe rewrite proposals only when the candidate is deterministic and
+  unambiguous; no fuzzy matching, extension guessing, case repair, or spelling
+  heuristics
+- Bounded lexical collapse for model-relative parent references while parent
+  escapes remain blocked
+- Existing `SetTexturePath` and strict `PmxEditPlan` reuse for generated plans;
+  no new edit operation type is introduced
+- A `texture-portability` CLI with stable text/JSON reporting plus optional
+  `--plan-out` output that never overwrites an existing plan
+- Referenced blocked dependencies prevent partial plan emission; blocked
+  unreferenced declarations remain visible as warnings
+- Source SHA-256 binding before and after analysis so plan generation is refused
+  when the PMX changes during the workflow
+- Generated regression coverage across lexical, filesystem, rewrite, strict-plan
+  bridge, CLI safety, and host case-sensitivity boundaries
+- 884 automated tests at the version 0.8.3 release-readiness checkpoint
 
 Version 0.8.2 adds edit-plan authoring and explanation UX without adding new
 edit operation types:
@@ -280,6 +307,7 @@ scan      Structurally scan a PMX model
 roundtrip Write a verified PMX copy to a distinct output path
 edit      Preview or safely write a strict declarative PMX edit plan
 edit-plan Author or explain strict declarative PMX edit plans
+texture-portability Analyze texture portability and propose safe rewrites
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
 rig       Resolve bone semantics, diagnose a rig, and build a bone map
@@ -551,6 +579,54 @@ index, operation type, target identity, and intended field names. It does not
 show intended field values, the expected source SHA-256 value, before/after
 values, or execution/verification claims. Read, decode, and validation failures
 reuse the stable `plan_read`, `plan_decode`, and `plan_validate` diagnostics.
+
+## Analyze texture portability and propose safe rewrites
+
+Version 0.8.3 adds `texture-portability`, a PMX/texture read-only analysis
+workflow. It scans declared texture paths, separates lexical path semantics from
+filesystem evidence, and reports deterministic rewrite proposals:
+
+```bash
+python check_assets.py texture-portability path/to/model.pmx
+python check_assets.py texture-portability path/to/model.pmx --json
+```
+
+The workflow preserves the original PMX declaration separately from normalized
+and candidate paths. Lexical classification is host-independent; filesystem
+evidence is used only when the host can resolve the declaration without guessing.
+Safe candidates require deterministic model-relative containment, an existing
+regular file, exact on-disk component spelling, and acceptance by the existing
+strict texture edit path policy.
+
+The workflow intentionally does not perform fuzzy matching, extension guessing,
+case repair, spelling repair, or silent parent clamping. Missing files, case
+mismatches, parent escapes, unsupported rooted forms, and other ambiguous paths
+remain blocked instead of being rewritten speculatively.
+
+To author a strict JSON plan containing only safe existing `set_texture_path`
+operations:
+
+```bash
+python check_assets.py texture-portability path/to/model.pmx --plan-out texture-fixes.json
+```
+
+`--plan-out` never overwrites an existing file. A referenced blocked dependency
+prevents the entire plan from being emitted, so the command never writes a
+partial "safe subset" while a required texture remains unresolved. Unreferenced
+blocked declarations remain visible as warnings.
+
+Generated plans reuse the existing strict edit-plan loader and include
+`expected_source_sha256`. The PMX is hashed before and after portability
+analysis; if the source changes, plan generation is refused. The command never
+writes a PMX model and never copies, moves, renames, converts, or deletes a
+texture file.
+
+Preview a generated plan through the existing edit pipeline before writing any
+separate PMX output:
+
+```bash
+python check_assets.py edit path/to/model.pmx --plan texture-fixes.json --dry-run
+```
 
 ## Preview or write a safe PMX edit plan
 
@@ -864,6 +940,10 @@ Command examples:
 - `edit-plan explain` with invalid plan data: `1`
 - `edit-plan explain` when the plan file cannot be read: `2`
 - `edit-plan` with an unexpected internal failure: `3`
+- `texture-portability` with no referenced blocked dependency: `0`
+- `texture-portability` with invalid PMX data, a referenced blocker, or a source-change refusal: `1`
+- `texture-portability` with input/plan-output path or plan I/O refusal: `2`
+- `texture-portability` with an unexpected internal failure: `3`
 - `doctor` with all referenced textures present: `0`
 - `doctor` with a referenced texture missing: `1`
 - `bones` search with no matches: `0`
@@ -991,6 +1071,14 @@ new authoring-only commands never load PMX data and no PMX reader, writer,
 engine, preview, or output-commit path is expanded. Generated regression tests
 instead block PMX I/O calls and verify a sentinel PMX remains byte-identical.
 
+Version 0.8.3 likewise does not require a new private-model validation run for
+release. The portability workflow does read PMX structure and filesystem texture
+evidence, but it never writes PMX or texture inputs and does not expand the PMX
+writer or output-commit path. Generated PMX fixtures and temporary texture trees
+cover portability classification, rewrite proposals, source-change refusal,
+strict plan generation, and byte-identical input preservation. A private-model
+rerun remains optional and local-only.
+
 Verification summary:
 
 ```text
@@ -1064,7 +1152,7 @@ Run all tests compactly:
 python -m unittest discover -s tests -q
 ```
 
-At the release-readiness checkpoint, version 0.8.2 includes 840 unit tests
+At the release-readiness checkpoint, version 0.8.3 includes 884 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -1103,8 +1191,10 @@ covering:
   validation, cleanup-on-failure, source-integrity checks, and untouched
   texture files
 - Texture-reference summaries
-- Dependency path portability and filesystem state
-- `scan` and `doctor` text/JSON output
+- Host-independent texture-path lexical semantics and normalized candidates
+- Dependency path portability, exact filesystem spelling, and containment evidence
+- Safe texture rewrite proposals, strict edit-plan bridging, and source SHA-256 binding
+- `texture-portability`, `scan`, and `doctor` text/JSON output
 - Bone display-name resolution and friendly flag presentation
 - Compact bone table rendering and JSON serialization
 - Safe hierarchy construction, cycle diagnostics, and iterative tree rendering
@@ -1141,9 +1231,10 @@ requests across Ubuntu and Windows. It performs:
 5. Full automated test discovery
 6. Generated PMX edit matrix, diagnostics, negative-safety, and private
    validation harness tests
-7. Exact `0.8.2` package-version assertion
-8. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`, `doctor`,
-   `bones`, and `rig` help checks, including all `edit-plan` subcommands
+7. Exact `0.8.3` package-version assertion
+8. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
+   `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
+   all `edit-plan` subcommands
 9. Private registry validation using legacy and explicit syntax
 10. Registered placeholder SHA-256 verification
 
@@ -1251,7 +1342,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.8.2 does not:
+Version 0.8.3 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
@@ -1274,9 +1365,8 @@ Version 0.8.2 does not:
 
 ## Roadmap
 
-Planned directions after 0.8.2:
+Planned directions after 0.8.3:
 
-- `0.8.3` — Texture Portability and Path Workflow
 - `0.8.4` — Broader Real-model Compatibility Matrix
 - `0.8.5` — Final v0.8 Stabilization and v0.9 Gate
 - Later: multilingual PMX naming with external reviewable dictionaries,

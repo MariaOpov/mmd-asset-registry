@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Sequence
+
+from mmd_registry.texture_path_semantics import analyze_texture_path
 
 
 ISSUE_SEVERITIES = frozenset({"warning", "error"})
@@ -139,57 +141,6 @@ def _path_text(path: Path) -> str:
     return path.as_posix()
 
 
-def _normalise_texture_path(raw_path: str) -> str:
-    """Normalize path separators without discarding PMX path content."""
-
-    if raw_path == "":
-        return ""
-
-    windows_path = PureWindowsPath(raw_path)
-    if "\\" in raw_path or windows_path.drive or windows_path.root:
-        return windows_path.as_posix()
-
-    return PurePosixPath(raw_path).as_posix()
-
-
-def _classify_path(
-    raw_path: str, normalized_path: str
-) -> tuple[
-    bool,
-    bool,
-    bool,
-    str,
-]:
-    """Return absolute/rooted/parent-reference flags and path flavor."""
-
-    windows_path = PureWindowsPath(raw_path)
-    posix_path = PurePosixPath(normalized_path)
-
-    windows_absolute = windows_path.is_absolute()
-    posix_absolute = posix_path.is_absolute()
-    is_absolute = windows_absolute or posix_absolute
-    is_rooted = bool(windows_path.root or windows_path.drive)
-    contains_parent_reference = ".." in (
-        windows_path.parts
-        if ("\\" in raw_path or windows_path.drive or windows_path.root)
-        else posix_path.parts
-    )
-
-    if windows_absolute or windows_path.drive or windows_path.root:
-        flavor = "windows"
-    elif posix_absolute:
-        flavor = "posix"
-    else:
-        flavor = "relative"
-
-    return (
-        is_absolute,
-        is_rooted,
-        contains_parent_reference,
-        flavor,
-    )
-
-
 def _native_candidate(
     *,
     raw_path: str,
@@ -245,13 +196,22 @@ def _diagnose_texture_path(
 ) -> TextureDependencyDiagnostic:
     """Diagnose one declared texture path."""
 
-    normalized_path = _normalise_texture_path(raw_path)
-    (
-        is_absolute,
-        is_rooted,
-        contains_parent_reference,
-        flavor,
-    ) = _classify_path(raw_path, normalized_path)
+    lexical = analyze_texture_path(raw_path)
+    normalized_path = lexical.normalized_path
+    is_absolute = lexical.windows_is_absolute or lexical.normalized_posix_is_absolute
+    is_rooted = lexical.windows_has_root or lexical.windows_has_drive
+    contains_parent_reference = lexical.contains_parent_reference
+
+    if (
+        lexical.windows_is_absolute
+        or lexical.windows_has_drive
+        or lexical.windows_has_root
+    ):
+        flavor = "windows"
+    elif lexical.normalized_posix_is_absolute:
+        flavor = "posix"
+    else:
+        flavor = "relative"
 
     issues: list[DependencyIssue] = []
 

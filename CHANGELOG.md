@@ -2,6 +2,56 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.3 - 2026-08-12
+
+### Added
+
+- Host-independent lexical texture-path semantics that preserve each declared
+  PMX path separately from normalized or candidate representations.
+- Deterministic portability reports that separate lexical classification from
+  filesystem evidence and distinguish referenced from unreferenced textures.
+- Safe texture rewrite proposals for deterministic, model-relative candidates,
+  including bounded parent collapse and exact on-disk component spelling checks.
+- A bridge from safe rewrite proposals into the existing `SetTexturePath` and
+  strict `PmxEditPlan` workflow without adding a new edit operation type.
+- A `texture-portability` CLI workflow with stable text/JSON reporting and
+  optional `--plan-out` generation of a new strict JSON edit plan.
+- Generated portability and CLI regression matrices covering canonical paths,
+  backslashes, bounded parents, case mismatches, missing files, parent escapes,
+  blocked referenced dependencies, plan no-overwrite, and source-change refusal.
+
+### Changed
+
+- Legacy dependency diagnostics and strict edit path policy now reuse shared pure
+  lexical facts while retaining their intentionally different acceptance rules.
+- Release-facing documentation and CI now include the texture-portability command
+  and focused portability/rewrite regression gates.
+
+### Verified
+
+- The complete local suite passes all 884 automated tests.
+- The focused portability, edit-plan, doctor, and legacy CLI regression gate
+  passes all 114 tests.
+- Generated plan output strict-loads through the existing edit-plan loader and
+  carries the SHA-256 of the PMX source analyzed by the workflow.
+- Source and texture fixture bytes remain unchanged during portability analysis
+  and plan generation.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Version 0.8.3 adds no new PMX edit operation types.
+- The portability workflow never writes a PMX model and never copies, moves,
+  renames, converts, or deletes texture files.
+- Referenced blocked dependencies prevent partial plan emission; unreferenced
+  blockers remain visible without inventing a rewrite.
+- Case-insensitive host filesystems cannot silently authorize case-repair
+  rewrites because candidate evidence requires exact component spelling.
+- Plan generation binds to the source with SHA-256 checks before and after
+  analysis and refuses emission if the PMX changes.
+- No private PMX, texture, generated output, absolute local path, or derived
+  production binary is committed or redistributed.
+
 ## 0.8.2 - 2026-08-12
 
 ### Added

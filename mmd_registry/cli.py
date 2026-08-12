@@ -1450,6 +1450,7 @@ def _run_edit_plan_explain(arguments: argparse.Namespace) -> int:
             diagnostic_from_plan_error(
                 error,
                 phase=PmxEditPhase.PLAN_VALIDATE,
+                operation_type=error.operation_type,
             ),
             "invalid_plan",
         )
@@ -1472,6 +1473,7 @@ def _run_edit_plan_explain(arguments: argparse.Namespace) -> int:
             diagnostic_from_plan_error(
                 error,
                 phase=PmxEditPhase.PLAN_VALIDATE,
+                operation_type=error.operation_type,
             ),
             "invalid_plan",
         )

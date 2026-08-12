@@ -2,6 +2,52 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.2 - 2026-08-12
+
+### Added
+
+- A deterministic PMX edit-operation catalog derived from the authoritative
+  supported operation types and JSON-facing field metadata.
+- Pure safe edit-plan template generation, including a skeleton and
+  operation-specific starters that require no PMX source.
+- Deterministic plan explanation reporting operation order/index, type, target
+  identity, and intended field names without executing the plan.
+- A dedicated `edit-plan` CLI namespace with `catalog`, `template`, and
+  `explain` actions plus stable Unicode-safe text/JSON output.
+- An authoring failure/regression matrix covering malformed UTF-8/JSON,
+  duplicate members, NaN/Infinity, strict type/schema failures, template
+  misuse, duplicate targets, privacy behavior, and PMX-I/O blockade.
+
+### Changed
+
+- Supported-operation plan errors can retain canonical operation-type context
+  in addition to operation index and deterministic JSON path.
+- `edit-plan explain` forwards that context through the existing structured
+  diagnostic contract while legacy `edit` diagnostic rendering remains
+  unchanged.
+- Release-facing documentation, CI help checks, and focused safety gates now
+  include the edit-plan authoring workflow.
+
+### Verified
+
+- The complete local suite passes all 840 automated tests.
+- Focused authoring and legacy edit regression tests pass together.
+- Authoring-only commands are regression-tested against PMX scan/apply/write
+  calls and leave a sentinel PMX byte-identical.
+- Redirected Unicode template and validation-error output is valid UTF-8.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Version 0.8.2 adds no new PMX edit operation types.
+- Starter templates are intentionally incomplete and cannot masquerade as
+  executable plans under the strict loader.
+- `edit-plan catalog` and `template` need no PMX source; `explain` reads only
+  strict plan JSON and does not expose intended values or the expected hash.
+- No PMX reader, writer, engine, preview, or output-commit behavior is expanded.
+- No private PMX, texture, generated output, absolute local path, or derived
+  production binary is committed or redistributed.
+
 ## 0.8.1 - 2026-08-12
 
 ### Added

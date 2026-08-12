@@ -2,6 +2,50 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.1 - 2026-08-12
+
+### Added
+
+- Structured PMX edit diagnostics with stable codes, pipeline phases, messages,
+  operation index/type context, and deterministic JSON paths.
+- A privacy-safe private-model failure-validation harness covering valid
+  dry-run, invalid plan diagnostics, source-hash mismatch, input/output alias
+  refusal, source integrity, and temporary-residue checks.
+- Negative-path safety regression coverage for serialization, reparse,
+  semantic verification, temporary payload hashing, fsync, source reads,
+  overwrite preservation, and source replacement.
+
+### Changed
+
+- Strict edit-plan decoding now distinguishes malformed UTF-8/JSON, empty
+  documents, duplicate JSON members, and non-standard numeric constants from
+  schema/operation validation failures.
+- Expected `edit` CLI failures now emit stable text diagnostics or one
+  backward-compatible JSON object with a nested structured `error` field,
+  while unexpected edit failures are sanitized at the process boundary.
+- Atomic edit output now captures the source filesystem identity before reading
+  and verifies that identity together with source SHA-256 immediately before
+  output commit.
+
+### Verified
+
+- The complete local suite passes all 773 automated tests.
+- A production-size PMX 2.0 UTF-16LE private model passed the negative failure
+  matrix with matching source SHA-256 before/after, no temporary residue, and
+  no persisted edited private asset.
+- Plan validation failure, source-hash mismatch, and input/output alias refusal
+  produced the expected stable diagnostic phases without modifying the source.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Version 0.8.1 adds no new edit operation types and does not expand the
+  bounded PMX editing surface introduced in 0.8.0.
+- Existing successful edit output and legacy JSON error fields remain
+  compatible while structured diagnostics are added.
+- No private PMX, texture, generated edited output, absolute local path, or
+  derived production binary is committed or redistributed.
+
 ## 0.8.0 - 2026-08-09
 
 ### Added

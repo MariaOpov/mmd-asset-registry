@@ -17,15 +17,16 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.0
+Tool version: 0.8.1
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.0
-adds strict edit plans, pure typed metadata/texture/material transformations,
-deterministic audit and preview reports, and verified atomic output without
-changing the persistent registry schema.
+Tool version and registry schema are intentionally independent. Version 0.8.1
+hardens the version 0.8 editing core with structured diagnostics, strict
+decode-versus-validation failure classification, stable CLI failure reports,
+negative-path safety coverage, and pre-commit source-identity verification
+without changing the persistent registry schema.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -84,6 +85,28 @@ Version 0.8.0 introduces the first safety-bounded PMX editing core:
   integrity, and automatic temporary plan/output cleanup
 - Ubuntu and Windows CI coverage plus 740 automated unit tests at release
   readiness
+
+Version 0.8.1 hardens that editing core without adding new edit operation
+types:
+
+- Structured edit diagnostics with stable `code`, `phase`, message, operation
+  index/type, and JSON-path context
+- Separate strict plan-decode and plan-validation failures for malformed
+  UTF-8/JSON, duplicate members, non-standard numeric constants, empty
+  documents, and schema errors
+- Backward-compatible CLI JSON failures that retain legacy fields while adding
+  one deterministic nested `error` object
+- Expected edit failures without tracebacks, plus sanitized process-boundary
+  reporting for unexpected edit failures
+- Negative-path regression coverage proving hash mismatch, serialization,
+  reparse, semantic verification, temporary payload, fsync, source read, and
+  alias failures cannot expose partial output
+- Pre-commit filesystem identity plus SHA-256 verification so replacement of a
+  source file with same-byte content is still detected
+- Privacy-safe real-model failure validation covering valid dry-run, invalid
+  plan diagnostics, source-hash mismatch, alias refusal, source integrity, and
+  zero temporary residue
+- 773 automated tests at the version 0.8.1 release-readiness checkpoint
 
 All version 0.7 capabilities remain available.
 
@@ -886,6 +909,10 @@ and encodability before a destination is created.
 Version 0.8.0 was verified against a production-size PMX 2.0 model without
 committing or redistributing that model.
 
+Version 0.8.1 additionally exercised expected edit failures on a
+production-size PMX 2.0 UTF-16LE model while requiring matching source SHA-256
+before/after, no temporary residue, and no persisted edited private asset.
+
 Verification summary:
 
 ```text
@@ -939,6 +966,13 @@ Private edit unrelated sections/counts: unchanged
 Private edit source SHA-256 before/after: matched
 Private edit temporary plan/output removed: yes
 Private texture files touched: no
+Private failure valid dry-run: passed
+Private failure plan diagnostic: edit_plan_invalid / plan_validate
+Private failure source-hash diagnostic: edit_preflight_failed / preflight
+Private failure alias refusal: path_policy_refused / preflight
+Private failure source SHA-256 before/after: matched
+Private failure temporary residue created: no
+Private failure asset persisted: no
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -952,7 +986,7 @@ Run all tests compactly:
 python -m unittest discover -s tests -q
 ```
 
-At the release-readiness checkpoint, version 0.8.0 includes 740 unit tests
+At the release-readiness checkpoint, version 0.8.1 includes 773 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -970,17 +1004,23 @@ covering:
 - `roundtrip` text/JSON CLI reporting and Windows Unicode paths
 - Immutable typed edit plans, operations, audit records, and exact no-op rules
 - Strict UTF-8 edit-plan JSON loading, contextual errors, exact JSON types,
-  optional source SHA-256, and duplicate-target rejection
+  optional source SHA-256, duplicate-target rejection, malformed/empty
+  document handling, duplicate-member rejection, and non-standard numeric
+  constant rejection
+- Structured edit diagnostics with stable phase/code/path context and
+  backward-compatible CLI JSON failure envelopes
 - Pure model metadata, indexed texture path, material text/reference, and
   material visual-property transformations
 - Deterministic edit previews, audit ordering, write reports, and serialized
   output bytes
 - PMX edit output alias refusal, no-clobber creation, explicit atomic
-  overwrite, source re-verification, and temporary-file cleanup
+  overwrite, source path/identity/hash re-verification, and temporary-file
+  cleanup across negative failure paths
 - PMX 2.0/2.1 × UTF-8/UTF-16LE × uniform/mixed index-width edit matrices and
   all seven model/texture/material category combinations
-- Ephemeral private-model validation, cleanup-on-failure, privacy-safe reports,
-  and untouched texture files
+- Ephemeral private-model validation plus privacy-safe negative-path
+  validation, cleanup-on-failure, source-integrity checks, and untouched
+  texture files
 - Texture-reference summaries
 - Dependency path portability and filesystem state
 - `scan` and `doctor` text/JSON output
@@ -1018,8 +1058,9 @@ requests across Ubuntu and Windows. It performs:
 3. Dependency installation
 4. Python source compilation
 5. Full automated test discovery
-6. Generated PMX edit matrix and private-validation harness tests
-7. Exact `0.8.0` package-version assertion
+6. Generated PMX edit matrix, diagnostics, negative-safety, and private
+   validation harness tests
+7. Exact `0.8.1` package-version assertion
 8. Top-level version plus `scan`, `roundtrip`, `edit`, `doctor`, `bones`, and
    `rig` help checks
 9. Private registry validation using legacy and explicit syntax
@@ -1052,12 +1093,15 @@ mmd-asset-registry/
 |   |   |-- document.py
 |   |   |-- editing/
 |   |   |   |-- audit.py
+|   |   |   |-- diagnostics.py
 |   |   |   |-- engine.py
+|   |   |   |-- errors.py
 |   |   |   |-- json_loader.py
 |   |   |   |-- operations.py
 |   |   |   |-- output.py
 |   |   |   |-- plan.py
 |   |   |   |-- preview.py
+|   |   |   |-- private_failure_validation.py
 |   |   |   `-- private_validation.py
 |   |   |-- errors.py
 |   |   |-- reader.py
@@ -1092,9 +1136,12 @@ mmd-asset-registry/
 |   |-- test_model_scanning.py
 |   |-- pmx_roundtrip_fixtures.py
 |   |-- test_pmx_document.py
+|   |-- test_pmx_edit_cli_diagnostics.py
 |   |-- test_pmx_edit_generated_matrix.py
+|   |-- test_pmx_edit_negative_safety.py
 |   |-- test_pmx_edit_safe_output.py
 |   |-- test_pmx_private_edit_validation.py
+|   |-- test_pmx_private_failure_validation.py
 |   |-- test_pmx_roundtrip.py
 |   |-- test_pmx_roundtrip_cli.py
 |   |-- test_pmx_writer.py
@@ -1115,7 +1162,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.8.0 does not:
+Version 0.8.1 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
@@ -1138,15 +1185,13 @@ Version 0.8.0 does not:
 
 ## Roadmap
 
-Planned directions after 0.8.0:
+Planned directions after 0.8.1:
 
-- Multilingual PMX naming with external, reviewable dictionaries
-- Integration of exported canonical bone maps with animation pipelines
-- Batch Rig Analyzer reports and project-level mapping review
-- PMD structural scanning
-- Registry browser and metadata editing
-- Batch scan and doctor commands
-- Safe registry updates from scan results
-- First desktop model inspector GUI
-- Batch edit-plan preview and review workflows
-- Later bone, morph, transform, vertex, and weight editing workflows
+- `0.8.2` — Edit-plan Authoring and Explain UX
+- `0.8.3` — Texture Portability and Path Workflow
+- `0.8.4` — Broader Real-model Compatibility Matrix
+- `0.8.5` — Final v0.8 Stabilization and v0.9 Gate
+- Later: multilingual PMX naming with external reviewable dictionaries,
+  animation-pipeline integration, PMD structural scanning, registry/browser
+  workflows, a desktop inspector GUI, and carefully bounded broader PMX
+  editing

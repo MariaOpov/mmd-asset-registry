@@ -11,6 +11,7 @@ class PmxEditPlanError(ValueError):
         reason: str,
         *,
         operation_index: int | None = None,
+        operation_type: str | None = None,
         field: str | None = None,
     ) -> None:
         if not isinstance(reason, str) or not reason:
@@ -21,6 +22,12 @@ class PmxEditPlanError(ValueError):
             or operation_index < 0
         ):
             raise ValueError("operation_index must be a nonnegative integer.")
+        if operation_type is not None and (
+            not isinstance(operation_type, str) or not operation_type
+        ):
+            raise ValueError(
+                "operation_type must be a non-empty string when provided."
+            )
         if field is not None and (not isinstance(field, str) or not field):
             raise ValueError("field must be a non-empty string when provided.")
 
@@ -32,6 +39,7 @@ class PmxEditPlanError(ValueError):
 
         self.reason = reason
         self.operation_index = operation_index
+        self.operation_type = operation_type
         self.field = field
         super().__init__(f"Invalid PMX edit plan at {location}: {reason}")
 

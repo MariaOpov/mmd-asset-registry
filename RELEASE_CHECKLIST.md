@@ -1,4 +1,4 @@
-# MMD Asset Registry v0.8.1 Release Checklist
+# MMD Asset Registry v0.8.2 Release Checklist
 
 Use this checklist after the feature branch is complete. Do not commit or
 redistribute any private or third-party production model.
@@ -17,7 +17,7 @@ redistribute any private or third-party production model.
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; assert __version__ == '0.8.1'"
+  python -c "from mmd_registry import __version__; assert __version__ == '0.8.2'"
   ```
 
 - [ ] Compile and run all automated checks:
@@ -37,6 +37,10 @@ redistribute any private or third-party production model.
   python check_assets.py scan --help
   python check_assets.py roundtrip --help
   python check_assets.py edit --help
+  python check_assets.py edit-plan --help
+  python check_assets.py edit-plan catalog --help
+  python check_assets.py edit-plan template --help
+  python check_assets.py edit-plan explain --help
   python check_assets.py doctor --help
   python check_assets.py bones --help
   python check_assets.py rig --help
@@ -60,6 +64,11 @@ redistribute any private or third-party production model.
 - [ ] Expected edit failures expose stable diagnostic code/phase/context
   without a traceback; JSON failures keep legacy fields plus one nested
   structured `error` object.
+- [ ] `edit-plan template` output is explicitly non-executable and remains
+  rejected until `_template` and all `$placeholder` values are resolved.
+- [ ] `edit-plan explain` reads only strict plan JSON, performs no PMX I/O,
+  and does not expose intended values, the expected hash value, or private
+  paths carried as plan values.
 - [ ] Edit plans cannot add, delete, or reorder textures/materials and cannot
   edit surface partitions, geometry, bones, morphs, display frames, or physics.
 - [ ] Generated fixtures cover PMX 2.0/2.1, UTF-8/UTF-16LE, uniform and mixed
@@ -71,41 +80,28 @@ redistribute any private or third-party production model.
 - [ ] Run the focused generated edit and private-harness tests:
 
   ```bat
-  python -m unittest -q tests.test_pmx_edit_generated_matrix tests.test_pmx_private_edit_validation tests.test_pmx_edit_cli_diagnostics tests.test_pmx_edit_negative_safety tests.test_pmx_private_failure_validation
+  python -m unittest -q tests.test_pmx_edit_plan_authoring_failures tests.test_pmx_edit_plan_cli tests.test_pmx_edit_plan_explain tests.test_pmx_edit_plan_template tests.test_pmx_edit_operation_catalog tests.test_pmx_edit_cli_diagnostics tests.test_pmx_edit_cli_dry_run tests.test_pmx_edit_generated_matrix tests.test_pmx_edit_negative_safety
   ```
 
-## 3. Private real-model validation
+## 3. Private asset hygiene
 
-- [ ] Set the private model path only in the current shell and run the
-  self-cleaning validator:
+Version 0.8.2 does not require a new private-model validation run for release:
+the new authoring-only commands do not load PMX data, and this branch does not
+expand PMX reader, writer, engine, preview, or output-commit behavior. The
+generated failure matrix explicitly blocks PMX scan/apply/write calls.
 
-  ```bat
-  set "PRIVATE_PMX=D:\private-path\model.pmx"
-  python -m mmd_registry.pmx.editing.private_validation "%PRIVATE_PMX%" --material-index 0 --json
-  echo Private validation exit code: %ERRORLEVEL%
-  python -m mmd_registry.pmx.editing.private_failure_validation "%PRIVATE_PMX%" --json
-  echo Private failure validation exit code: %ERRORLEVEL%
-  set "PRIVATE_PMX="
-  ```
-
-- [ ] Private real-model validation passes parse → serialize → parse semantic
-  equality, metadata/material exactness, unchanged section counts and unrelated
-  records, cross-reference validation, input-integrity verification, untouched
-  texture files, and temporary plan/output cleanup.
-- [ ] Private failure validation passes valid dry-run, invalid-plan diagnostic,
-  source-hash mismatch, alias refusal, matching source SHA-256 before/after,
-  zero temporary residue, and `private_asset_persisted: false`.
 - [ ] The private model and textures remain outside the repository.
-- [ ] No third-party PMX, texture, archive, derived binary, or identifying
-  local path is staged or committed.
-- [ ] Keep the JSON private-validation report local; do not stage it or attach
-  it to the pull request or release.
+- [ ] No third-party PMX, texture, archive, derived binary, private report, or
+  identifying local path is staged or committed.
 - [ ] Inspect tracked model placeholders before publication:
 
   ```bat
   git ls-files -s "*.pmx"
   git status --short
   ```
+
+- [ ] If the prior private validation harnesses are rerun voluntarily, keep all
+  reports local and do not attach private assets or reports to the PR/release.
 
 ## 4. Publish the pull request
 
@@ -142,25 +138,25 @@ redistribute any private or third-party production model.
 - [ ] Create and push the annotated tag:
 
   ```bat
-  git tag -a v0.8.1 -m "MMD Asset Registry v0.8.1"
-  git push origin v0.8.1
+  git tag -a v0.8.2 -m "MMD Asset Registry v0.8.2"
+  git push origin v0.8.2
   ```
 
 - [ ] Publish the release with reviewed notes:
 
   ```bat
-  gh release create v0.8.1 --verify-tag --title "MMD Asset Registry v0.8.1" --notes-file "%USERPROFILE%\Downloads\v0.8.1-release-notes.md"
+  gh release create v0.8.2 --verify-tag --title "MMD Asset Registry v0.8.2" --notes-file "%USERPROFILE%\Downloads\v0.8.2-release-notes.md"
   ```
 
 - [ ] Verify the published release is neither draft nor prerelease:
 
   ```bat
-  gh release view v0.8.1 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  gh release view v0.8.2 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
 ## 6. Post-release confirmation
 
-- [ ] Confirm `main`, `origin/main`, and tag `v0.8.1` identify the intended
+- [ ] Confirm `main`, `origin/main`, and tag `v0.8.2` identify the intended
   release commit.
 - [ ] Confirm the release page documents structured edit diagnostics, strict
   plan decoding, stable CLI failures, atomic distinct output, negative-path

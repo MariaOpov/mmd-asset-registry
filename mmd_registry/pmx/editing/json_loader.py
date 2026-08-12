@@ -18,6 +18,7 @@ from mmd_registry.pmx.editing.operations import (
     SetModelInfo,
     SetTexturePath,
     UpdateMaterial,
+    operation_to_dict,
 )
 from mmd_registry.pmx.editing.plan import (
     PMX_EDIT_PLAN_SCHEMA_VERSION,
@@ -108,6 +109,26 @@ def _field_error(
         reason,
         operation_index=operation_index,
         field=field,
+    )
+
+
+def _with_operation_type(
+    error: PmxEditPlanError,
+    operation_type: str,
+) -> PmxEditPlanError:
+    """Return one plan failure enriched with known operation type."""
+
+    if not isinstance(error, PmxEditPlanError):
+        raise TypeError("error must be a PmxEditPlanError instance.")
+    if type(operation_type) is not str or not operation_type:
+        raise ValueError("operation_type must be a non-empty string.")
+    if error.operation_type is not None:
+        return error
+    return PmxEditPlanError(
+        error.reason,
+        operation_index=error.operation_index,
+        operation_type=operation_type,
+        field=error.field,
     )
 
 
@@ -448,20 +469,29 @@ def _parse_operation(
         operation_index=operation_index,
     )
     if operation_name == "set_model_info":
-        return _parse_model_info_operation(
-            payload,
-            operation_index=operation_index,
-        )
+        try:
+            return _parse_model_info_operation(
+                payload,
+                operation_index=operation_index,
+            )
+        except PmxEditPlanError as error:
+            raise _with_operation_type(error, operation_name) from error
     if operation_name == "set_texture_path":
-        return _parse_texture_path_operation(
-            payload,
-            operation_index=operation_index,
-        )
+        try:
+            return _parse_texture_path_operation(
+                payload,
+                operation_index=operation_index,
+            )
+        except PmxEditPlanError as error:
+            raise _with_operation_type(error, operation_name) from error
     if operation_name == "update_material":
-        return _parse_material_operation(
-            payload,
-            operation_index=operation_index,
-        )
+        try:
+            return _parse_material_operation(
+                payload,
+                operation_index=operation_index,
+            )
+        except PmxEditPlanError as error:
+            raise _with_operation_type(error, operation_name) from error
     raise _field_error(
         f"unsupported operation name {operation_name!r}.",
         field="op",
@@ -528,7 +558,25 @@ def _parse_decoded_plan(payload: object) -> PmxEditPlan:
         schema_version=schema_version,
         expected_source_sha256=expected_source_sha256,
     )
-    validate_pmx_edit_plan(plan)
+    try:
+        validate_pmx_edit_plan(plan)
+    except PmxEditPlanError as error:
+        operation_index = error.operation_index
+        if (
+            error.operation_type is not None
+            or operation_index is None
+            or operation_index >= len(plan.operations)
+        ):
+            raise
+        operation_payload = operation_to_dict(
+            plan.operations[operation_index]
+        )
+        operation_type = operation_payload["op"]
+        if type(operation_type) is not str or not operation_type:
+            raise RuntimeError(
+                "validated operation produced an invalid operation name."
+            ) from error
+        raise _with_operation_type(error, operation_type) from error
     return plan
 
 

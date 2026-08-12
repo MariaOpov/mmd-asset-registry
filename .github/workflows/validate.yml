@@ -38,12 +38,17 @@ jobs:
       - name: Compile Python source
         run: python -m compileall mmd_registry tests check_assets.py
 
-      - name: Run PMX edit compatibility and safety matrix
+      - name: Run PMX edit compatibility and authoring safety matrix
         run: >
           python -m unittest -q
           tests.test_pmx_edit_generated_matrix
           tests.test_pmx_private_edit_validation
           tests.test_pmx_edit_cli_diagnostics
+          tests.test_pmx_edit_plan_authoring_failures
+          tests.test_pmx_edit_plan_cli
+          tests.test_pmx_edit_plan_explain
+          tests.test_pmx_edit_plan_template
+          tests.test_pmx_edit_operation_catalog
           tests.test_pmx_edit_negative_safety
           tests.test_pmx_private_failure_validation
 
@@ -52,11 +57,15 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.8.1'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.8.2'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help
           python check_assets.py edit --help
+          python check_assets.py edit-plan --help
+          python check_assets.py edit-plan catalog --help
+          python check_assets.py edit-plan template --help
+          python check_assets.py edit-plan explain --help
           python check_assets.py doctor --help
           python check_assets.py bones --help
           python check_assets.py rig --help

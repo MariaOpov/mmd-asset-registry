@@ -6,6 +6,11 @@ from mmd_registry.pmx.editing.audit import (
     PmxEditCategory,
     PmxEditChange,
 )
+from mmd_registry.pmx.editing.catalog import (
+    PmxEditOperationCatalog,
+    PmxEditOperationCatalogEntry,
+    get_pmx_edit_operation_catalog,
+)
 from mmd_registry.pmx.editing.diagnostics import (
     PmxEditDiagnostic,
     PmxEditDiagnosticCode,
@@ -34,7 +39,12 @@ from mmd_registry.pmx.editing.json_loader import (
     parse_pmx_edit_plan_json,
 )
 from mmd_registry.pmx.editing.operations import (
+    PmxEditEffectKind,
+    PmxEditFieldRole,
+    PmxEditFieldSpec,
+    PmxEditJsonType,
     PmxEditOperation,
+    PmxEditTargetKind,
     SetModelInfo,
     SetTexturePath,
     UpdateMaterial,
@@ -70,7 +80,13 @@ __all__ = [
     "PmxEditChange",
     "PmxEditDiagnostic",
     "PmxEditDiagnosticCode",
+    "PmxEditEffectKind",
+    "PmxEditFieldRole",
+    "PmxEditFieldSpec",
+    "PmxEditJsonType",
     "PmxEditOperation",
+    "PmxEditOperationCatalog",
+    "PmxEditOperationCatalogEntry",
     "PmxEditPathError",
     "PmxEditPhase",
     "PmxEditPlan",
@@ -78,6 +94,7 @@ __all__ = [
     "PmxEditPlanError",
     "PmxEditPreview",
     "PmxEditResult",
+    "PmxEditTargetKind",
     "PmxEditVerificationError",
     "PmxEditWriteResult",
     "SetModelInfo",
@@ -93,6 +110,7 @@ __all__ = [
     "default_diagnostic_code",
     "diagnostic_from_plan_error",
     "dry_run_pmx_edit",
+    "get_pmx_edit_operation_catalog",
     "load_pmx_edit_plan",
     "parse_pmx_edit_plan_json",
     "render_pmx_edit_diagnostic_json",

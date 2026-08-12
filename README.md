@@ -17,16 +17,16 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.1
+Tool version: 0.8.2
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.1
-hardens the version 0.8 editing core with structured diagnostics, strict
-decode-versus-validation failure classification, stable CLI failure reports,
-negative-path safety coverage, and pre-commit source-identity verification
-without changing the persistent registry schema.
+Tool version and registry schema are intentionally independent. Version 0.8.2
+adds deterministic edit-operation discovery, intentionally incomplete starter
+templates, and plan explanation without adding new edit operations or loading a
+PMX model. It also hardens authoring diagnostics while keeping the existing
+`edit` execution contract and persistent registry schema unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -85,6 +85,29 @@ Version 0.8.0 introduces the first safety-bounded PMX editing core:
   integrity, and automatic temporary plan/output cleanup
 - Ubuntu and Windows CI coverage plus 740 automated unit tests at release
   readiness
+
+Version 0.8.2 adds edit-plan authoring and explanation UX without adding new
+edit operation types:
+
+- A deterministic operation catalog derived from the authoritative supported
+  operation types and their JSON-facing field metadata
+- Safe plan skeletons and operation-specific starter templates generated
+  without a PMX source
+- Intentionally incomplete templates that remain non-executable until the
+  top-level `_template` marker is removed and every `$placeholder` object is
+  replaced with a concrete strict-JSON value
+- Deterministic plan explanation reporting operation index, type, target
+  identity, and intended field names without executing the plan
+- Privacy-bounded explanations that do not reveal intended field values,
+  expected source SHA-256 values, or private/absolute paths carried as values
+- A dedicated `edit-plan` CLI namespace with `catalog`, `template`, and
+  `explain` actions plus stable text/JSON output
+- Authoring failures reusing the existing `plan_read`, `plan_decode`, and
+  `plan_validate` diagnostic phases with deterministic index/type/path context
+  when a supported operation type is known
+- Regression coverage proving authoring-only commands do not scan, apply,
+  serialize, or write PMX data and leave a sentinel PMX byte-identical
+- 840 automated tests at the version 0.8.2 release-readiness checkpoint
 
 Version 0.8.1 hardens that editing core without adding new edit operation
 types:
@@ -256,6 +279,7 @@ inspect   Inspect a PMX or PMD model header
 scan      Structurally scan a PMX model
 roundtrip Write a verified PMX copy to a distinct output path
 edit      Preview or safely write a strict declarative PMX edit plan
+edit-plan Author or explain strict declarative PMX edit plans
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
 rig       Resolve bone semantics, diagnose a rig, and build a bone map
@@ -482,6 +506,51 @@ python check_assets.py roundtrip path/to/input.pmx path/to/output.pmx --json
 Byte-identical output is verified when it occurs, but the architectural
 contract is semantic and structural equivalence. The writer does not repair,
 rename, reparent, translate, or otherwise reinterpret model data.
+
+## Author and explain PMX edit plans
+
+Version 0.8.2 adds an authoring-only `edit-plan` namespace. These commands do
+not require a PMX model and do not execute an edit plan.
+
+List the authoritative supported operation catalog:
+
+```bash
+python check_assets.py edit-plan catalog
+python check_assets.py edit-plan catalog --json
+```
+
+Generate a safe plan skeleton:
+
+```bash
+python check_assets.py edit-plan template
+```
+
+Generate a starter for one supported operation:
+
+```bash
+python check_assets.py edit-plan template set_model_info
+python check_assets.py edit-plan template set_texture_path
+python check_assets.py edit-plan template update_material
+```
+
+Templates are intentionally non-executable. They contain a top-level
+`_template` marker, and operation starters contain structured `$placeholder`
+objects instead of executable scalar values. The strict loader rejects the
+template until the marker is removed and all placeholders are replaced with
+valid values.
+
+Explain a completed strict JSON plan without loading a PMX:
+
+```bash
+python check_assets.py edit-plan explain edit.json
+python check_assets.py edit-plan explain edit.json --json
+```
+
+Explanation preserves operation order and reports the zero-based operation
+index, operation type, target identity, and intended field names. It does not
+show intended field values, the expected source SHA-256 value, before/after
+values, or execution/verification claims. Read, decode, and validation failures
+reuse the stable `plan_read`, `plan_decode`, and `plan_validate` diagnostics.
 
 ## Preview or write a safe PMX edit plan
 
@@ -791,6 +860,10 @@ Command examples:
 - `edit` with an invalid PMX, plan, reference, or verification result: `1`
 - `edit` with missing output, unsafe alias, or unapproved overwrite: `2`
 - `edit` with an unexpected internal failure: `3`
+- `edit-plan catalog`, `template`, or valid `explain`: `0`
+- `edit-plan explain` with invalid plan data: `1`
+- `edit-plan explain` when the plan file cannot be read: `2`
+- `edit-plan` with an unexpected internal failure: `3`
 - `doctor` with all referenced textures present: `0`
 - `doctor` with a referenced texture missing: `1`
 - `bones` search with no matches: `0`
@@ -913,6 +986,11 @@ Version 0.8.1 additionally exercised expected edit failures on a
 production-size PMX 2.0 UTF-16LE model while requiring matching source SHA-256
 before/after, no temporary residue, and no persisted edited private asset.
 
+Version 0.8.2 does not require a new private-model validation run because its
+new authoring-only commands never load PMX data and no PMX reader, writer,
+engine, preview, or output-commit path is expanded. Generated regression tests
+instead block PMX I/O calls and verify a sentinel PMX remains byte-identical.
+
 Verification summary:
 
 ```text
@@ -986,7 +1064,7 @@ Run all tests compactly:
 python -m unittest discover -s tests -q
 ```
 
-At the release-readiness checkpoint, version 0.8.1 includes 773 unit tests
+At the release-readiness checkpoint, version 0.8.2 includes 840 unit tests
 covering:
 
 - Bounded binary reads and contextual truncation errors
@@ -1009,6 +1087,9 @@ covering:
   constant rejection
 - Structured edit diagnostics with stable phase/code/path context and
   backward-compatible CLI JSON failure envelopes
+- Deterministic edit-operation catalog metadata, intentionally incomplete
+  starter templates, pure plan explanations, authoring CLI behavior, and
+  authoring failure/privacy regression coverage
 - Pure model metadata, indexed texture path, material text/reference, and
   material visual-property transformations
 - Deterministic edit previews, audit ordering, write reports, and serialized
@@ -1060,9 +1141,9 @@ requests across Ubuntu and Windows. It performs:
 5. Full automated test discovery
 6. Generated PMX edit matrix, diagnostics, negative-safety, and private
    validation harness tests
-7. Exact `0.8.1` package-version assertion
-8. Top-level version plus `scan`, `roundtrip`, `edit`, `doctor`, `bones`, and
-   `rig` help checks
+7. Exact `0.8.2` package-version assertion
+8. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`, `doctor`,
+   `bones`, and `rig` help checks, including all `edit-plan` subcommands
 9. Private registry validation using legacy and explicit syntax
 10. Registered placeholder SHA-256 verification
 
@@ -1093,16 +1174,19 @@ mmd-asset-registry/
 |   |   |-- document.py
 |   |   |-- editing/
 |   |   |   |-- audit.py
+|   |   |   |-- catalog.py
 |   |   |   |-- diagnostics.py
 |   |   |   |-- engine.py
 |   |   |   |-- errors.py
+|   |   |   |-- explain.py
 |   |   |   |-- json_loader.py
 |   |   |   |-- operations.py
 |   |   |   |-- output.py
 |   |   |   |-- plan.py
 |   |   |   |-- preview.py
 |   |   |   |-- private_failure_validation.py
-|   |   |   `-- private_validation.py
+|   |   |   |-- private_validation.py
+|   |   |   `-- template.py
 |   |   |-- errors.py
 |   |   |-- reader.py
 |   |   |-- roundtrip.py
@@ -1137,6 +1221,11 @@ mmd-asset-registry/
 |   |-- pmx_roundtrip_fixtures.py
 |   |-- test_pmx_document.py
 |   |-- test_pmx_edit_cli_diagnostics.py
+|   |-- test_pmx_edit_plan_authoring_failures.py
+|   |-- test_pmx_edit_plan_cli.py
+|   |-- test_pmx_edit_plan_explain.py
+|   |-- test_pmx_edit_plan_template.py
+|   |-- test_pmx_edit_operation_catalog.py
 |   |-- test_pmx_edit_generated_matrix.py
 |   |-- test_pmx_edit_negative_safety.py
 |   |-- test_pmx_edit_safe_output.py
@@ -1162,7 +1251,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.8.1 does not:
+Version 0.8.2 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
@@ -1185,9 +1274,8 @@ Version 0.8.1 does not:
 
 ## Roadmap
 
-Planned directions after 0.8.1:
+Planned directions after 0.8.2:
 
-- `0.8.2` — Edit-plan Authoring and Explain UX
 - `0.8.3` — Texture Portability and Path Workflow
 - `0.8.4` — Broader Real-model Compatibility Matrix
 - `0.8.5` — Final v0.8 Stabilization and v0.9 Gate

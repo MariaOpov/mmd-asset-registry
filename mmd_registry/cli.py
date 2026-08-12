@@ -66,6 +66,9 @@ from mmd_registry.reporting import (
     write_json_report,
 )
 from mmd_registry.rig_cli import run_rig_command
+from mmd_registry.texture_portability_cli import (
+    run_texture_portability_command,
+)
 from mmd_registry.validator import (
     RegistryValidationResult,
     validate_registry,
@@ -80,6 +83,7 @@ COMMAND_NAMES = frozenset(
         "scan",
         "roundtrip",
         "doctor",
+        "texture-portability",
         "bones",
         "rig",
         "edit",
@@ -426,6 +430,34 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print the explanation as stable Unicode-safe JSON.",
+    )
+
+    texture_portability_parser = subparsers.add_parser(
+        "texture-portability",
+        help="Analyze PMX texture portability and propose safe rewrites.",
+        description=(
+            "Scan declared PMX texture paths, derive deterministic portable-path "
+            "rewrites, and optionally write a strict JSON edit plan. This command "
+            "never writes a PMX model or modifies texture files."
+        ),
+    )
+    texture_portability_parser.add_argument(
+        "path",
+        help="Path to the PMX file.",
+    )
+    texture_portability_parser.add_argument(
+        "--plan-out",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write a new strict JSON set_texture_path edit plan when safe "
+            "rewrites are available. Existing files are never overwritten."
+        ),
+    )
+    texture_portability_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the portability and rewrite report as stable JSON.",
     )
 
     doctor_parser = subparsers.add_parser(
@@ -1756,6 +1788,13 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "edit-plan":
         return _run_edit_plan(arguments)
+
+    if arguments.command == "texture-portability":
+        return run_texture_portability_command(
+            path=arguments.path,
+            json_output=arguments.json,
+            plan_out=arguments.plan_out,
+        )
 
     if arguments.command == "doctor":
         return _run_doctor(arguments)

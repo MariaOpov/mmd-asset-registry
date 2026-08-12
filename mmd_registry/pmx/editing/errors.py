@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 class PmxEditPlanError(ValueError):
-    """One validation failure in an immutable PMX edit plan."""
+    """One contextual failure in an immutable PMX edit plan."""
 
     def __init__(
         self,
@@ -34,6 +34,10 @@ class PmxEditPlanError(ValueError):
         self.operation_index = operation_index
         self.field = field
         super().__init__(f"Invalid PMX edit plan at {location}: {reason}")
+
+
+class PmxEditPlanDecodeError(PmxEditPlanError):
+    """Raised when UTF-8 or JSON decoding fails before plan validation."""
 
 
 class PmxEditVerificationError(RuntimeError):

@@ -330,62 +330,73 @@ class PmxEditDryRunCliTests(unittest.TestCase):
         self.assertIn("simulated mismatch", error_output)
         self.assertFalse(output_path.exists())
 
-    def test_unexpected_failure_returns_three_without_traceback(self) -> None:
-        with patch(
-            "mmd_registry.cli.dry_run_pmx_edit",
-            side_effect=RuntimeError("simulated internal failure"),
+    def test_unexpected_edit_failure_propagates_from_run(self) -> None:
+        output = io.StringIO()
+        error_output = io.StringIO()
+        with (
+            patch(
+                "mmd_registry.cli.dry_run_pmx_edit",
+                side_effect=RuntimeError("simulated internal failure"),
+            ),
+            redirect_stdout(output),
+            redirect_stderr(error_output),
+            self.assertRaisesRegex(RuntimeError, "simulated internal failure"),
         ):
-            exit_code, output, error_output = self.capture_run(
-                self.dry_run_arguments()
-            )
+            run(self.dry_run_arguments())
 
-        self.assertEqual(exit_code, 3)
-        self.assertEqual(output, "")
-        self.assertIn("Internal edit failure", error_output)
-        self.assertIn("simulated internal failure", error_output)
-        self.assertNotIn("Traceback", error_output)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(error_output.getvalue(), "")
 
-    def test_internal_loader_failure_returns_three_without_traceback(self) -> None:
-        with patch(
-            "mmd_registry.cli.load_pmx_edit_plan",
-            side_effect=RuntimeError("simulated loader failure"),
+    def test_unexpected_loader_failure_propagates_from_run(self) -> None:
+        output = io.StringIO()
+        error_output = io.StringIO()
+        with (
+            patch(
+                "mmd_registry.cli.load_pmx_edit_plan",
+                side_effect=RuntimeError("simulated loader failure"),
+            ),
+            redirect_stdout(output),
+            redirect_stderr(error_output),
+            self.assertRaisesRegex(RuntimeError, "simulated loader failure"),
         ):
-            exit_code, output, error_output = self.capture_run(
-                self.dry_run_arguments()
-            )
+            run(self.dry_run_arguments())
 
-        self.assertEqual(exit_code, 3)
-        self.assertEqual(output, "")
-        self.assertIn("Internal plan-load failure", error_output)
-        self.assertNotIn("Traceback", error_output)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(error_output.getvalue(), "")
 
-    def test_internal_renderer_failure_returns_three(self) -> None:
-        with patch(
-            "mmd_registry.cli.render_pmx_edit_preview_text",
-            side_effect=RuntimeError("simulated renderer failure"),
+    def test_unexpected_renderer_failure_propagates_from_run(self) -> None:
+        output = io.StringIO()
+        error_output = io.StringIO()
+        with (
+            patch(
+                "mmd_registry.cli.render_pmx_edit_preview_text",
+                side_effect=RuntimeError("simulated renderer failure"),
+            ),
+            redirect_stdout(output),
+            redirect_stderr(error_output),
+            self.assertRaisesRegex(RuntimeError, "simulated renderer failure"),
         ):
-            exit_code, output, error_output = self.capture_run(
-                self.dry_run_arguments()
-            )
+            run(self.dry_run_arguments())
 
-        self.assertEqual(exit_code, 3)
-        self.assertEqual(output, "")
-        self.assertIn("Internal preview-render failure", error_output)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(error_output.getvalue(), "")
 
-    def test_internal_json_failure_is_machine_readable(self) -> None:
-        with patch(
-            "mmd_registry.cli.dry_run_pmx_edit",
-            side_effect=RuntimeError("simulated internal failure"),
+    def test_unexpected_json_failure_is_not_misreported_as_domain_error(self) -> None:
+        output = io.StringIO()
+        error_output = io.StringIO()
+        with (
+            patch(
+                "mmd_registry.cli.dry_run_pmx_edit",
+                side_effect=RuntimeError("simulated internal failure"),
+            ),
+            redirect_stdout(output),
+            redirect_stderr(error_output),
+            self.assertRaisesRegex(RuntimeError, "simulated internal failure"),
         ):
-            exit_code, output, error_output = self.capture_run(
-                self.dry_run_arguments("--json")
-            )
-        payload = json.loads(output)
+            run(self.dry_run_arguments("--json"))
 
-        self.assertEqual(exit_code, 3)
-        self.assertEqual(error_output, "")
-        self.assertEqual(payload["error_type"], "internal")
-        self.assertIn("simulated internal failure", payload["errors"][0])
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(error_output.getvalue(), "")
 
     def test_plan_argument_is_required_by_parser(self) -> None:
         output = io.StringIO()

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from mmd_registry.pmx.editing import (
+    PmxEditPlanDecodeError,
     PmxEditPlanError,
     SetModelInfo,
     SetTexturePath,
@@ -99,7 +100,7 @@ class PmxEditPlanJsonTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             plan_path = Path(directory, "invalid.json")
             plan_path.write_bytes(b"\xff\xfe")
-            with self.assertRaisesRegex(PmxEditPlanError, "valid UTF-8"):
+            with self.assertRaisesRegex(PmxEditPlanDecodeError, "valid UTF-8"):
                 load_pmx_edit_plan(plan_path)
 
         with self.assertRaisesRegex(TypeError, "path must be"):
@@ -107,7 +108,7 @@ class PmxEditPlanJsonTests(unittest.TestCase):
 
     def test_malformed_json_reports_line_and_column(self) -> None:
         with self.assertRaisesRegex(
-            PmxEditPlanError,
+            PmxEditPlanDecodeError,
             r"invalid JSON at line 1, column \d+",
         ):
             parse_pmx_edit_plan_json(
@@ -116,6 +117,15 @@ class PmxEditPlanJsonTests(unittest.TestCase):
 
         with self.assertRaisesRegex(TypeError, "text must be a string"):
             parse_pmx_edit_plan_json(b"{}")  # type: ignore[arg-type]
+
+    def test_empty_json_document_is_a_decode_error(self) -> None:
+        for text in ("", "   ", "\n\t"):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(
+                    PmxEditPlanDecodeError,
+                    r"invalid JSON at line 1, column \d+",
+                ):
+                    parse_pmx_edit_plan_json(text)
 
     def test_top_level_value_must_be_an_exact_object(self) -> None:
         for payload in (None, [], "plan", 1, True):
@@ -233,7 +243,7 @@ class PmxEditPlanJsonTests(unittest.TestCase):
 
     def test_duplicate_json_members_are_rejected(self) -> None:
         with self.assertRaisesRegex(
-            PmxEditPlanError,
+            PmxEditPlanDecodeError,
             "duplicate JSON member 'local_name'",
         ):
             parse_pmx_edit_plan_json(
@@ -448,15 +458,17 @@ class PmxEditPlanJsonTests(unittest.TestCase):
                 '"specular_strength":1e400}]}'
             )
 
-        with self.assertRaisesRegex(
-            PmxEditPlanError,
-            r"numeric constant 'NaN' is not valid JSON",
-        ):
-            parse_pmx_edit_plan_json(
-                '{"schema_version":1,"operations":[{'
-                '"op":"update_material","material_index":0,'
-                '"edge_scale":NaN}]}'
-            )
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                with self.assertRaisesRegex(
+                    PmxEditPlanDecodeError,
+                    rf"numeric constant '{constant}' is not valid JSON",
+                ):
+                    parse_pmx_edit_plan_json(
+                        '{"schema_version":1,"operations":[{'
+                        '"op":"update_material","material_index":0,'
+                        '"edge_scale":' + constant + '}]}'
+                    )
 
     def test_expected_source_hash_is_strict_lowercase_sha256(self) -> None:
         operation = {"op": "set_model_info", "local_name": "x"}

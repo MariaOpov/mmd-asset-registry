@@ -35,6 +35,7 @@ class PmxEditDiagnosticTests(unittest.TestCase):
             PmxEditPhase.REPARSE: "edit_reparse_failed",
             PmxEditPhase.SEMANTIC_VERIFY: "edit_verification_failed",
             PmxEditPhase.OUTPUT_COMMIT: "output_commit_failed",
+            PmxEditPhase.INTERNAL: "edit_internal_error",
         }
 
         self.assertEqual(

@@ -38,6 +38,7 @@ class PmxEditPhase(StrEnum):
     REPARSE = "reparse"
     SEMANTIC_VERIFY = "semantic_verify"
     OUTPUT_COMMIT = "output_commit"
+    INTERNAL = "internal"
 
 
 class PmxEditDiagnosticCode(StrEnum):
@@ -55,6 +56,7 @@ class PmxEditDiagnosticCode(StrEnum):
     REPARSE_FAILED = "edit_reparse_failed"
     SEMANTIC_VERIFY_FAILED = "edit_verification_failed"
     OUTPUT_COMMIT_FAILED = "output_commit_failed"
+    INTERNAL_ERROR = "edit_internal_error"
 
 
 _DEFAULT_CODE_BY_PHASE: Final[dict[PmxEditPhase, PmxEditDiagnosticCode]] = {
@@ -70,6 +72,7 @@ _DEFAULT_CODE_BY_PHASE: Final[dict[PmxEditPhase, PmxEditDiagnosticCode]] = {
     PmxEditPhase.REPARSE: PmxEditDiagnosticCode.REPARSE_FAILED,
     PmxEditPhase.SEMANTIC_VERIFY: PmxEditDiagnosticCode.SEMANTIC_VERIFY_FAILED,
     PmxEditPhase.OUTPUT_COMMIT: PmxEditDiagnosticCode.OUTPUT_COMMIT_FAILED,
+    PmxEditPhase.INTERNAL: PmxEditDiagnosticCode.INTERNAL_ERROR,
 }
 
 

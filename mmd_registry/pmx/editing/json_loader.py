@@ -7,7 +7,10 @@ import math
 from pathlib import Path
 from typing import Final
 
-from mmd_registry.pmx.editing.errors import PmxEditPlanError
+from mmd_registry.pmx.editing.errors import (
+    PmxEditPlanDecodeError,
+    PmxEditPlanError,
+)
 from mmd_registry.pmx.editing.operations import (
     MATERIAL_FIELDS,
     MODEL_INFO_FIELDS,
@@ -534,6 +537,10 @@ def parse_pmx_edit_plan_json(text: str) -> PmxEditPlan:
 
     if type(text) is not str:
         raise TypeError("text must be a string.")
+    if not text.strip():
+        raise PmxEditPlanDecodeError(
+            "invalid JSON at line 1, column 1: document is empty."
+        )
     try:
         payload = json.loads(
             text,
@@ -541,15 +548,15 @@ def parse_pmx_edit_plan_json(text: str) -> PmxEditPlan:
             parse_constant=_reject_json_constant,
         )
     except _DuplicateJsonMemberError as error:
-        raise PmxEditPlanError(
+        raise PmxEditPlanDecodeError(
             f"duplicate JSON member {error.member_name!r}."
         ) from error
     except _NonstandardJsonConstantError as error:
-        raise PmxEditPlanError(
+        raise PmxEditPlanDecodeError(
             f"numeric constant {error.constant!r} is not valid JSON."
         ) from error
     except json.JSONDecodeError as error:
-        raise PmxEditPlanError(
+        raise PmxEditPlanDecodeError(
             (
                 f"invalid JSON at line {error.lineno}, column "
                 f"{error.colno}: {error.msg}."
@@ -568,7 +575,7 @@ def load_pmx_edit_plan(path: str | Path) -> PmxEditPlan:
     try:
         text = plan_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
-        raise PmxEditPlanError(
+        raise PmxEditPlanDecodeError(
             "edit-plan file must contain valid UTF-8 text."
         ) from error
     return parse_pmx_edit_plan_json(text)

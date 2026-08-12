@@ -25,11 +25,17 @@ from mmd_registry.model_scanning import (
     scan_pmx_structure,
 )
 from mmd_registry.pmx.editing import (
+    PmxEditDiagnostic,
     PmxEditPathError,
+    PmxEditPhase,
+    PmxEditPlanDecodeError,
     PmxEditPlanError,
     PmxEditVerificationError,
+    default_diagnostic_code,
+    diagnostic_from_plan_error,
     dry_run_pmx_edit,
     load_pmx_edit_plan,
+    render_pmx_edit_diagnostic_text,
     render_pmx_edit_preview_json,
     render_pmx_edit_preview_text,
     render_pmx_edit_write_json,
@@ -855,9 +861,11 @@ def _print_roundtrip_error(
                     "input_path": input_path.as_posix(),
                     "output_path": output_path.as_posix(),
                     "error_type": error_type,
-                    "errors": [message],
+                    "errors": [diagnostic.message],
+                    "error": diagnostic.to_dict(),
                 },
                 ensure_ascii=False,
+                allow_nan=False,
                 indent=2,
             )
         )
@@ -921,17 +929,54 @@ def _run_roundtrip(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _new_edit_diagnostic(
+    phase: PmxEditPhase,
+    message: str,
+) -> PmxEditDiagnostic:
+    """Build one simple stable diagnostic for an expected CLI failure."""
+
+    return PmxEditDiagnostic(
+        code=default_diagnostic_code(phase),
+        phase=phase,
+        message=message,
+    )
+
+
+def _phase_for_runtime_plan_error(error: PmxEditPlanError) -> PmxEditPhase:
+    """Map one validated-plan runtime failure to its deterministic phase."""
+
+    if error.operation_index is None and error.field == "expected_source_sha256":
+        return PmxEditPhase.PREFLIGHT
+    return PmxEditPhase.APPLY
+
+
+def _new_edit_io_diagnostic(
+    phase: PmxEditPhase,
+    message: str,
+    error: OSError,
+) -> PmxEditDiagnostic:
+    """Build one stable filesystem diagnostic without exposing OS repr text."""
+
+    details = ((("errno", error.errno),) if type(error.errno) is int else ())
+    return PmxEditDiagnostic(
+        code=default_diagnostic_code(phase),
+        phase=phase,
+        message=message,
+        details=details,
+    )
+
+
 def _print_edit_error(
     input_path: Path,
     plan_path: Path,
     output_path: Path | None,
-    message: str,
+    diagnostic: PmxEditDiagnostic,
     *,
     json_output: bool,
     error_type: str,
     dry_run: bool,
 ) -> None:
-    """Print one stable edit path, data, verification, or internal failure."""
+    """Print one stable expected edit failure in text or JSON form."""
 
     if json_output:
         print(
@@ -947,7 +992,8 @@ def _print_edit_error(
                         else None
                     ),
                     "error_type": error_type,
-                    "errors": [message],
+                    "errors": [diagnostic.message],
+                "error": diagnostic.to_dict(),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -955,7 +1001,8 @@ def _print_edit_error(
         )
         return
 
-    print(f"[ERROR] edit: {message}", file=sys.stderr)
+    rendered = render_pmx_edit_diagnostic_text(diagnostic).rstrip("\n")
+    print(f"[ERROR] edit: {rendered}", file=sys.stderr)
 
 
 def _edit_path_error(path: Path, label: str) -> str | None:
@@ -975,23 +1022,35 @@ def _run_edit(arguments: argparse.Namespace) -> int:
     plan_path = Path(arguments.plan)
     output_path = Path(arguments.output) if arguments.output is not None else None
 
-    def print_error(message: str, error_type: str) -> None:
+    def print_error(
+        diagnostic: PmxEditDiagnostic,
+        error_type: str,
+    ) -> None:
         _print_edit_error(
             input_path,
             plan_path,
             output_path,
-            message,
+            diagnostic,
             json_output=arguments.json,
             error_type=error_type,
             dry_run=arguments.dry_run,
         )
 
     if arguments.overwrite and output_path is None:
-        print_error("--overwrite requires an output path.", "usage")
+        print_error(
+            _new_edit_diagnostic(
+                PmxEditPhase.PREFLIGHT,
+                "--overwrite requires an output path.",
+            ),
+            "usage",
+        )
         return 2
     if not arguments.dry_run and output_path is None:
         print_error(
-            "Output path is required unless --dry-run is used.",
+            _new_edit_diagnostic(
+                PmxEditPhase.PREFLIGHT,
+                "Output path is required unless --dry-run is used.",
+            ),
             "usage",
         )
         return 2
@@ -999,59 +1058,102 @@ def _run_edit(arguments: argparse.Namespace) -> int:
     for path, label in ((input_path, "Input"), (plan_path, "Plan")):
         path_error = _edit_path_error(path, label)
         if path_error is not None:
-            print_error(path_error, "path_policy")
+            print_error(
+                _new_edit_diagnostic(PmxEditPhase.PREFLIGHT, path_error),
+                "path_policy",
+            )
             return 2
 
     try:
         plan = load_pmx_edit_plan(plan_path)
+    except PmxEditPlanDecodeError as error:
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=PmxEditPhase.PLAN_DECODE,
+            ),
+            "invalid_plan",
+        )
+        return 1
     except PmxEditPlanError as error:
-        print_error(str(error), "invalid_plan")
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=PmxEditPhase.PLAN_VALIDATE,
+            ),
+            "invalid_plan",
+        )
         return 1
     except OSError as error:
-        print_error(f"Unable to read plan file: {error}", "io")
+        print_error(
+            _new_edit_io_diagnostic(
+                PmxEditPhase.PLAN_READ,
+                "Unable to read edit-plan file.",
+                error,
+            ),
+            "io",
+        )
         return 2
-    except Exception as error:
-        print_error(f"Internal plan-load failure: {error}", "internal")
-        return 3
 
     if arguments.dry_run:
         try:
             source_bytes = input_path.read_bytes()
         except OSError as error:
-            print_error(f"Unable to read input file: {error}", "io")
+            print_error(
+                _new_edit_io_diagnostic(
+                    PmxEditPhase.SOURCE_READ,
+                    "Unable to read source PMX file.",
+                    error,
+                ),
+                "io",
+            )
             return 2
 
         try:
             preview = dry_run_pmx_edit(source_bytes, plan)
         except PmxEditPlanError as error:
-            print_error(str(error), "invalid_plan")
+            print_error(
+                diagnostic_from_plan_error(
+                    error,
+                    phase=_phase_for_runtime_plan_error(error),
+                ),
+                "invalid_plan",
+            )
             return 1
-        except (BinaryParseError, PmxValidationError) as error:
-            print_error(str(error), "invalid_pmx")
+        except BinaryParseError as error:
+            print_error(
+                _new_edit_diagnostic(PmxEditPhase.SOURCE_PARSE, str(error)),
+                "invalid_pmx",
+            )
+            return 1
+        except PmxValidationError as error:
+            print_error(
+                _new_edit_diagnostic(
+                    PmxEditPhase.DOCUMENT_VALIDATE,
+                    str(error),
+                ),
+                "invalid_pmx",
+            )
             return 1
         except PmxEditVerificationError as error:
-            print_error(str(error), "verification")
-            return 1
-        except Exception as error:
-            print_error(f"Internal edit failure: {error}", "internal")
-            return 3
-
-        try:
-            if arguments.json:
-                sys.stdout.write(render_pmx_edit_preview_json(preview))
-            else:
-                sys.stdout.write(
-                    render_pmx_edit_preview_text(
-                        preview,
-                        include_changes=False,
-                    )
-                )
-        except Exception as error:
             print_error(
-                f"Internal preview-render failure: {error}",
-                "internal",
+                _new_edit_diagnostic(
+                    PmxEditPhase.SEMANTIC_VERIFY,
+                    str(error),
+                ),
+                "verification",
             )
-            return 3
+            return 1
+
+        if arguments.json:
+            sys.stdout.write(render_pmx_edit_preview_json(preview))
+        else:
+            sys.stdout.write(
+                render_pmx_edit_preview_text(
+                    preview,
+                    include_changes=False,
+                )
+            )
         return 0
 
     assert output_path is not None
@@ -1063,32 +1165,59 @@ def _run_edit(arguments: argparse.Namespace) -> int:
             overwrite=arguments.overwrite,
         )
     except PmxEditPathError as error:
-        print_error(str(error), "path_policy")
+        print_error(
+            _new_edit_diagnostic(PmxEditPhase.PREFLIGHT, str(error)),
+            "path_policy",
+        )
         return 2
     except PmxEditPlanError as error:
-        print_error(str(error), "invalid_plan")
+        print_error(
+            diagnostic_from_plan_error(
+                error,
+                phase=_phase_for_runtime_plan_error(error),
+            ),
+            "invalid_plan",
+        )
         return 1
-    except (BinaryParseError, PmxValidationError) as error:
-        print_error(str(error), "invalid_pmx")
+    except BinaryParseError as error:
+        print_error(
+            _new_edit_diagnostic(PmxEditPhase.SOURCE_PARSE, str(error)),
+            "invalid_pmx",
+        )
+        return 1
+    except PmxValidationError as error:
+        print_error(
+            _new_edit_diagnostic(
+                PmxEditPhase.DOCUMENT_VALIDATE,
+                str(error),
+            ),
+            "invalid_pmx",
+        )
         return 1
     except PmxEditVerificationError as error:
-        print_error(str(error), "verification")
+        print_error(
+            _new_edit_diagnostic(
+                PmxEditPhase.SEMANTIC_VERIFY,
+                str(error),
+            ),
+            "verification",
+        )
         return 1
     except OSError as error:
-        print_error(f"File operation failed: {error}", "io")
+        print_error(
+            _new_edit_io_diagnostic(
+                PmxEditPhase.OUTPUT_COMMIT,
+                "File operation failed.",
+                error,
+            ),
+            "io",
+        )
         return 2
-    except Exception as error:
-        print_error(f"Internal edit failure: {error}", "internal")
-        return 3
 
-    try:
-        if arguments.json:
-            sys.stdout.write(render_pmx_edit_write_json(result))
-        else:
-            sys.stdout.write(render_pmx_edit_write_text(result))
-    except Exception as error:
-        print_error(f"Internal result-render failure: {error}", "internal")
-        return 3
+    if arguments.json:
+        sys.stdout.write(render_pmx_edit_write_json(result))
+    else:
+        sys.stdout.write(render_pmx_edit_write_text(result))
     return 0
 
 
@@ -1365,6 +1494,33 @@ def run(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
+def _print_unexpected_edit_error(*, json_output: bool) -> None:
+    """Render one process-boundary edit failure without exception internals."""
+
+    diagnostic = _new_edit_diagnostic(
+        PmxEditPhase.INTERNAL,
+        "Unexpected internal edit failure.",
+    )
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error_type": "internal",
+                    "errors": [diagnostic.message],
+                    "error": diagnostic.to_dict(),
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+                indent=2,
+            )
+        )
+        return
+
+    rendered = render_pmx_edit_diagnostic_text(diagnostic).rstrip("\n")
+    print(f"[ERROR] edit: {rendered}", file=sys.stderr)
+
+
 def main() -> None:
     """Command-line entry point."""
 
@@ -1373,10 +1529,16 @@ def main() -> None:
     try:
         exit_code = run()
     except Exception as error:
-        print(
-            f"[ERROR] internal: {error}",
-            file=sys.stderr,
-        )
+        normalized_arguments = normalize_arguments(None)
+        if normalized_arguments and normalized_arguments[0] == "edit":
+            _print_unexpected_edit_error(
+                json_output="--json" in normalized_arguments,
+            )
+        else:
+            print(
+                f"[ERROR] internal: {error}",
+                file=sys.stderr,
+            )
         exit_code = 3
 
     raise SystemExit(exit_code)

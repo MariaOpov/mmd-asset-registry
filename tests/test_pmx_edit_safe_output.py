@@ -512,20 +512,24 @@ class PmxEditWriteCliTests(unittest.TestCase):
         self.assertIn("File operation failed", error_output)
         self.assertNotIn("Traceback", error_output)
 
-    def test_unexpected_failure_returns_three_without_traceback(self) -> None:
+    def test_unexpected_write_failure_propagates_from_run(self) -> None:
         output_path = self.project_root / "output.pmx"
-        with patch(
-            "mmd_registry.cli.write_pmx_edit",
-            side_effect=RuntimeError("simulated internal failure"),
+        output = io.StringIO()
+        error_output = io.StringIO()
+        with (
+            patch(
+                "mmd_registry.cli.write_pmx_edit",
+                side_effect=RuntimeError("simulated internal failure"),
+            ),
+            redirect_stdout(output),
+            redirect_stderr(error_output),
+            self.assertRaisesRegex(RuntimeError, "simulated internal failure"),
         ):
-            exit_code, output, error_output = self.capture_run(
-                self.write_arguments(output_path)
-            )
+            run(self.write_arguments(output_path))
 
-        self.assertEqual(exit_code, 3)
-        self.assertEqual(output, "")
-        self.assertIn("Internal edit failure", error_output)
-        self.assertNotIn("Traceback", error_output)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(error_output.getvalue(), "")
+        self.assertFalse(output_path.exists())
 
 
 if __name__ == "__main__":

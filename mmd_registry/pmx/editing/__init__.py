@@ -6,6 +6,16 @@ from mmd_registry.pmx.editing.audit import (
     PmxEditCategory,
     PmxEditChange,
 )
+from mmd_registry.pmx.editing.diagnostics import (
+    PmxEditDiagnostic,
+    PmxEditDiagnosticCode,
+    PmxEditPhase,
+    build_edit_plan_json_path,
+    default_diagnostic_code,
+    diagnostic_from_plan_error,
+    render_pmx_edit_diagnostic_json,
+    render_pmx_edit_diagnostic_text,
+)
 from mmd_registry.pmx.editing.engine import (
     PmxEditResult,
     apply_pmx_edit_plan,
@@ -15,6 +25,7 @@ from mmd_registry.pmx.editing.engine import (
 )
 from mmd_registry.pmx.editing.errors import (
     PmxEditPathError,
+    PmxEditPlanDecodeError,
     PmxEditPlanError,
     PmxEditVerificationError,
 )
@@ -57,9 +68,13 @@ __all__ = [
     "PmxEditAudit",
     "PmxEditCategory",
     "PmxEditChange",
+    "PmxEditDiagnostic",
+    "PmxEditDiagnosticCode",
     "PmxEditOperation",
     "PmxEditPathError",
+    "PmxEditPhase",
     "PmxEditPlan",
+    "PmxEditPlanDecodeError",
     "PmxEditPlanError",
     "PmxEditPreview",
     "PmxEditResult",
@@ -72,11 +87,16 @@ __all__ = [
     "apply_set_model_info",
     "apply_set_texture_path",
     "apply_update_material",
+    "build_edit_plan_json_path",
     "canonicalize_pmx_float32",
     "calculate_pmx_edit_plan_sha256",
+    "default_diagnostic_code",
+    "diagnostic_from_plan_error",
     "dry_run_pmx_edit",
     "load_pmx_edit_plan",
     "parse_pmx_edit_plan_json",
+    "render_pmx_edit_diagnostic_json",
+    "render_pmx_edit_diagnostic_text",
     "render_pmx_edit_preview_json",
     "render_pmx_edit_preview_text",
     "render_pmx_edit_write_json",

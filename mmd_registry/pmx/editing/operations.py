@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import ClassVar, Final, Literal, TypeAlias
 
 
@@ -31,6 +32,139 @@ MATERIAL_FIELDS: Final[tuple[str, ...]] = (
     "edge_color",
     "edge_scale",
 )
+
+
+class PmxEditJsonType(StrEnum):
+    """Exact JSON value kinds accepted by the strict edit-plan loader."""
+
+    STRING = "string"
+    INTEGER = "integer"
+    FLOAT = "float"
+    ARRAY = "array"
+
+
+class PmxEditFieldRole(StrEnum):
+    """Whether a field selects a target or supplies an intended new value."""
+
+    SELECTOR = "selector"
+    VALUE = "value"
+
+
+class PmxEditTargetKind(StrEnum):
+    """Stable high-level target kinds exposed by the authoring catalog."""
+
+    MODEL = "model"
+    TEXTURE = "texture"
+    MATERIAL = "material"
+
+
+class PmxEditEffectKind(StrEnum):
+    """Stable edit-surface categories exposed by the authoring catalog."""
+
+    MODEL_METADATA = "model_metadata"
+    TEXTURE_PATH = "texture_path"
+    MATERIAL_STATE = "material_state"
+
+
+PmxEditCatalogChoice: TypeAlias = str | int
+
+
+@dataclass(frozen=True, slots=True)
+class PmxEditFieldSpec:
+    """One immutable JSON-facing field description for an edit operation."""
+
+    name: str
+    json_type: PmxEditJsonType
+    required: bool
+    role: PmxEditFieldRole
+    array_length: int | None = None
+    minimum: int | None = None
+    maximum: int | None = None
+    choices: tuple[PmxEditCatalogChoice, ...] = ()
+    finite: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.name) is not str or not self.name:
+            raise ValueError("field spec name must be a non-empty string.")
+        if not isinstance(self.json_type, PmxEditJsonType):
+            raise TypeError("json_type must be a PmxEditJsonType value.")
+        if type(self.required) is not bool:
+            raise TypeError("required must be a boolean.")
+        if not isinstance(self.role, PmxEditFieldRole):
+            raise TypeError("role must be a PmxEditFieldRole value.")
+        if self.array_length is not None:
+            if type(self.array_length) is not int or self.array_length < 1:
+                raise ValueError("array_length must be a positive integer.")
+            if self.json_type is not PmxEditJsonType.ARRAY:
+                raise ValueError("array_length is valid only for JSON arrays.")
+        for bound_name in ("minimum", "maximum"):
+            bound = getattr(self, bound_name)
+            if bound is not None and type(bound) is not int:
+                raise TypeError(f"{bound_name} must be an integer when provided.")
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ValueError("minimum cannot be greater than maximum.")
+        if type(self.choices) is not tuple:
+            raise TypeError("choices must be a tuple.")
+        if any(type(choice) not in (str, int) for choice in self.choices):
+            raise TypeError("choices may contain only strings or integers.")
+        if type(self.finite) is not bool:
+            raise TypeError("finite must be a boolean.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a deterministic JSON-ready field description."""
+
+        payload: dict[str, object] = {
+            "name": self.name,
+            "json_type": self.json_type.value,
+            "required": self.required,
+            "role": self.role.value,
+        }
+        if self.array_length is not None:
+            payload["array_length"] = self.array_length
+        if self.minimum is not None:
+            payload["minimum"] = self.minimum
+        if self.maximum is not None:
+            payload["maximum"] = self.maximum
+        if self.choices:
+            payload["choices"] = list(self.choices)
+        if self.finite:
+            payload["finite"] = True
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class PmxEditOperationMetadata:
+    """Authoritative authoring metadata attached to one operation class."""
+
+    purpose: str
+    target_kind: PmxEditTargetKind
+    effect_kind: PmxEditEffectKind
+    fields: tuple[PmxEditFieldSpec, ...]
+    constraints: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.purpose) is not str or not self.purpose:
+            raise ValueError("purpose must be a non-empty string.")
+        if not isinstance(self.target_kind, PmxEditTargetKind):
+            raise TypeError("target_kind must be a PmxEditTargetKind value.")
+        if not isinstance(self.effect_kind, PmxEditEffectKind):
+            raise TypeError("effect_kind must be a PmxEditEffectKind value.")
+        if type(self.fields) is not tuple or not self.fields:
+            raise ValueError("fields must be a non-empty tuple.")
+        if not all(isinstance(field, PmxEditFieldSpec) for field in self.fields):
+            raise TypeError("fields must contain only PmxEditFieldSpec values.")
+        if len({field.name for field in self.fields}) != len(self.fields):
+            raise ValueError("operation metadata field names must be unique.")
+        if type(self.constraints) is not tuple:
+            raise TypeError("constraints must be a tuple.")
+        if any(type(item) is not str or not item for item in self.constraints):
+            raise ValueError("constraints must contain non-empty strings.")
+        if len(set(self.constraints)) != len(self.constraints):
+            raise ValueError("operation metadata constraints must be unique.")
 
 
 def _is_plain_int(value: object) -> bool:
@@ -117,6 +251,22 @@ class SetModelInfo:
 
     operation_name: ClassVar[Literal["set_model_info"]] = "set_model_info"
 
+    catalog_metadata: ClassVar[PmxEditOperationMetadata] = PmxEditOperationMetadata(
+        purpose="Replace one or more existing PMX model-information fields.",
+        target_kind=PmxEditTargetKind.MODEL,
+        effect_kind=PmxEditEffectKind.MODEL_METADATA,
+        fields=tuple(
+            PmxEditFieldSpec(
+                name=field_name,
+                json_type=PmxEditJsonType.STRING,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+            )
+            for field_name in MODEL_INFO_FIELDS
+        ),
+        constraints=("at_least_one_update_field",),
+    )
+
     local_name: str | None = None
     universal_name: str | None = None
     local_comments: str | None = None
@@ -158,6 +308,31 @@ class SetTexturePath:
 
     operation_name: ClassVar[Literal["set_texture_path"]] = "set_texture_path"
 
+    catalog_metadata: ClassVar[PmxEditOperationMetadata] = PmxEditOperationMetadata(
+        purpose="Replace one existing texture path by its zero-based index.",
+        target_kind=PmxEditTargetKind.TEXTURE,
+        effect_kind=PmxEditEffectKind.TEXTURE_PATH,
+        fields=(
+            PmxEditFieldSpec(
+                name="texture_index",
+                json_type=PmxEditJsonType.INTEGER,
+                required=True,
+                role=PmxEditFieldRole.SELECTOR,
+                minimum=0,
+            ),
+            PmxEditFieldSpec(
+                name="path",
+                json_type=PmxEditJsonType.STRING,
+                required=True,
+                role=PmxEditFieldRole.VALUE,
+            ),
+        ),
+        constraints=(
+            "target_index_range_checked_when_applied",
+            "texture_path_policy_checked_when_applied",
+        ),
+    )
+
     texture_index: int
     path: str
 
@@ -191,6 +366,134 @@ class UpdateMaterial:
     """Replace supported fields of one existing material record."""
 
     operation_name: ClassVar[Literal["update_material"]] = "update_material"
+
+    catalog_metadata: ClassVar[PmxEditOperationMetadata] = PmxEditOperationMetadata(
+        purpose="Replace supported fields of one existing material record.",
+        target_kind=PmxEditTargetKind.MATERIAL,
+        effect_kind=PmxEditEffectKind.MATERIAL_STATE,
+        fields=(
+            PmxEditFieldSpec(
+                name="material_index",
+                json_type=PmxEditJsonType.INTEGER,
+                required=True,
+                role=PmxEditFieldRole.SELECTOR,
+                minimum=0,
+            ),
+            PmxEditFieldSpec(
+                name="local_name",
+                json_type=PmxEditJsonType.STRING,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+            ),
+            PmxEditFieldSpec(
+                name="universal_name",
+                json_type=PmxEditJsonType.STRING,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+            ),
+            PmxEditFieldSpec(
+                name="memo",
+                json_type=PmxEditJsonType.STRING,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+            ),
+            PmxEditFieldSpec(
+                name="texture_index",
+                json_type=PmxEditJsonType.INTEGER,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                minimum=-1,
+            ),
+            PmxEditFieldSpec(
+                name="sphere_texture_index",
+                json_type=PmxEditJsonType.INTEGER,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                minimum=-1,
+            ),
+            PmxEditFieldSpec(
+                name="sphere_mode",
+                json_type=PmxEditJsonType.INTEGER,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                choices=(0, 1, 2, 3),
+            ),
+            PmxEditFieldSpec(
+                name="toon_reference_mode",
+                json_type=PmxEditJsonType.STRING,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                choices=("texture", "shared"),
+            ),
+            PmxEditFieldSpec(
+                name="toon_reference_index",
+                json_type=PmxEditJsonType.INTEGER,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                minimum=-1,
+            ),
+            PmxEditFieldSpec(
+                name="diffuse",
+                json_type=PmxEditJsonType.ARRAY,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                array_length=4,
+                finite=True,
+            ),
+            PmxEditFieldSpec(
+                name="specular",
+                json_type=PmxEditJsonType.ARRAY,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                array_length=3,
+                finite=True,
+            ),
+            PmxEditFieldSpec(
+                name="specular_strength",
+                json_type=PmxEditJsonType.FLOAT,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                finite=True,
+            ),
+            PmxEditFieldSpec(
+                name="ambient",
+                json_type=PmxEditJsonType.ARRAY,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                array_length=3,
+                finite=True,
+            ),
+            PmxEditFieldSpec(
+                name="drawing_flags",
+                json_type=PmxEditJsonType.INTEGER,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                minimum=0,
+                maximum=255,
+            ),
+            PmxEditFieldSpec(
+                name="edge_color",
+                json_type=PmxEditJsonType.ARRAY,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                array_length=4,
+                finite=True,
+            ),
+            PmxEditFieldSpec(
+                name="edge_scale",
+                json_type=PmxEditJsonType.FLOAT,
+                required=False,
+                role=PmxEditFieldRole.VALUE,
+                finite=True,
+            ),
+        ),
+        constraints=(
+            "at_least_one_update_field",
+            "target_index_range_checked_when_applied",
+            "reference_ranges_checked_when_applied",
+            "shared_toon_reference_index_must_be_0_through_9",
+        ),
+    )
 
     material_index: int
     local_name: str | None = None

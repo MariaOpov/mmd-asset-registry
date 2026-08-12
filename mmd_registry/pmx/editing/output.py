@@ -106,6 +106,13 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _file_identity(path: Path) -> tuple[int, int]:
+    """Return the stable filesystem identity used for pre-commit verification."""
+
+    stat_result = path.stat()
+    return (stat_result.st_dev, stat_result.st_ino)
+
+
 def _validate_destination_state(
     source: Path,
     destination: Path,
@@ -188,6 +195,7 @@ def _verify_source_unchanged(
     requested_source: Path,
     source: Path,
     expected_sha256: str,
+    expected_identity: tuple[int, int],
 ) -> None:
     """Require the original source path and content immediately pre-commit."""
 
@@ -197,6 +205,17 @@ def _verify_source_unchanged(
         raise PmxEditVerificationError(
             f"source path changed before output commit: {error}"
         ) from error
+    try:
+        current_identity = _file_identity(current_source)
+    except OSError as error:
+        raise PmxEditVerificationError(
+            f"source identity could not be verified before output commit: {error}"
+        ) from error
+    if current_identity != expected_identity:
+        raise PmxEditVerificationError(
+            "source file identity changed before output commit."
+        )
+
     try:
         same_file = source.samefile(current_source)
     except OSError as error:
@@ -226,6 +245,7 @@ def _commit_verified_bytes(
     source: Path,
     destination: Path,
     source_sha256: str,
+    source_identity: tuple[int, int],
     overwrite: bool,
 ) -> None:
     """Commit verified bytes atomically without exposing a partial output."""
@@ -253,6 +273,7 @@ def _commit_verified_bytes(
             requested_source,
             source,
             source_sha256,
+            source_identity,
         )
         _validate_destination_state(
             source,
@@ -297,6 +318,7 @@ def write_pmx_edit(
         output_path,
         overwrite=overwrite,
     )
+    source_identity = _file_identity(source)
     source_bytes = source.read_bytes()
     preview = dry_run_pmx_edit(source_bytes, plan)
 
@@ -315,6 +337,7 @@ def write_pmx_edit(
         source=source,
         destination=destination,
         source_sha256=preview.source_sha256,
+        source_identity=source_identity,
         overwrite=overwrite,
     )
     return PmxEditWriteResult(

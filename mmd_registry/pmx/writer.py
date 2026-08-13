@@ -585,8 +585,15 @@ def write_pmx(
     path = Path(destination)
 
     if not overwrite:
-        with path.open("xb") as file:
-            file.write(data)
+        created_destination = False
+        try:
+            with path.open("xb") as file:
+                created_destination = True
+                file.write(data)
+        except BaseException:
+            if created_destination:
+                path.unlink(missing_ok=True)
+            raise
         return path
 
     path.parent.mkdir(parents=True, exist_ok=True)

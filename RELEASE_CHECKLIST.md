@@ -1,4 +1,4 @@
-# MMD Asset Registry v0.8.3 Release Checklist
+# MMD Asset Registry v0.8.4 Release Checklist
 
 Use this checklist after the feature branch is complete. Do not commit or
 redistribute any private or third-party production model.
@@ -17,16 +17,17 @@ redistribute any private or third-party production model.
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; assert __version__ == '0.8.3'"
+  python -c "from mmd_registry import __version__; assert __version__ == '0.8.4'"
   ```
 
 - [ ] Compile and run all automated checks:
 
   ```bat
+  set "MMD_REGISTRY_PRIVATE_PMX="
   python -m compileall -f mmd_registry tests check_assets.py
   python -m unittest discover -s tests -q
   git diff --check
-  rem Expected full-suite count at release readiness: 884 tests
+  rem Expected normal-CI full-suite count: 915 tests, optional private class skipped
   ```
 
 - [ ] Confirm all release-facing command help pages:
@@ -90,6 +91,10 @@ redistribute any private or third-party production model.
 - [ ] Generated edit fixtures cover all 12 version/encoding/uniform-width
   combinations, 12 mixed-width combinations, and all seven combinations of
   model, texture, and material operation categories.
+- [ ] Named v0.8.4 compatibility profiles cover PMX 2.0/2.1, both supported
+  encodings, additional UV counts 0-4, all six index-width fields, Unicode,
+  zero-count sections, reader/scanner parity, boundary policies, deterministic
+  writer/round-trip semantics, and cross-feature composition.
 
 - [ ] Run the focused generated edit and private-harness tests:
 
@@ -103,14 +108,31 @@ redistribute any private or third-party production model.
   python -m unittest -q tests.test_texture_path_semantics tests.test_texture_portability tests.test_texture_rewrite tests.test_texture_portability_cli tests.test_texture_portability_generated_matrix tests.test_doctor_cli tests.test_cli tests.test_pmx_edit_plan_json tests.test_pmx_texture_path_editing
   ```
 
+- [ ] Run the focused v0.8.4 compatibility matrix with the private runtime path
+  deliberately empty:
+
+  ```bat
+  set "MMD_REGISTRY_PRIVATE_PMX="
+  python -m unittest -q tests.test_pmx_compatibility_profiles tests.test_pmx_compatibility_reader_scanner tests.test_pmx_compatibility_boundaries tests.test_pmx_compatibility_writer_roundtrip tests.test_pmx_compatibility_cross_feature tests.test_pmx_compatibility_private_runtime
+  ```
+
 ## 3. Private asset hygiene
 
-Version 0.8.3 does not require a new private-model validation run for release:
-the portability workflow reads PMX structure and deterministic filesystem
-texture evidence but never modifies PMX/texture inputs and does not expand the
-PMX writer or output-commit path. Generated PMX fixtures and temporary texture
-trees cover the new lexical, filesystem, rewrite, CLI, strict-plan, and
-source-binding behavior. A private-model rerun remains optional and local-only.
+Version 0.8.4 includes an optional runtime-only compatibility harness. Normal CI
+must leave `MMD_REGISTRY_PRIVATE_PMX` empty so no private asset is required or
+referenced. For release validation, a maintainer may explicitly point that
+variable at one local `.pmx`, run the private runtime module, verify source
+size/SHA-256 invariance and temporary cleanup, then clear the variable again.
+Never commit the variable value, model path, model name, private report, model,
+texture, or derived output.
+
+- [ ] Optional local-only private compatibility gate:
+
+  ```bat
+  set "MMD_REGISTRY_PRIVATE_PMX=<absolute-local-path-to-private-model.pmx>"
+  python -m unittest -q tests.test_pmx_compatibility_private_runtime
+  set "MMD_REGISTRY_PRIVATE_PMX="
+  ```
 
 - [ ] The private model and textures remain outside the repository.
 - [ ] No third-party PMX, texture, archive, derived binary, private report, or
@@ -122,8 +144,8 @@ source-binding behavior. A private-model rerun remains optional and local-only.
   git status --short
   ```
 
-- [ ] If the prior private validation harnesses are rerun voluntarily, keep all
-  reports local and do not attach private assets or reports to the PR/release.
+- [ ] If any private validation harness is run, keep all reports local and do
+  not attach private assets, paths, names, or reports to the PR/release.
 
 ## 4. Publish the pull request
 
@@ -160,30 +182,30 @@ source-binding behavior. A private-model rerun remains optional and local-only.
 - [ ] Create and push the annotated tag:
 
   ```bat
-  git tag -a v0.8.3 -m "MMD Asset Registry v0.8.3"
-  git push origin v0.8.3
+  git tag -a v0.8.4 -m "MMD Asset Registry v0.8.4"
+  git push origin v0.8.4
   ```
 
 - [ ] Publish the release with reviewed notes:
 
   ```bat
-  gh release create v0.8.3 --verify-tag --title "MMD Asset Registry v0.8.3" --notes-file "%USERPROFILE%\Downloads\v0.8.3-release-notes.md"
+  gh release create v0.8.4 --verify-tag --title "MMD Asset Registry v0.8.4" --notes-file "%USERPROFILE%\Downloads\v0.8.4-release-notes.md"
   ```
 
 - [ ] Verify the published release is neither draft nor prerelease:
 
   ```bat
-  gh release view v0.8.3 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  gh release view v0.8.4 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
 ## 6. Post-release confirmation
 
-- [ ] Confirm `main`, `origin/main`, and tag `v0.8.3` identify the intended
+- [ ] Confirm `main`, `origin/main`, and tag `v0.8.4` identify the intended
   release commit.
-- [ ] Confirm the release page documents deterministic texture-path semantics,
-  portability/filesystem evidence separation, safe rewrite proposals, strict
-  plan bridging, source SHA-256 binding, no partial plan emission on referenced
-  blockers, no direct PMX/texture mutation, backward compatibility, and explicit
+- [ ] Confirm the release page documents the v0.8.4 compatibility profiles,
+  reader/scanner parity, boundary-policy evidence, deterministic writer and
+  round-trip semantics, cross-feature integration, optional private runtime
+  validation, source SHA-256 invariance, backward compatibility, and explicit
   editing limitations.
 - [ ] Keep the private validation output local; do not attach the production
   PMX or textures to the GitHub release.

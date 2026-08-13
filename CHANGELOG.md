@@ -2,6 +2,63 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.4 - 2026-08-13
+
+### Added
+
+- A typed named compatibility-profile foundation for PMX 2.0/2.1,
+  UTF-16LE/UTF-8, additional UV counts 0-4, Unicode/zero-count fixtures, and
+  uniform or mixed 1/2/4-byte index widths.
+- Reader/scanner compatibility matrices that assert semantic parity rather than
+  merely requiring generated files not to crash.
+- Boundary regressions for the existing PMX version-tolerance policy, opaque
+  bone/material flag preservation, and trailing opaque-byte handling.
+- Writer/round-trip compatibility coverage requiring deterministic repeated
+  serialization, parse/serialize/parse semantic equality, distinct output, and
+  unchanged source bytes.
+- Cross-feature generated integration covering `scan`, `doctor`, `bones`, `rig`,
+  `roundtrip`, strict `edit-plan`, `edit --dry-run`, and
+  `texture-portability`.
+- An optional runtime-only private compatibility suite enabled through
+  `MMD_REGISTRY_PRIVATE_PMX`, with temporary output/plan cleanup and source
+  size/SHA-256 invariants.
+
+### Changed
+
+- Release CI now runs the v0.8.4 compatibility modules on both Ubuntu and
+  Windows while explicitly leaving the private runtime path empty.
+- Release-facing version metadata, documentation, changelog, readiness checks,
+  and publication checklist now target version 0.8.4.
+- Registry schema remains `0.3`; no PMX edit operation type or public CLI
+  command is added.
+
+### Verified
+
+- Normal local discovery passes all 915 automated tests with the optional
+  private runtime class skipped.
+- The optional private runtime gate passes all 3 compatibility tests when
+  explicitly enabled; full discovery then passes 918 tests.
+- The private runtime gate preserves source size and SHA-256, writes round-trip
+  output only under a temporary directory, uses `edit --dry-run` for edit
+  preview, and removes all generated temporary directories.
+- Generated compatibility evidence covers PMX 2.0/2.1, both supported
+  encodings, additional UV counts 0-4, all six index-size fields, Unicode,
+  zero-count sections, BDEF1/QDEF representative deformation, deterministic
+  writer behavior, and cross-feature composition.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- Version 0.8.4 is a compatibility/stabilization release and does not expand
+  the bounded PMX editing surface.
+- Scanner warnings for preserved trailing opaque bytes do not claim semantic
+  understanding of that data.
+- Existing tolerated raw PMX version values remain a documented compatibility
+  policy; canonical serialization may be semantically equal without being
+  byte-identical to such non-canonical input.
+- No private PMX, texture, generated output, absolute local path, model name, or
+  derived production binary is committed or redistributed.
+
 ## 0.8.3 - 2026-08-12
 
 ### Added

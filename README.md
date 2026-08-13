@@ -17,17 +17,16 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.3
+Tool version: 0.8.4
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.3
-adds deterministic cross-platform texture-path semantics, portability analysis,
-safe rewrite proposals, and strict edit-plan generation without adding new edit
-operation types. Model and texture inputs remain read-only; generated plans stay
-inside the existing verified `edit` workflow and registry schema `0.3` remains
-unchanged.
+Tool version and registry schema are intentionally independent. Version 0.8.4
+broadens generated and optional real-model compatibility evidence without
+expanding the PMX editing surface. Reader/scanner parity, deterministic
+round-trip semantics, cross-feature CLI composition, and fail-closed boundary
+behavior are regression-tested while registry schema `0.3` remains unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -86,6 +85,30 @@ Version 0.8.0 introduces the first safety-bounded PMX editing core:
   integrity, and automatic temporary plan/output cleanup
 - Ubuntu and Windows CI coverage plus 740 automated unit tests at release
   readiness
+
+Version 0.8.4 broadens PMX compatibility evidence without changing the public
+editing surface:
+
+- Named generated compatibility profiles cover PMX 2.0/2.1, UTF-16LE/UTF-8,
+  additional UV counts 0 through 4, uniform and mixed 1/2/4-byte index widths,
+  Unicode data, zero-count sections, BDEF1, and PMX 2.1 QDEF
+- Typed reader and structural scanner results are cross-checked for header,
+  section-count, Unicode bone, deform, and index-width semantics
+- Boundary regressions lock the existing version-tolerance policy, preserve
+  opaque bone/material flag bits, and distinguish trailing-byte preservation
+  from semantic understanding
+- Writer and round-trip profiles require parse -> serialize -> parse semantic
+  equality, deterministic repeated serialization, distinct output, unchanged
+  source bytes, and exact preservation of opaque trailing data
+- Cross-feature integration drives representative generated PMX data through
+  `scan`, `doctor`, `bones`, `rig`, `roundtrip`, strict `edit-plan`,
+  `edit --dry-run`, and `texture-portability`
+- Optional private-model compatibility tests are activated only through
+  `MMD_REGISTRY_PRIVATE_PMX`; normal CI leaves it empty and skips that runtime
+  class without committing a private path or asset
+- Normal release-readiness discovery runs 915 automated tests with the optional
+  private runtime class skipped; the local private-model gate runs 918 tests
+  when that class is explicitly enabled
 
 Version 0.8.3 adds deterministic texture portability and path workflow
 without expanding the PMX editing surface:
@@ -1079,6 +1102,13 @@ cover portability classification, rewrite proposals, source-change refusal,
 strict plan generation, and byte-identical input preservation. A private-model
 rerun remains optional and local-only.
 
+Version 0.8.4 adds an optional runtime-only compatibility harness. For this
+release it was exercised locally against a private production model through
+typed loading, read-only public workflows, verified temporary round-trip,
+strict plan explanation, and `edit --dry-run`. The source size and SHA-256
+remained unchanged, all temporary output/plan directories were removed, and no
+private path, model name, model bytes, texture, or report is required by CI.
+
 Verification summary:
 
 ```text
@@ -1139,6 +1169,9 @@ Private failure alias refusal: path_policy_refused / preflight
 Private failure source SHA-256 before/after: matched
 Private failure temporary residue created: no
 Private failure asset persisted: no
+v0.8.4 private compatibility workflows: passed
+v0.8.4 private source SHA-256 before/after: matched
+v0.8.4 private temporary output/plan cleanup: passed
 ```
 
 This verification supplements generated fixtures; the repository does not
@@ -1152,8 +1185,10 @@ Run all tests compactly:
 python -m unittest discover -s tests -q
 ```
 
-At the release-readiness checkpoint, version 0.8.3 includes 884 unit tests
-covering:
+At the release-readiness checkpoint, version 0.8.4 includes 915 unit tests
+under normal CI discovery with the optional private-runtime class skipped. When
+`MMD_REGISTRY_PRIVATE_PMX` is explicitly enabled for local validation, 918 tests
+run. Coverage includes:
 
 - Bounded binary reads and contextual truncation errors
 - PMX 2.0 and 2.1 header/global settings
@@ -1187,6 +1222,13 @@ covering:
   cleanup across negative failure paths
 - PMX 2.0/2.1 × UTF-8/UTF-16LE × uniform/mixed index-width edit matrices and
   all seven model/texture/material category combinations
+- Named PMX compatibility profiles, reader/scanner parity, additional UV 0-4,
+  zero-count sections, Unicode data, version/opaque-flag/trailing-byte boundaries,
+  and deterministic writer/round-trip invariants
+- Cross-feature generated compatibility across scan, doctor, bones, rig,
+  roundtrip, strict edit-plan explanation, edit dry-run, and texture portability
+- Optional runtime-only private compatibility with source SHA-256 invariance,
+  temporary-output cleanup, and CI skip behavior when no local path is supplied
 - Ephemeral private-model validation plus privacy-safe negative-path
   validation, cleanup-on-failure, source-integrity checks, and untouched
   texture files

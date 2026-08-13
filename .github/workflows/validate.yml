@@ -13,6 +13,8 @@ jobs:
   validate:
     name: Python 3.12 validation (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      MMD_REGISTRY_PRIVATE_PMX: ""
     strategy:
       fail-fast: false
       matrix:
@@ -38,7 +40,7 @@ jobs:
       - name: Compile Python source
         run: python -m compileall mmd_registry tests check_assets.py
 
-      - name: Run PMX edit and texture portability safety matrix
+      - name: Run PMX edit, portability, and compatibility safety matrix
         run: >
           python -m unittest -q
           tests.test_pmx_edit_generated_matrix
@@ -56,13 +58,19 @@ jobs:
           tests.test_texture_rewrite
           tests.test_texture_portability_cli
           tests.test_texture_portability_generated_matrix
+          tests.test_pmx_compatibility_profiles
+          tests.test_pmx_compatibility_reader_scanner
+          tests.test_pmx_compatibility_boundaries
+          tests.test_pmx_compatibility_writer_roundtrip
+          tests.test_pmx_compatibility_cross_feature
+          tests.test_pmx_compatibility_private_runtime
 
       - name: Run automated tests
         run: python -m unittest discover -s tests -q
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.8.3'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.8.4'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

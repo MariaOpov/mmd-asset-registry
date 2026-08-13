@@ -1,4 +1,4 @@
-# MMD Asset Registry v0.8.4 Release Checklist
+# MMD Asset Registry v0.8.5 Release Checklist
 
 Use this checklist after the feature branch is complete. Do not commit or
 redistribute any private or third-party production model.
@@ -17,7 +17,7 @@ redistribute any private or third-party production model.
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; assert __version__ == '0.8.4'"
+  python -c "from mmd_registry import __version__; assert __version__ == '0.8.5'"
   ```
 
 - [ ] Compile and run all automated checks:
@@ -27,7 +27,7 @@ redistribute any private or third-party production model.
   python -m compileall -f mmd_registry tests check_assets.py
   python -m unittest discover -s tests -q
   git diff --check
-  rem Expected normal-CI full-suite count: 915 tests, optional private class skipped
+  rem Expected normal-CI full-suite count: 983 tests, optional private class skipped
   ```
 
 - [ ] Confirm all release-facing command help pages:
@@ -95,6 +95,9 @@ redistribute any private or third-party production model.
   encodings, additional UV counts 0-4, all six index-width fields, Unicode,
   zero-count sections, reader/scanner parity, boundary policies, deterministic
   writer/round-trip semantics, and cross-feature composition.
+- [ ] v0.8.5 stabilization regressions cover the frozen v0.8 contract,
+  deterministic replay, destination safety, capability manifest, cross-feature
+  state isolation, structured round-trip diagnostics, and backward compatibility.
 
 - [ ] Run the focused generated edit and private-harness tests:
 
@@ -108,12 +111,12 @@ redistribute any private or third-party production model.
   python -m unittest -q tests.test_texture_path_semantics tests.test_texture_portability tests.test_texture_rewrite tests.test_texture_portability_cli tests.test_texture_portability_generated_matrix tests.test_doctor_cli tests.test_cli tests.test_pmx_edit_plan_json tests.test_pmx_texture_path_editing
   ```
 
-- [ ] Run the focused v0.8.4 compatibility matrix with the private runtime path
+- [ ] Run the focused v0.8.4 compatibility plus v0.8.5 stabilization matrix with the private runtime path
   deliberately empty:
 
   ```bat
   set "MMD_REGISTRY_PRIVATE_PMX="
-  python -m unittest -q tests.test_pmx_compatibility_profiles tests.test_pmx_compatibility_reader_scanner tests.test_pmx_compatibility_boundaries tests.test_pmx_compatibility_writer_roundtrip tests.test_pmx_compatibility_cross_feature tests.test_pmx_compatibility_private_runtime
+  python -m unittest -q tests.test_pmx_compatibility_profiles tests.test_pmx_compatibility_reader_scanner tests.test_pmx_compatibility_boundaries tests.test_pmx_compatibility_writer_roundtrip tests.test_pmx_compatibility_cross_feature tests.test_pmx_compatibility_private_runtime tests.test_v08_contract_freeze tests.test_pmx_roundtrip_cli_diagnostics tests.test_pmx_destination_safety tests.test_pmx_edit_replay_determinism tests.test_pmx_capability_manifest tests.test_pmx_cross_feature_state_isolation tests.test_v08_backward_compatibility
   ```
 
 ## 3. Private asset hygiene
@@ -182,27 +185,27 @@ texture, or derived output.
 - [ ] Create and push the annotated tag:
 
   ```bat
-  git tag -a v0.8.4 -m "MMD Asset Registry v0.8.4"
-  git push origin v0.8.4
+  git tag -a v0.8.5 -m "MMD Asset Registry v0.8.5"
+  git push origin v0.8.5
   ```
 
 - [ ] Publish the release with reviewed notes:
 
   ```bat
-  gh release create v0.8.4 --verify-tag --title "MMD Asset Registry v0.8.4" --notes-file "%USERPROFILE%\Downloads\v0.8.4-release-notes.md"
+  gh release create v0.8.5 --verify-tag --title "MMD Asset Registry v0.8.5" --notes-file "%USERPROFILE%\Downloads\v0.8.5-release-notes.md"
   ```
 
 - [ ] Verify the published release is neither draft nor prerelease:
 
   ```bat
-  gh release view v0.8.4 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  gh release view v0.8.5 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
 ## 6. Post-release confirmation
 
-- [ ] Confirm `main`, `origin/main`, and tag `v0.8.4` identify the intended
+- [ ] Confirm `main`, `origin/main`, and tag `v0.8.5` identify the intended
   release commit.
-- [ ] Confirm the release page documents the v0.8.4 compatibility profiles,
+- [ ] Confirm the release page documents the v0.8.5 stabilization work and retained v0.8.4 compatibility profiles,
   reader/scanner parity, boundary-policy evidence, deterministic writer and
   round-trip semantics, cross-feature integration, optional private runtime
   validation, source SHA-256 invariance, backward compatibility, and explicit

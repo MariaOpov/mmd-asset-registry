@@ -28,13 +28,15 @@ class PmxDestinationSafetyTests(unittest.TestCase):
 
     @staticmethod
     def _publish_collision(destination: Path, racer_bytes: bytes):
+        expected_destination = destination.resolve(strict=False)
+
         def collide(source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
                     target: str | bytes | os.PathLike[str] | os.PathLike[bytes],
                     *args,
                     **kwargs) -> None:
             source_path = Path(source)
             target_path = Path(target)
-            if target_path != destination:
+            if target_path.resolve(strict=False) != expected_destination:
                 raise AssertionError(f"unexpected publish target: {target_path}")
             if not source_path.is_file():
                 raise AssertionError("temporary publish source must exist")

@@ -8,13 +8,18 @@ from typing import Final, Literal
 from tests.mmd_fixtures import build_pmx_bone, build_pmx_structure
 
 
-PmxFixtureKind = Literal["empty", "unicode_bone", "qdef_additional_uv"]
+PmxFixtureKind = Literal[
+    "empty",
+    "unicode_bone",
+    "bdef1_additional_uv",
+    "qdef_additional_uv",
+]
 
 _VALID_VERSIONS: Final[frozenset[float]] = frozenset({2.0, 2.1})
 _VALID_ENCODING_FLAGS: Final[frozenset[int]] = frozenset({0, 1})
 _VALID_INDEX_SIZES: Final[frozenset[int]] = frozenset({1, 2, 4})
 _VALID_FIXTURE_KINDS: Final[frozenset[str]] = frozenset(
-    {"empty", "unicode_bone", "qdef_additional_uv"}
+    {"empty", "unicode_bone", "bdef1_additional_uv", "qdef_additional_uv"}
 )
 
 
@@ -136,6 +141,42 @@ PMX_COMPATIBILITY_PROFILES: Final[tuple[PmxCompatibilityProfile, ...]] = (
         capabilities=("mixed-index-widths", "zero-count-sections"),
     ),
     PmxCompatibilityProfile(
+        profile_id="wide-index-pmx21-utf8",
+        version=2.1,
+        encoding_flag=1,
+        additional_uv_count=0,
+        index_sizes=(4, 4, 4, 4, 4, 4),
+        fixture_kind="empty",
+        capabilities=("uniform-index-width-4", "zero-count-sections"),
+    ),
+    PmxCompatibilityProfile(
+        profile_id="additional-uv1-bdef1-pmx20-utf8",
+        version=2.0,
+        encoding_flag=1,
+        additional_uv_count=1,
+        index_sizes=(1, 2, 4, 1, 2, 4),
+        fixture_kind="bdef1_additional_uv",
+        capabilities=("additional-uv-1", "bdef1", "bone-reference"),
+    ),
+    PmxCompatibilityProfile(
+        profile_id="additional-uv2-bdef1-pmx21-utf16",
+        version=2.1,
+        encoding_flag=0,
+        additional_uv_count=2,
+        index_sizes=(2, 4, 1, 2, 4, 1),
+        fixture_kind="bdef1_additional_uv",
+        capabilities=("additional-uv-2", "bdef1", "bone-reference"),
+    ),
+    PmxCompatibilityProfile(
+        profile_id="additional-uv3-bdef1-pmx20-utf16",
+        version=2.0,
+        encoding_flag=0,
+        additional_uv_count=3,
+        index_sizes=(4, 1, 2, 4, 1, 2),
+        fixture_kind="bdef1_additional_uv",
+        capabilities=("additional-uv-3", "bdef1", "bone-reference"),
+    ),
+    PmxCompatibilityProfile(
         profile_id="unicode-bone-pmx21-utf16",
         version=2.1,
         encoding_flag=0,
@@ -201,6 +242,19 @@ def build_compatibility_fixture(profile: PmxCompatibilityProfile) -> bytes:
         )
         return build_pmx_structure(
             deform_types=(),
+            bones=(bone,),
+            **common_arguments,
+        )
+
+    if profile.fixture_kind == "bdef1_additional_uv":
+        bone = build_pmx_bone(
+            local_name="Root",
+            universal_name="Root",
+            encoding_flag=profile.encoding_flag,
+            bone_index_size=bone_index_size,
+        )
+        return build_pmx_structure(
+            deform_types=(0,),
             bones=(bone,),
             **common_arguments,
         )

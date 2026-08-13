@@ -31,6 +31,10 @@ class PmxCompatibilityProfileFoundationTests(unittest.TestCase):
                 "minimal-pmx20-utf16",
                 "minimal-pmx20-utf8",
                 "mixed-index-pmx21",
+                "wide-index-pmx21-utf8",
+                "additional-uv1-bdef1-pmx20-utf8",
+                "additional-uv2-bdef1-pmx21-utf16",
+                "additional-uv3-bdef1-pmx20-utf16",
                 "unicode-bone-pmx21-utf16",
                 "additional-uv4-qdef-pmx21",
             ),
@@ -119,6 +123,25 @@ class PmxCompatibilityProfileFoundationTests(unittest.TestCase):
                 self.assertEqual(document.rigid_bodies, ())
                 self.assertEqual(document.joints, ())
                 self.assertEqual(document.soft_bodies, ())
+
+    def test_vertex_profiles_preserve_declared_additional_uv_count(self) -> None:
+        for profile in PMX_COMPATIBILITY_PROFILES:
+            if profile.fixture_kind not in {
+                "bdef1_additional_uv",
+                "qdef_additional_uv",
+            }:
+                continue
+
+            with self.subTest(profile=profile.profile_id):
+                document = load_pmx(
+                    io.BytesIO(build_compatibility_fixture(profile))
+                )
+
+                self.assertEqual(len(document.vertices), 1)
+                self.assertEqual(
+                    len(document.vertices[0].additional_uvs),
+                    profile.additional_uv_count,
+                )
 
     def test_unicode_bone_profile_preserves_text_and_offset_tail(self) -> None:
         profile = next(

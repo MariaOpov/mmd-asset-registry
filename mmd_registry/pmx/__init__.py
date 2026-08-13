@@ -68,7 +68,7 @@ from mmd_registry.pmx.document import (
     PmxVersion,
     decode_pmx_bone_flags,
 )
-from mmd_registry.pmx.errors import PmxValidationError
+from mmd_registry.pmx.errors import PmxValidationError, PmxValidationIssue
 from mmd_registry.pmx.reader import load_pmx, read_pmx_document
 from mmd_registry.pmx.roundtrip import (
     PmxRoundTripPathError,
@@ -149,6 +149,7 @@ __all__ = [
     "PmxVertexMorphOffset",
     "PmxVersion",
     "PmxValidationError",
+    "PmxValidationIssue",
     "decode_pmx_bone_flags",
     "load_pmx",
     "read_pmx_document",

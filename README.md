@@ -17,16 +17,15 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.4
+Tool version: 0.8.5
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.4
-broadens generated and optional real-model compatibility evidence without
-expanding the PMX editing surface. Reader/scanner parity, deterministic
-round-trip semantics, cross-feature CLI composition, and fail-closed boundary
-behavior are regression-tested while registry schema `0.3` remains unchanged.
+Tool version and registry schema are intentionally independent. Version 0.8.5
+closes the v0.8 stabilization line with stronger deterministic, failure-safety,
+state-isolation, capability, and backward-compatibility evidence. The bounded
+PMX editing surface and registry schema `0.3` remain unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -85,6 +84,22 @@ Version 0.8.0 introduces the first safety-bounded PMX editing core:
   integrity, and automatic temporary plan/output cleanup
 - Ubuntu and Windows CI coverage plus 740 automated unit tests at release
   readiness
+
+Version 0.8.5 finalizes the v0.8 stabilization line before the v0.9 gate:
+
+- Structured PMX validation issues, cross-reference integrity coverage, and a
+  deterministic adversarial corpus strengthen malformed-input diagnostics
+- Verified writer/edit output paths are hardened against partial-write residue,
+  destination alias/collision races, and source identity changes
+- Deterministic edit replay, dry-run/apply parity, and round-trip JSON diagnostic
+  regressions freeze machine-facing behavior
+- An immutable PMX capability manifest, repeated cross-feature state-isolation
+  coverage, and representative v0.8.0-v0.8.4 backward-compatibility contracts
+  define the stable core available to the next release line
+- Resource-safety auditing reconfirms bounded reads/counts, temporary-file
+  cleanup, optional private-runtime gating, and zero-byte tracked PMX placeholders
+- Normal discovery passes 983 automated tests with the optional private runtime
+  class skipped
 
 Version 0.8.4 broadens PMX compatibility evidence without changing the public
 editing surface:
@@ -1407,7 +1422,7 @@ Version 0.8.3 does not:
 
 ## Roadmap
 
-Planned directions after 0.8.3:
+Release progression through 0.8.5:
 
 - `0.8.4` — Broader Real-model Compatibility Matrix
 - `0.8.5` — Final v0.8 Stabilization and v0.9 Gate

@@ -64,13 +64,20 @@ jobs:
           tests.test_pmx_compatibility_writer_roundtrip
           tests.test_pmx_compatibility_cross_feature
           tests.test_pmx_compatibility_private_runtime
+          tests.test_v08_contract_freeze
+          tests.test_pmx_roundtrip_cli_diagnostics
+          tests.test_pmx_destination_safety
+          tests.test_pmx_edit_replay_determinism
+          tests.test_pmx_capability_manifest
+          tests.test_pmx_cross_feature_state_isolation
+          tests.test_v08_backward_compatibility
 
       - name: Run automated tests
         run: python -m unittest discover -s tests -q
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.8.4'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.8.5'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

@@ -113,6 +113,10 @@ def _resolve_paths(
         raise PmxRoundTripPathError("Input file must use the .pmx extension.")
     if destination.suffix.lower() != ".pmx":
         raise PmxRoundTripPathError("Output file must use the .pmx extension.")
+    if destination.is_symlink():
+        raise PmxRoundTripPathError(
+            f"Output path must not be a symbolic link: {destination}"
+        )
 
     source = source.resolve(strict=True)
     destination = destination.resolve(strict=False)

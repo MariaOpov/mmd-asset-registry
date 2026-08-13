@@ -585,8 +585,25 @@ def write_pmx(
     path = Path(destination)
 
     if not overwrite:
-        with path.open("xb") as file:
-            file.write(data)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as file:
+                temporary_path = Path(file.name)
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            os.link(temporary_path, path)
+            temporary_path.unlink()
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
         return path
 
     path.parent.mkdir(parents=True, exist_ok=True)

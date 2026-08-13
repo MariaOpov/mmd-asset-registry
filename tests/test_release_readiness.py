@@ -1,4 +1,4 @@
-"""Release-readiness checks for version 0.8.4."""
+"""Release-readiness checks for version 0.8.5."""
 
 from __future__ import annotations
 
@@ -23,13 +23,13 @@ RELEASE_CHECKLIST_PATH = PROJECT_ROOT / "RELEASE_CHECKLIST.md"
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_8_4(self) -> None:
-        self.assertEqual(__version__, "0.8.4")
+    def test_package_version_is_0_8_5(self) -> None:
+        self.assertEqual(__version__, "0.8.5")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.8.4", readme)
+        self.assertIn("Tool version: 0.8.5", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
 
@@ -151,10 +151,20 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("840 automated tests", changelog)
         self.assertIn("## 0.8.1 - 2026-08-12", changelog)
 
+    def test_changelog_documents_0_8_5_stabilization(self) -> None:
+        changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("## 0.8.5 - 2026-08-13", changelog)
+        self.assertIn("immutable capability manifest", changelog)
+        self.assertIn("backward-compatibility contracts", changelog)
+        self.assertIn("all 983 automated tests", changelog)
+        self.assertIn("Registry schema remains `0.3`", changelog)
+        self.assertIn("adds no public CLI command, UI", changelog)
+
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.8.4'", workflow)
+        self.assertIn("assert __version__ == '0.8.5'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -188,12 +198,19 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_compatibility_writer_roundtrip", workflow)
         self.assertIn("tests.test_pmx_compatibility_cross_feature", workflow)
         self.assertIn("tests.test_pmx_compatibility_private_runtime", workflow)
+        self.assertIn("tests.test_v08_contract_freeze", workflow)
+        self.assertIn("tests.test_pmx_roundtrip_cli_diagnostics", workflow)
+        self.assertIn("tests.test_pmx_destination_safety", workflow)
+        self.assertIn("tests.test_pmx_edit_replay_determinism", workflow)
+        self.assertIn("tests.test_pmx_capability_manifest", workflow)
+        self.assertIn("tests.test_pmx_cross_feature_state_isolation", workflow)
+        self.assertIn("tests.test_v08_backward_compatibility", workflow)
         self.assertIn("python -m unittest discover -s tests -q", workflow)
 
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.8.4", checklist)
+        self.assertIn("MMD Asset Registry v0.8.5", checklist)
         self.assertIn("python -m unittest discover -s tests -q", checklist)
         self.assertIn("git diff --check", checklist)
         self.assertIn("Private asset hygiene", checklist)
@@ -203,11 +220,11 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("python check_assets.py edit-plan explain --help", checklist)
         self.assertIn("python check_assets.py texture-portability --help", checklist)
         self.assertIn("tests.test_pmx_compatibility_cross_feature", checklist)
-        self.assertIn("915 tests", checklist)
+        self.assertIn("983 tests", checklist)
         self.assertIn("No third-party PMX", checklist)
         self.assertIn("gh pr checks", checklist)
-        self.assertIn("git tag -a v0.8.4", checklist)
-        self.assertIn("gh release create v0.8.4", checklist)
+        self.assertIn("git tag -a v0.8.5", checklist)
+        self.assertIn("gh release create v0.8.5", checklist)
 
     def test_tracked_pmx_files_are_only_empty_placeholders(self) -> None:
         result = subprocess.run(

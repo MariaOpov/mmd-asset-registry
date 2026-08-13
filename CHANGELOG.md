@@ -2,6 +2,46 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.8.5 - 2026-08-13
+
+### Added
+
+- Structured PMX validation issue reporting, cross-reference integrity
+  regressions, and a deterministic adversarial PMX corpus.
+- An immutable capability manifest describing the existing PMX support surface
+  without adding a public command or plugin API.
+- Cross-feature state-isolation coverage and representative v0.8.0-v0.8.4
+  backward-compatibility contracts.
+
+### Changed
+
+- Verified writer/edit output handling is hardened against partial-write residue,
+  destination alias/collision races, and source replacement during publication.
+- Edit replay and dry-run/apply behavior are locked to deterministic parity, and
+  round-trip JSON failures retain stable structured diagnostics.
+- Release-facing metadata, README, CI gates, readiness checks, and publication
+  checklist now target version 0.8.5.
+
+### Verified
+
+- Normal local discovery passes all 983 automated tests with the optional private
+  runtime class skipped.
+- Resource-safety auditing reconfirms bounded reads/counts, truncation handling,
+  temporary-file/fsync cleanup, destination safety, source preservation, and
+  deterministic replay.
+- Tracked PMX files remain zero-byte placeholders; private runtime validation is
+  explicit opt-in and preserves source size/SHA-256.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- PMX edit-plan schema remains `1`; the existing three edit operation types are
+  unchanged.
+- Version 0.8.5 adds no public CLI command, UI, PMX edit operation, or broader
+  semantic editing authority.
+- Existing v0.8 machine-facing contracts remain backward compatible and private
+  assets remain outside the repository.
+
 ## 0.8.4 - 2026-08-13
 
 ### Added

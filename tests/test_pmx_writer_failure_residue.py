@@ -11,11 +11,12 @@ from mmd_registry.pmx import load_pmx, roundtrip_pmx, write_pmx
 from tests.pmx_roundtrip_fixtures import build_pmx_roundtrip_fixture
 
 
-class _PartialWriteFailure:
-    """Wrap one newly created file, persist a prefix, then fail the write."""
+class _PartialTempWriteFailure:
+    """Wrap one temp file, persist a prefix, then fail the writer payload."""
 
     def __init__(self, file) -> None:
         self._file = file
+        self.name = file.name
 
     def __enter__(self):
         return self
@@ -30,19 +31,26 @@ class _PartialWriteFailure:
         self._file.flush()
         raise OSError("simulated partial PMX write failure")
 
+    def flush(self) -> None:
+        self._file.flush()
 
-def _partial_write_open(destination: Path):
-    """Return a Path.open replacement that fails only for destination create."""
+    def fileno(self) -> int:
+        return self._file.fileno()
 
-    real_open = Path.open
 
-    def failing_open(path: Path, mode: str = "r", *args, **kwargs):
-        file = real_open(path, mode, *args, **kwargs)
-        if Path(path) == destination and mode == "xb":
-            return _PartialWriteFailure(file)
-        return file
+def _partial_tempfile_factory():
+    """Return a NamedTemporaryFile replacement that fails during payload write."""
 
-    return failing_open
+    import tempfile
+
+    real_named_temporary_file = tempfile.NamedTemporaryFile
+
+    def failing_named_temporary_file(*args, **kwargs):
+        return _PartialTempWriteFailure(
+            real_named_temporary_file(*args, **kwargs)
+        )
+
+    return failing_named_temporary_file
 
 
 class PmxWriterFailureResidueTests(unittest.TestCase):
@@ -56,10 +64,9 @@ class PmxWriterFailureResidueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory, "partial.pmx")
 
-            with patch.object(
-                Path,
-                "open",
-                new=_partial_write_open(destination),
+            with patch(
+                "mmd_registry.pmx.writer.tempfile.NamedTemporaryFile",
+                new=_partial_tempfile_factory(),
             ):
                 with self.assertRaisesRegex(
                     OSError,
@@ -104,10 +111,9 @@ class PmxWriterFailureResidueTests(unittest.TestCase):
             destination = root / "output.pmx"
             source.write_bytes(self.source_bytes)
 
-            with patch.object(
-                Path,
-                "open",
-                new=_partial_write_open(destination),
+            with patch(
+                "mmd_registry.pmx.writer.tempfile.NamedTemporaryFile",
+                new=_partial_tempfile_factory(),
             ):
                 with self.assertRaisesRegex(
                     OSError,

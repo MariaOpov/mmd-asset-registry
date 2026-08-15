@@ -1,0 +1,8 @@
+include README.md
+include pyproject.toml
+recursive-include mmd_registry *.py
+recursive-include tests *.py
+recursive-include tools *.py
+prune reports
+prune sample_assets
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -33,12 +33,38 @@ No optional development dependencies are declared yet. Lint and coverage
 tooling belong to their dedicated checkpoints and must not become runtime
 dependencies.
 
+## Distribution build and inspection
+
+Builds use the standard `build` frontend and create both distribution formats
+from the repository root:
+
+```text
+python -m build --sdist --wheel
+python tools/inspect_distribution_artifacts.py dist
+```
+
+The inspection command requires a clean `dist` directory containing exactly
+one wheel and one sdist. It reads archives without extracting them and verifies
+their filenames, metadata, runtime dependencies, pure-Python wheel tag, member
+paths, RECORD coverage, source boundary, and SHA-256 digests. It refuses links,
+unsafe paths, PMX/VMD data, local private paths, secret-key material, temporary
+outputs, repository-only assets, and test leakage into the wheel.
+
+The wheel intentionally contains only `mmd_registry` and its generated
+`.dist-info` metadata. The sdist intentionally contains the complete Python
+test sources, test helpers, and artifact-inspection tool so its source boundary
+is explicit rather than the partial implicit test selection produced by
+setuptools.
+
+Build output remains local and ignored. This checkpoint does not upload or
+publish either artifact.
+
 ## Deferred gates
 
-This checkpoint defines metadata only. Wheel and sdist creation and inspection
-belong to Checkpoint 8. The installed console entry point belongs to
-Checkpoint 9, so `project.scripts` is intentionally absent here. Clean isolated
-installation belongs to Checkpoint 10.
+The installed console entry point belongs to Checkpoint 9, so
+`project.scripts` remains intentionally absent. Clean isolated installation
+belongs to Checkpoint 10; artifact inspection does not claim installation
+success.
 
 The repository currently has no tracked license file, so packaging metadata
 does not invent a license expression or license classifier. License metadata

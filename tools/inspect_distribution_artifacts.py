@@ -316,9 +316,11 @@ def inspect_sdist(
                 "pyproject.toml",
                 "tests/__init__.py",
                 "tests/mmd_fixtures.py",
+                "tests/test_clean_install.py",
                 "tests/test_console_entry_point.py",
                 "tests/test_distribution_artifacts.py",
                 "tools/inspect_distribution_artifacts.py",
+                "tools/verify_clean_install.py",
             }
             _require_members(relative_names, required, "sdist")
             allowed_roots = {

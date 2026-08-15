@@ -74,12 +74,33 @@ during the architecture runway.
 Wheel inspection requires exactly this `console_scripts` mapping and rejects
 missing, renamed, duplicated, or additional entry points.
 
+## Clean isolated installation
+
+The clean-install gate creates a disposable virtual environment outside the
+repository, installs the inspected wheel and all declared runtime dependencies,
+and runs installed-package probes from that external working directory:
+
+```text
+python tools/verify_clean_install.py dist
+```
+
+The verifier does not inherit system site packages or the active development
+environment. It removes Python import-path overrides, runs probes with isolated
+mode, checks dependency consistency with `pip check`, and proves that both
+`mmd_registry` and `PyYAML` were imported from the disposable environment rather
+than the source checkout. It also validates installed metadata, public imports,
+the console entry point, and both console and module `--version` execution.
+
+Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
+genuinely empty environment. A complete local dependency wheelhouse can be used
+instead with `--no-index --find-links DIRECTORY`. The temporary environment is
+always removed, including after a failed probe, and no artifact is published.
+
 ## Deferred gates
 
-Clean isolated installation belongs to Checkpoint 10. This checkpoint verifies
-the generated wheel metadata and callable target but does not claim that a
-fresh environment can install every runtime dependency and execute the
-generated platform launcher outside the source tree.
+Cross-platform clean installation in both Ubuntu and Windows CI belongs to
+Checkpoint 19. Checkpoint 10 establishes the local deterministic verifier and
+its installed-package contracts without changing runtime behavior.
 
 The repository currently has no tracked license file, so packaging metadata
 does not invent a license expression or license classifier. License metadata

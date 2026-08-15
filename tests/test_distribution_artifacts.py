@@ -94,9 +94,11 @@ def default_sdist_files() -> dict[str, bytes]:
         "setup.cfg": b"[egg_info]\n",
         "tests/__init__.py": b"",
         "tests/mmd_fixtures.py": b"# fixtures\n",
+        "tests/test_clean_install.py": b"# clean install tests\n",
         "tests/test_console_entry_point.py": b"# console tests\n",
         "tests/test_distribution_artifacts.py": b"# tests\n",
         "tools/inspect_distribution_artifacts.py": b"# inspector\n",
+        "tools/verify_clean_install.py": b"# clean install verifier\n",
         f"{NORMALIZED_NAME}.egg-info/PKG-INFO": package_metadata(),
     }
 

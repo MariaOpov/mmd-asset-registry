@@ -82,10 +82,13 @@ class PackagingMetadataTests(unittest.TestCase):
         self.assertEqual(discovery["exclude"], ["tests*"])
         self.assertFalse(discovery["namespaces"])
 
-    def test_later_checkpoint_metadata_is_not_added_early(self) -> None:
+    def test_console_script_is_explicit_and_later_metadata_is_deferred(self) -> None:
         project = self.metadata["project"]
 
-        self.assertNotIn("scripts", project)
+        self.assertEqual(
+            project["scripts"],
+            {"mmd-asset-registry": "mmd_registry.cli:main"},
+        )
         self.assertNotIn("optional-dependencies", project)
         self.assertNotIn("license", project)
         self.assertNotIn("license-files", project)

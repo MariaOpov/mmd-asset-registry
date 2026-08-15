@@ -17,6 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.scripts]
+mmd-asset-registry = "mmd_registry.cli:main"
+
 [project.urls]
 Repository = "https://github.com/MariaOpov/mmd-asset-registry"
 Issues = "https://github.com/MariaOpov/mmd-asset-registry/issues"

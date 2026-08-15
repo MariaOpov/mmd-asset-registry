@@ -22,6 +22,7 @@ IDENTITY = ProjectIdentity(
     version="0.8.5",
     requires_python=">=3.12",
     dependencies=("PyYAML>=6.0",),
+    console_scripts=(("mmd-asset-registry", "mmd_registry.cli:main"),),
 )
 NORMALIZED_NAME = "mmd_asset_registry"
 DIST_INFO = f"{NORMALIZED_NAME}-{IDENTITY.version}.dist-info"
@@ -45,6 +46,10 @@ def default_wheel_files() -> dict[str, bytes]:
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
         f"{DIST_INFO}/METADATA": package_metadata(),
+        f"{DIST_INFO}/entry_points.txt": (
+            b"[console_scripts]\n"
+            b"mmd-asset-registry = mmd_registry.cli:main\n"
+        ),
         f"{DIST_INFO}/WHEEL": (
             b"Wheel-Version: 1.0\n"
             b"Root-Is-Purelib: true\n"
@@ -89,6 +94,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "setup.cfg": b"[egg_info]\n",
         "tests/__init__.py": b"",
         "tests/mmd_fixtures.py": b"# fixtures\n",
+        "tests/test_console_entry_point.py": b"# console tests\n",
         "tests/test_distribution_artifacts.py": b"# tests\n",
         "tools/inspect_distribution_artifacts.py": b"# inspector\n",
         f"{NORMALIZED_NAME}.egg-info/PKG-INFO": package_metadata(),
@@ -194,6 +200,20 @@ class DistributionArtifactTests(unittest.TestCase):
         write_sdist(self.directory)
 
         self.assert_rejected("metadata Version='9.9.9'")
+
+    def test_console_script_must_match_the_project_identity(self) -> None:
+        write_wheel(
+            self.directory,
+            replacements={
+                f"{DIST_INFO}/entry_points.txt": (
+                    b"[console_scripts]\n"
+                    b"mmd-asset-registry = mmd_registry.cli:run\n"
+                )
+            },
+        )
+        write_sdist(self.directory)
+
+        self.assert_rejected("Wheel console scripts")
 
     def test_private_local_path_content_is_rejected(self) -> None:
         self.write_valid_pair()

@@ -59,12 +59,27 @@ setuptools.
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
 
+## Installed console command
+
+The installed console command is `mmd-asset-registry`. Packaging metadata maps
+it directly to `mmd_registry.cli:main`, the same process boundary used by the
+legacy `check_assets.py` launcher. No second parser or wrapper implementation
+is introduced.
+
+The command supports `--help` and `--version`, uses the existing CLI exit-code
+and UTF-8 handling, and remains independent from the repository working
+directory. The legacy script and `python -m mmd_registry.cli` remain available
+during the architecture runway.
+
+Wheel inspection requires exactly this `console_scripts` mapping and rejects
+missing, renamed, duplicated, or additional entry points.
+
 ## Deferred gates
 
-The installed console entry point belongs to Checkpoint 9, so
-`project.scripts` remains intentionally absent. Clean isolated installation
-belongs to Checkpoint 10; artifact inspection does not claim installation
-success.
+Clean isolated installation belongs to Checkpoint 10. This checkpoint verifies
+the generated wheel metadata and callable target but does not claim that a
+fresh environment can install every runtime dependency and execute the
+generated platform launcher outside the source tree.
 
 The repository currently has no tracked license file, so packaging metadata
 does not invent a license expression or license classifier. License metadata

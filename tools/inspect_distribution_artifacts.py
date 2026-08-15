@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import configparser
 import csv
 import hashlib
 import io
@@ -87,6 +88,7 @@ class ProjectIdentity:
     version: str
     requires_python: str
     dependencies: tuple[str, ...]
+    console_scripts: tuple[tuple[str, str], ...] = ()
 
 
 def load_project_identity(project_root: Path) -> ProjectIdentity:
@@ -110,6 +112,7 @@ def load_project_identity(project_root: Path) -> ProjectIdentity:
         version=version,
         requires_python=project["requires-python"],
         dependencies=tuple(project.get("dependencies", ())),
+        console_scripts=tuple(sorted(project.get("scripts", {}).items())),
     )
 
 
@@ -216,16 +219,23 @@ def inspect_wheel(
                 f"{expected_dist_info}/WHEEL",
                 f"{expected_dist_info}/top_level.txt",
             }
+            entry_points_name = f"{expected_dist_info}/entry_points.txt"
+            if identity.console_scripts:
+                required.add(entry_points_name)
             _require_members(file_names, required, "wheel")
-            if f"{expected_dist_info}/entry_points.txt" in file_names:
+            if not identity.console_scripts and entry_points_name in file_names:
                 raise DistributionInspectionError(
-                    "Wheel gained a console entry point before Checkpoint 9."
+                    "Wheel contains console entry points not declared by the project."
                 )
 
             metadata = _parse_metadata(
                 archive.read(f"{expected_dist_info}/METADATA")
             )
             _validate_metadata(metadata, identity)
+            if identity.console_scripts:
+                _validate_entry_points(
+                    archive.read(entry_points_name), identity.console_scripts
+                )
             wheel_metadata = _parse_metadata(
                 archive.read(f"{expected_dist_info}/WHEEL")
             )
@@ -306,6 +316,7 @@ def inspect_sdist(
                 "pyproject.toml",
                 "tests/__init__.py",
                 "tests/mmd_fixtures.py",
+                "tests/test_console_entry_point.py",
                 "tests/test_distribution_artifacts.py",
                 "tools/inspect_distribution_artifacts.py",
             }
@@ -465,6 +476,30 @@ def _validate_record(data: bytes, file_names: set[str]) -> None:
     if set(recorded_names) != file_names:
         raise DistributionInspectionError(
             "Wheel RECORD does not cover exactly the archived files."
+        )
+
+
+def _validate_entry_points(
+    data: bytes, expected_scripts: tuple[tuple[str, str], ...]
+) -> None:
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str
+    try:
+        parser.read_string(data.decode("utf-8"))
+    except (UnicodeDecodeError, configparser.Error) as error:
+        raise DistributionInspectionError(
+            f"Wheel entry_points.txt is malformed: {error}"
+        ) from error
+
+    if parser.sections() != ["console_scripts"]:
+        raise DistributionInspectionError(
+            "Wheel must contain only the console_scripts entry-point group."
+        )
+    actual_scripts = tuple(sorted(parser.items("console_scripts")))
+    if actual_scripts != expected_scripts:
+        raise DistributionInspectionError(
+            f"Wheel console scripts {actual_scripts!r}; "
+            f"expected {expected_scripts!r}."
         )
 
 

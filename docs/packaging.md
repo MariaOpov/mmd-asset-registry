@@ -31,8 +31,8 @@ requirements are not runtime requirements.
 
 Development-only tools are isolated in `requirements-dev.txt`; they are not
 declared as project, build-system, or optional distribution dependencies. Ruff
-provides the Checkpoint 11 lint gate. Coverage tooling remains deferred to its
-dedicated checkpoint and must not become a runtime dependency.
+provides the Checkpoint 11 lint gate, and coverage.py provides the Checkpoint
+12 full-suite measurement. Neither tool is a runtime dependency.
 
 ## Distribution build and inspection
 

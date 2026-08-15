@@ -42,3 +42,17 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["mmd_registry"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.json]
+output = "coverage.json"
+pretty_print = true

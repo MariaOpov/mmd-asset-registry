@@ -319,7 +319,9 @@ def inspect_sdist(
                 "tests/mmd_fixtures.py",
                 "tests/test_clean_install.py",
                 "tests/test_console_entry_point.py",
+                "tests/test_coverage_foundation.py",
                 "tests/test_distribution_artifacts.py",
+                "tests/test_lint_foundation.py",
                 "tools/inspect_distribution_artifacts.py",
                 "tools/verify_clean_install.py",
             }

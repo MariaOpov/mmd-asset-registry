@@ -205,7 +205,10 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_capability_manifest", workflow)
         self.assertIn("tests.test_pmx_cross_feature_state_isolation", workflow)
         self.assertIn("tests.test_v08_backward_compatibility", workflow)
-        self.assertIn("python -m unittest discover -s tests -q", workflow)
+        self.assertIn(
+            "python -m coverage run -m unittest discover -s tests -q",
+            workflow,
+        )
 
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")

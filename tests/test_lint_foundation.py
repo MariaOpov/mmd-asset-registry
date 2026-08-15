@@ -41,7 +41,7 @@ class LintFoundationTests(unittest.TestCase):
         project = self.metadata["project"]
         build_system = self.metadata["build-system"]
 
-        self.assertEqual(development_requirements, ["ruff==0.16.3"])
+        self.assertIn("ruff==0.16.3", development_requirements)
         self.assertNotIn("ruff", " ".join(project["dependencies"]).lower())
         self.assertNotIn("ruff", " ".join(build_system["requires"]).lower())
         self.assertNotIn("optional-dependencies", project)

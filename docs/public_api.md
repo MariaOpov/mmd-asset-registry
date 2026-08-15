@@ -99,8 +99,33 @@ redacted `PmxServiceError` for the `validate_document` operation.
 
 The direct `mmd_registry.pmx.validate_pmx_document()` API retains its existing
 `PmxValidationError` behavior for compatibility. The service does not print,
-exit, load the CLI, alter edit execution, or add any edit operation. Stable
-edit-service diagnostic integration belongs to its following checkpoint.
+exit, load the CLI, alter edit execution, or add any edit operation.
+
+## Edit service
+
+`mmd_registry.services.preview_edit()` accepts immutable source bytes and an
+existing typed `PmxEditPlan`. It returns the established immutable
+`PmxEditPreview` only after parse, plan application, serialization, reparse,
+semantic equality, and source-integrity verification complete. Preview never
+writes a file.
+
+`apply_edit()` accepts distinct input and output paths, the same typed plan,
+and an explicit overwrite flag. It delegates to the existing safe-output
+pipeline, including path and alias policy, source identity and hash checks,
+temporary-file verification, destination-state rechecks, and atomic commit.
+It returns the existing immutable `PmxEditWriteResult`; the input remains
+unchanged and in-place editing remains unsupported.
+
+Both services report expected and unexpected ordinary failures as redacted
+`PmxServiceError` values for their own operation. Process-control exceptions
+are not converted. The CLI adapts expected service diagnostics to its legacy
+presentation and exit-code contract, while direct
+`mmd_registry.pmx.editing.dry_run_pmx_edit()` and `write_pmx_edit()` calls retain
+their existing domain exceptions.
+
+The edit surface remains exactly `set_model_info`, `set_texture_path`, and
+`update_material`. This service adds no operation, model-creation authority,
+VMD editing, plugin loading, or unrestricted physics editing.
 
 ## Internal surface
 

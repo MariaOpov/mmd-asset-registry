@@ -80,6 +80,7 @@ jobs:
           tests.test_public_diagnostics_api
           tests.test_stable_document_service
           tests.test_stable_validation_service
+          tests.test_stable_edit_service
           tests.test_pmx_cross_feature_state_isolation
           tests.test_v08_backward_compatibility
 

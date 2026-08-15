@@ -170,6 +170,48 @@ except public_diagnostics.PmxServiceError as error:
 else:
     raise AssertionError("installed validation service accepted invalid input")
 
+edit_plan = mmd_registry.pmx.editing.PmxEditPlan(
+    operations=(
+        mmd_registry.pmx.editing.SetModelInfo(local_name="Installed edit service"),
+    )
+)
+edit_preview = public_services.preview_edit(document_source, edit_plan)
+assert edit_preview.to_dict()["verification"] == {
+    "semantic": "passed",
+    "input_unchanged": True,
+}, "installed edit preview verification mismatch"
+assert edit_preview.document.model_info.local_name == "Installed edit service", (
+    "installed edit preview result mismatch"
+)
+
+edit_source_path = working_directory / "installed-source.pmx"
+edit_output_path = working_directory / "installed-output.pmx"
+edit_source_path.write_bytes(document_source)
+edit_result = public_services.apply_edit(
+    edit_source_path,
+    edit_output_path,
+    edit_plan,
+)
+assert edit_source_path.read_bytes() == document_source, (
+    "installed edit apply changed source"
+)
+assert edit_output_path.is_file(), "installed edit apply created no output"
+assert edit_result.preview == edit_preview, "installed edit apply preview mismatch"
+assert edit_result.to_dict()["verification"] == {
+    "semantic": "passed",
+    "input_unchanged": True,
+}, "installed edit apply verification mismatch"
+try:
+    public_services.apply_edit(edit_source_path, edit_source_path, edit_plan)
+except public_diagnostics.PmxServiceError as error:
+    assert error.to_dict() == {
+        "code": "edit_path_unsafe",
+        "operation": "apply_edit",
+        "message": "Edit path failed safety validation.",
+    }, "installed edit diagnostic mismatch"
+else:
+    raise AssertionError("installed edit service accepted in-place output")
+
 package_path = Path(mmd_registry.__file__).resolve()
 dependency_path = Path(yaml.__file__).resolve()
 assert is_within(package_path, environment_root), "package did not load from clean venv"

@@ -138,9 +138,18 @@ def validate_document(document: PmxDocument) -> PmxDocumentValidationResult:
 
 
 def preview_edit(source_bytes: bytes, plan: PmxEditPlan) -> PmxEditPreview:
-    """Run the existing verified in-memory edit preview pipeline."""
+    """Return a verified edit preview or one structured service failure."""
 
-    return dry_run_pmx_edit(source_bytes, plan)
+    try:
+        return dry_run_pmx_edit(source_bytes, plan)
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.PREVIEW_EDIT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 def apply_edit(
@@ -150,14 +159,23 @@ def apply_edit(
     *,
     overwrite: bool = False,
 ) -> PmxEditWriteResult:
-    """Apply one plan through the existing safe distinct-output pipeline."""
+    """Safely write one verified edit or raise a structured service failure."""
 
-    return write_pmx_edit(
-        input_path,
-        output_path,
-        plan,
-        overwrite=overwrite,
-    )
+    try:
+        return write_pmx_edit(
+            input_path,
+            output_path,
+            plan,
+            overwrite=overwrite,
+        )
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.APPLY_EDIT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 __all__ = (

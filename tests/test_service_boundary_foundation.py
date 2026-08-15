@@ -12,9 +12,12 @@ from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import mmd_registry.services as services
+from mmd_registry.diagnostics import (
+    PmxServiceDiagnosticCode,
+    PmxServiceError,
+)
 from mmd_registry.pmx import load_pmx
 from mmd_registry.pmx.editing import PmxEditPlan, SetModelInfo
-from mmd_registry.pmx.editing.errors import PmxEditPathError
 from tests.mmd_fixtures import build_pmx_bone, build_pmx_structure
 
 
@@ -131,8 +134,12 @@ class ServiceBoundaryFoundationTests(unittest.TestCase):
                 "Service Apply",
             )
 
-            with self.assertRaises(PmxEditPathError):
+            with self.assertRaises(PmxServiceError) as raised:
                 services.apply_edit(source, source, plan)
+            self.assertEqual(
+                raised.exception.diagnostic.code,
+                PmxServiceDiagnosticCode.EDIT_PATH_UNSAFE,
+            )
             self.assertEqual(source.read_bytes(), source_bytes)
 
     def test_capability_service_reuses_immutable_authoritative_manifest(self) -> None:

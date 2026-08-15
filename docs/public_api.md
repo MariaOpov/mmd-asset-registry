@@ -17,11 +17,14 @@ The current public namespaces are:
 - `mmd_registry.pmx`, for the typed PMX document, reader, validation, writer,
   and round-trip surface listed in its `__all__`;
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
-  listed in its `__all__`.
+  listed in its `__all__`;
+- `mmd_registry.services`, for typed CLI-independent document, validation,
+  editing, and capability use cases listed in its `__all__`.
 
-Future public services must be exposed through an intentional documented
+Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
-not by itself make that module public.
+not by itself make that module public. The service namespace delegates to the
+existing v0.8 safety pipeline and does not expand editing authority.
 
 ## Internal surface
 

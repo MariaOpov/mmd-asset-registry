@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 .venv/
 
+# Python packaging
+build/
+dist/
+*.egg-info/
+
 # Generated reports
 reports/*.json
 reports/*.txt

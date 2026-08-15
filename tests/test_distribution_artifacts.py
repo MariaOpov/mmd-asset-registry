@@ -43,6 +43,7 @@ def package_metadata(*, version: str = IDENTITY.version) -> bytes:
 def default_wheel_files() -> dict[str, bytes]:
     return {
         "mmd_registry/__init__.py": b'__version__ = "0.8.5"\n',
+        "mmd_registry/diagnostics.py": b"__all__ = ()\n",
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
         f"{DIST_INFO}/METADATA": package_metadata(),
@@ -88,6 +89,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "PKG-INFO": package_metadata(),
         "README.md": b"# Test package\n",
         "mmd_registry/__init__.py": b'__version__ = "0.8.5"\n',
+        "mmd_registry/diagnostics.py": b"__all__ = ()\n",
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
         "pyproject.toml": b"[build-system]\n",
@@ -101,6 +103,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "tests/test_coverage_foundation.py": b"# coverage tests\n",
         "tests/test_lint_foundation.py": b"# lint tests\n",
         "tests/test_public_capability_api.py": b"# public capability tests\n",
+        "tests/test_public_diagnostics_api.py": b"# public diagnostic tests\n",
         "tools/inspect_distribution_artifacts.py": b"# inspector\n",
         "tools/verify_clean_install.py": b"# clean install verifier\n",
         f"{NORMALIZED_NAME}.egg-info/PKG-INFO": package_metadata(),

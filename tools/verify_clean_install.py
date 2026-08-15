@@ -60,6 +60,7 @@ for entry in sys.path:
 import mmd_registry
 import mmd_registry._internal
 import mmd_registry.capabilities as public_capabilities
+import mmd_registry.diagnostics as public_diagnostics
 import mmd_registry.pmx
 import mmd_registry.pmx.editing
 import mmd_registry.services
@@ -78,6 +79,22 @@ assert capability_manifest.edit_operation_types == (
     "set_texture_path",
     "update_material",
 ), "installed capability manifest mismatch"
+assert public_diagnostics.__all__ == (
+    "PmxServiceDiagnostic",
+    "PmxServiceDiagnosticCode",
+    "PmxServiceError",
+    "PmxServiceOperation",
+    "diagnostic_from_service_error",
+), "public diagnostic exports mismatch"
+internal_diagnostic = public_diagnostics.diagnostic_from_service_error(
+    public_diagnostics.PmxServiceOperation.LOAD_DOCUMENT,
+    RuntimeError("private implementation detail"),
+)
+assert internal_diagnostic.to_dict() == {
+    "code": "service_internal_error",
+    "operation": "load_document",
+    "message": "Unexpected internal service failure.",
+}, "installed diagnostic redaction mismatch"
 
 package_path = Path(mmd_registry.__file__).resolve()
 dependency_path = Path(yaml.__file__).resolve()

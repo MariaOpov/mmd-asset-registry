@@ -13,6 +13,7 @@ from types import ModuleType
 import mmd_registry
 import mmd_registry._internal as internal
 import mmd_registry.capabilities as capabilities
+import mmd_registry.diagnostics as diagnostics
 import mmd_registry.pmx as pmx
 import mmd_registry.pmx.editing as editing
 
@@ -33,7 +34,7 @@ class PublicPackageArchitectureTests(unittest.TestCase):
         self.assertEqual(exported_names, {"__version__"})
 
     def test_public_namespaces_have_complete_explicit_exports(self) -> None:
-        for module in (capabilities, pmx, editing):
+        for module in (capabilities, diagnostics, pmx, editing):
             with self.subTest(module=module.__name__):
                 self._assert_explicit_exports(module)
 
@@ -52,6 +53,7 @@ class PublicPackageArchitectureTests(unittest.TestCase):
                 "import mmd_registry",
                 "import mmd_registry._internal",
                 "import mmd_registry.capabilities",
+                "import mmd_registry.diagnostics",
                 "import mmd_registry.pmx",
                 "import mmd_registry.pmx.editing",
                 "assert 'mmd_registry.cli' not in sys.modules",

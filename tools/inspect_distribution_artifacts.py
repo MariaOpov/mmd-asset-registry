@@ -212,6 +212,7 @@ def inspect_wheel(
 
             required = {
                 "mmd_registry/__init__.py",
+                "mmd_registry/diagnostics.py",
                 "mmd_registry/pmx/__init__.py",
                 "mmd_registry/services/__init__.py",
                 f"{expected_dist_info}/METADATA",
@@ -311,6 +312,7 @@ def inspect_sdist(
                 "PKG-INFO",
                 "README.md",
                 "mmd_registry/__init__.py",
+                "mmd_registry/diagnostics.py",
                 "mmd_registry/pmx/__init__.py",
                 "mmd_registry/services/__init__.py",
                 "pyproject.toml",
@@ -323,6 +325,7 @@ def inspect_sdist(
                 "tests/test_distribution_artifacts.py",
                 "tests/test_lint_foundation.py",
                 "tests/test_public_capability_api.py",
+                "tests/test_public_diagnostics_api.py",
                 "tools/inspect_distribution_artifacts.py",
                 "tools/verify_clean_install.py",
             }

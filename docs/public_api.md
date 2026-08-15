@@ -16,6 +16,8 @@ The current public namespaces are:
 - `mmd_registry`, whose only root export is `__version__`;
 - `mmd_registry.capabilities`, for the immutable current-support manifest and
   canonical `get_capabilities()` entry point listed in its `__all__`;
+- `mmd_registry.diagnostics`, for immutable service operation, code,
+  diagnostic, exception-wrapper, and safe error-adapter types in its `__all__`;
 - `mmd_registry.pmx`, for the typed PMX document, reader, validation, writer,
   and round-trip surface listed in its `__all__`;
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
@@ -41,6 +43,26 @@ Absence from the manifest means unsupported; the API does not imply model
 creation, VMD editing, plugin loading, unrestricted physics editing, or any
 future edit operation. The former `get_pmx_capability_manifest()` name remains
 directly importable for compatibility, but is not a canonical `__all__` export.
+
+## Diagnostic surface
+
+`mmd_registry.diagnostics` exposes a presentation-independent failure boundary
+for the document, validation, and edit services that already exist. A
+`PmxServiceDiagnostic` is frozen, slotted, deterministic, JSON-ready, and uses
+the bounded `PmxServiceOperation` and `PmxServiceDiagnosticCode` vocabularies.
+`PmxServiceError` carries exactly one such diagnostic without printing,
+terminating the process, or assigning an exit code.
+
+`diagnostic_from_service_error()` converts only allowlisted stable fields from
+known PMX failures. Filesystem paths, arbitrary exception text, exception
+representations, and unexpected implementation details are replaced with
+coarse safe messages. Existing domain exception types and CLI diagnostics are
+not removed or redirected during this checkpoint; stable service integration
+belongs to the following service checkpoints.
+
+The operation and code vocabularies describe current behavior only. They do
+not promise model creation, VMD editing, plugin loading, unrestricted physics
+editing, or future edit operations.
 
 ## Internal surface
 

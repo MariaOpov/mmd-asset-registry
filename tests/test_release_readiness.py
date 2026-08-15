@@ -1,4 +1,4 @@
-"""Release-readiness checks for version 0.8.5."""
+"""Release-readiness checks for pre-0.9.0 / package version 0.9.0a0."""
 
 from __future__ import annotations
 
@@ -23,13 +23,15 @@ RELEASE_CHECKLIST_PATH = PROJECT_ROOT / "RELEASE_CHECKLIST.md"
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_8_5(self) -> None:
-        self.assertEqual(__version__, "0.8.5")
+    def test_package_version_is_0_9_0_alpha_0(self) -> None:
+        self.assertEqual(__version__, "0.9.0a0")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.8.5", readme)
+        self.assertIn("Tool version: 0.9.0a0", readme)
+        self.assertIn("Release label: pre-0.9.0", readme)
+        self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
 
@@ -101,6 +103,14 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("## Version 0.8 features", readme)
         self.assertIn("schema_version", readme)
         self.assertIn("expected_source_sha256", readme)
+        self.assertIn("## pre-0.9.0 architecture runway", readme)
+        self.assertIn("CLI-independent namespaces", readme)
+        self.assertIn("installed `mmd-asset-registry` console command", readme)
+        self.assertIn("does not add structural PMX editing", readme)
+        self.assertIn("1,095 tests", readme)
+        self.assertIn("88.26%", readme)
+        self.assertIn("71-member wheel", readme)
+        self.assertIn("186-member sdist", readme)
         self.assertIn("--dry-run", readme)
         self.assertIn("atomic", readme)
         self.assertIn("symlink and hardlink", readme)
@@ -154,6 +164,14 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_changelog_documents_0_8_5_stabilization(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("## pre-0.9.0 - 2026-08-15", changelog)
+        self.assertIn("distribution version `0.9.0a0`", changelog)
+        self.assertIn("1,095 tests", changelog)
+        self.assertIn("88.26%", changelog)
+        self.assertIn("71 wheel members", changelog)
+        self.assertIn("186 sdist members", changelog)
+        self.assertIn("Ubuntu and Windows GitHub Actions remain mandatory", changelog)
+        self.assertIn("No PyPI publication", changelog)
         self.assertIn("## 0.8.5 - 2026-08-13", changelog)
         self.assertIn("immutable capability manifest", changelog)
         self.assertIn("backward-compatibility contracts", changelog)
@@ -164,7 +182,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.8.5'", workflow)
+        self.assertIn("assert __version__ == '0.9.0a0'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -215,25 +233,38 @@ class ReleaseReadinessTests(unittest.TestCase):
             "python -m coverage run -m unittest discover -s tests -q",
             workflow,
         )
+        self.assertIn("python -m ruff check", workflow)
+        self.assertIn("python -m build --sdist --wheel", workflow)
+        self.assertIn("python tools/inspect_distribution_artifacts.py dist", workflow)
+        self.assertIn("python tools/verify_clean_install.py dist", workflow)
 
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.8.5", checklist)
-        self.assertIn("python -m unittest discover -s tests -q", checklist)
-        self.assertIn("git diff --check", checklist)
+        self.assertIn("MMD Asset Registry pre-0.9.0", checklist)
+        self.assertIn("distribution version is `0.9.0a0`", checklist)
+        self.assertIn("python -m coverage run -m unittest discover -s tests -q", checklist)
+        self.assertIn("git --no-pager diff --check", checklist)
+        self.assertIn("python -m ruff check", checklist)
+        self.assertIn("python -m build --sdist --wheel", checklist)
+        self.assertIn("python tools/inspect_distribution_artifacts.py dist", checklist)
+        self.assertIn("python tools/verify_clean_install.py dist", checklist)
         self.assertIn("Private asset hygiene", checklist)
         self.assertIn("MMD_REGISTRY_PRIVATE_PMX", checklist)
-        self.assertIn("optional runtime-only compatibility harness", checklist)
-        self.assertIn("python check_assets.py edit --help", checklist)
-        self.assertIn("python check_assets.py edit-plan explain --help", checklist)
-        self.assertIn("python check_assets.py texture-portability --help", checklist)
-        self.assertIn("tests.test_pmx_compatibility_cross_feature", checklist)
-        self.assertIn("983 tests", checklist)
+        self.assertIn("optional private runtime", checklist)
+        self.assertIn("tests.test_stable_edit_service", checklist)
+        self.assertIn("1095 tests", checklist)
+        self.assertIn("88.26", checklist)
+        self.assertIn("wheel=71, sdist=186", checklist)
         self.assertIn("No third-party PMX", checklist)
         self.assertIn("gh pr checks", checklist)
-        self.assertIn("git tag -a v0.8.5", checklist)
-        self.assertIn("gh release create v0.8.5", checklist)
+        self.assertIn("both `ubuntu-latest` and `windows-latest` jobs pass", checklist)
+        self.assertIn("Verify merged main", checklist)
+        self.assertIn("Never tag the feature", checklist)
+        self.assertIn("git tag -a pre-0.9.0", checklist)
+        self.assertIn("gh release create pre-0.9.0", checklist)
+        self.assertIn("--prerelease", checklist)
+        self.assertIn("Do not publish the wheel or sdist to PyPI", checklist)
 
     def test_tracked_pmx_files_are_only_empty_placeholders(self) -> None:
         result = subprocess.run(

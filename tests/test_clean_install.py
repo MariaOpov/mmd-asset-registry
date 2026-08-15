@@ -150,7 +150,7 @@ class CleanInstallTests(unittest.TestCase):
             "dependency_path": "/tmp/venv/site-packages/yaml/__init__.py",
             "environment_root": "/tmp/venv",
             "package_path": "/tmp/venv/site-packages/mmd_registry/__init__.py",
-            "version": "0.8.5",
+            "version": "0.9.0a0",
             "working_directory": "/tmp/work",
         }
         output = PROBE_RESULT_PREFIX + json.dumps(payload, sort_keys=True)

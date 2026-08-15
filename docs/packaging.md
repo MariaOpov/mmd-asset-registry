@@ -15,13 +15,11 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. The current value remains `0.8.5` so this checkpoint does
-not impersonate an unreleased build.
-
-At the release-readiness checkpoint, the Git label `pre-0.9.0` is expected to
-map to the PEP 440 distribution version `0.9.0a0`. That change must update the
-existing runtime source and all release-facing contracts together; no second
-hard-coded distribution version should be introduced.
+literal attribute. At release readiness, the Git/GitHub label `pre-0.9.0` maps
+to the PEP 440 Python distribution version `0.9.0a0`. Runtime imports, installed
+metadata, wheel and sdist filenames, console output, reports, CI assertions,
+and release-facing tests all derive from or explicitly verify that mapping; no
+second distribution-version source is introduced.
 
 ## Dependencies and build backend
 

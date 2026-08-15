@@ -1,214 +1,187 @@
-# MMD Asset Registry v0.8.5 Release Checklist
+# MMD Asset Registry pre-0.9.0 Release Checklist
 
-Use this checklist after the feature branch is complete. Do not commit or
-redistribute any private or third-party production model.
+The Git/GitHub release label is `pre-0.9.0`; the PEP 440 runtime and
+distribution version is `0.9.0a0`. This is a prerelease. Never tag the feature
+branch, never create a release before merged-main verification, and never
+publish to PyPI without separate explicit Maintainer approval.
 
-## 1. Verify the feature branch
+## 1. Feature-branch local gate
 
-- [ ] Confirm the expected branch and a clean working tree:
+- [ ] Confirm the expected branch, commit ancestry, and clean working tree:
 
   ```bat
-  git branch --show-current
-  git status
+  cd /d D:\MMD\mmd-asset-registry
+  set "MMD_REGISTRY_PRIVATE_PMX="
+  git --no-pager status
+  git --no-pager branch --show-current
   git --no-pager log -5 --oneline --decorate
+  git --no-pager diff --check
   ```
 
-- [ ] Confirm release metadata:
+- [ ] Confirm the release label/package-version mapping and unchanged registry
+  schema:
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; assert __version__ == '0.8.5'"
+  python -c "from mmd_registry import __version__; from mmd_registry.constants import LATEST_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS; assert __version__ == '0.9.0a0'; assert LATEST_SCHEMA_VERSION == '0.3'; assert SUPPORTED_SCHEMA_VERSIONS == frozenset(('0.2', '0.3'))"
   ```
 
-- [ ] Compile and run all automated checks:
+- [ ] Run lint, compilation, compatibility/public-boundary tests, and the full
+  coverage suite:
 
   ```bat
-  set "MMD_REGISTRY_PRIVATE_PMX="
-  python -m compileall -f mmd_registry tests check_assets.py
-  python -m unittest discover -s tests -q
-  git diff --check
-  rem Expected normal-CI full-suite count: 983 tests, optional private class skipped
+  python -m ruff check mmd_registry tests tools check_assets.py
+  python -m compileall -q mmd_registry tests check_assets.py
+  python -m unittest -q tests.test_v08_contract_freeze tests.test_v08_backward_compatibility tests.test_pre090_compatibility_contract tests.test_public_package_architecture tests.test_console_entry_point tests.test_cli_service_decoupling tests.test_public_capability_api tests.test_public_diagnostics_api tests.test_stable_document_service tests.test_stable_validation_service tests.test_stable_edit_service tests.test_cross_platform_build_install_gate
+  python -m coverage erase
+  python -m coverage run -m unittest discover -s tests -q
+  python -m coverage report
+  python -m coverage json
+  rem Expected local baseline: 1095 tests, skipped=1, combined coverage 88.26%%
   ```
 
-- [ ] Confirm all release-facing command help pages:
+- [ ] Build fresh artifacts, inspect them, and verify an isolated wheel install:
 
   ```bat
-  python check_assets.py validate --help
-  python check_assets.py hash --help
-  python check_assets.py inspect --help
-  python check_assets.py scan --help
-  python check_assets.py roundtrip --help
-  python check_assets.py edit --help
-  python check_assets.py edit-plan --help
-  python check_assets.py edit-plan catalog --help
-  python check_assets.py edit-plan template --help
-  python check_assets.py edit-plan explain --help
-  python check_assets.py texture-portability --help
-  python check_assets.py doctor --help
-  python check_assets.py bones --help
-  python check_assets.py rig --help
+  python -c "import shutil; shutil.rmtree('dist', ignore_errors=True)"
+  python -m build --sdist --wheel
+  python tools/inspect_distribution_artifacts.py dist
+  python tools/verify_clean_install.py dist
+  rem Expected members: wheel=71, sdist=186
   ```
 
-## 2. Reconfirm safety and compatibility
+## 2. Safety, compatibility, and scope gate
 
-- [ ] Registry schemas `0.2` and `0.3` remain supported; latest remains `0.3`.
-- [ ] Existing `validate`, `hash`, `inspect`, `scan`, `roundtrip`, `doctor`,
-  `bones`, and `rig` commands retain their prior behavior.
-- [ ] `roundtrip` refuses an input/output alias and refuses an existing output
-  unless `--overwrite` is explicitly supplied.
-- [ ] PMX output is written only to a distinct user-selected path; no in-place
-  edit or automatic repair is performed.
-- [ ] `edit --dry-run` never creates or modifies output.
-- [ ] `edit` refuses missing output, input/output aliases, symlink/hardlink
-  aliases, and existing output unless `--overwrite` is explicit.
-- [ ] Edit output passes final validation, serialize/reparse semantic equality,
-  source path/identity/hash re-verification, and atomic commit without partial
-  output.
-- [ ] Expected edit failures expose stable diagnostic code/phase/context
-  without a traceback; JSON failures keep legacy fields plus one nested
-  structured `error` object.
-- [ ] `edit-plan template` output is explicitly non-executable and remains
-  rejected until `_template` and all `$placeholder` values are resolved.
-- [ ] `edit-plan explain` reads only strict plan JSON, performs no PMX I/O,
-  and does not expose intended values, the expected hash value, or private
-  paths carried as plan values.
-- [ ] `texture-portability` separates host-independent lexical semantics from
-  filesystem evidence and preserves the original declared PMX path.
-- [ ] Safe rewrite candidates require deterministic model-relative containment,
-  existing regular files, exact on-disk spelling, and the existing strict edit
-  path policy; no fuzzy/case/extension/spelling guessing is allowed.
-- [ ] A referenced blocked dependency prevents partial `--plan-out` emission;
-  an unreferenced blocker remains visible without inventing a rewrite.
-- [ ] `texture-portability --plan-out` never overwrites an existing file, emits
-  only existing `set_texture_path` operations, strict-loads the generated plan,
-  and binds it to source SHA-256 before/after analysis.
-- [ ] `texture-portability` never writes PMX input and never copies, moves,
-  renames, converts, or deletes texture files.
-- [ ] Edit plans cannot add, delete, or reorder textures/materials and cannot
-  edit surface partitions, geometry, bones, morphs, display frames, or physics.
-- [ ] Generated fixtures cover PMX 2.0/2.1, UTF-8/UTF-16LE, uniform and mixed
-  1/2/4-byte indices, all deform types, all morph types, and physics sections.
-- [ ] Generated edit fixtures cover all 12 version/encoding/uniform-width
-  combinations, 12 mixed-width combinations, and all seven combinations of
-  model, texture, and material operation categories.
-- [ ] Named v0.8.4 compatibility profiles cover PMX 2.0/2.1, both supported
-  encodings, additional UV counts 0-4, all six index-width fields, Unicode,
-  zero-count sections, reader/scanner parity, boundary policies, deterministic
-  writer/round-trip semantics, and cross-feature composition.
-- [ ] v0.8.5 stabilization regressions cover the frozen v0.8 contract,
-  deterministic replay, destination safety, capability manifest, cross-feature
-  state isolation, structured round-trip diagnostics, and backward compatibility.
-
-- [ ] Run the focused generated edit and private-harness tests:
-
-  ```bat
-  python -m unittest -q tests.test_pmx_edit_plan_authoring_failures tests.test_pmx_edit_plan_cli tests.test_pmx_edit_plan_explain tests.test_pmx_edit_plan_template tests.test_pmx_edit_operation_catalog tests.test_pmx_edit_cli_diagnostics tests.test_pmx_edit_cli_dry_run tests.test_pmx_edit_generated_matrix tests.test_pmx_edit_negative_safety
-  ```
-
-- [ ] Run the focused texture portability and bridge tests:
-
-  ```bat
-  python -m unittest -q tests.test_texture_path_semantics tests.test_texture_portability tests.test_texture_rewrite tests.test_texture_portability_cli tests.test_texture_portability_generated_matrix tests.test_doctor_cli tests.test_cli tests.test_pmx_edit_plan_json tests.test_pmx_texture_path_editing
-  ```
-
-- [ ] Run the focused v0.8.4 compatibility plus v0.8.5 stabilization matrix with the private runtime path
-  deliberately empty:
-
-  ```bat
-  set "MMD_REGISTRY_PRIVATE_PMX="
-  python -m unittest -q tests.test_pmx_compatibility_profiles tests.test_pmx_compatibility_reader_scanner tests.test_pmx_compatibility_boundaries tests.test_pmx_compatibility_writer_roundtrip tests.test_pmx_compatibility_cross_feature tests.test_pmx_compatibility_private_runtime tests.test_v08_contract_freeze tests.test_pmx_roundtrip_cli_diagnostics tests.test_pmx_destination_safety tests.test_pmx_edit_replay_determinism tests.test_pmx_capability_manifest tests.test_pmx_cross_feature_state_isolation tests.test_v08_backward_compatibility
-  ```
+- [ ] Registry schema `0.3`, supported schemas `0.2`/`0.3`, and edit-plan
+  schema `1` remain unchanged.
+- [ ] Only the existing three bounded edit operation types are authorized; no
+  structural edit, model creation, bone/morph/physics CRUD, GUI, Smart Tools,
+  plugin system, or AI feature is added.
+- [ ] Existing v0.8 imports, process entry points, CLI behavior, diagnostics,
+  exit codes, source-integrity checks, distinct-output rules, and atomic write
+  safety remain compatible.
+- [ ] Public imports remain CLI-independent and side-effect controlled.
+- [ ] Wheel contents are limited to `mmd_registry` plus distribution metadata;
+  tests and tools appear only within the reviewed sdist boundary.
+- [ ] The `check_assets.py`, module, and installed console entry points agree on
+  version and behavior outside the repository working directory.
 
 ## 3. Private asset hygiene
 
-Version 0.8.4 includes an optional runtime-only compatibility harness. Normal CI
-must leave `MMD_REGISTRY_PRIVATE_PMX` empty so no private asset is required or
-referenced. For release validation, a maintainer may explicitly point that
-variable at one local `.pmx`, run the private runtime module, verify source
-size/SHA-256 invariance and temporary cleanup, then clear the variable again.
-Never commit the variable value, model path, model name, private report, model,
-texture, or derived output.
-
-- [ ] Optional local-only private compatibility gate:
+- [ ] Leave `MMD_REGISTRY_PRIVATE_PMX` empty for normal local and CI gates.
+- [ ] No third-party PMX, texture, archive, derived binary, private report,
+  model name, identifying local path, key material, or secret is staged.
+- [ ] Tracked PMX files remain zero-byte placeholders:
 
   ```bat
-  set "MMD_REGISTRY_PRIVATE_PMX=<absolute-local-path-to-private-model.pmx>"
-  python -m unittest -q tests.test_pmx_compatibility_private_runtime
-  set "MMD_REGISTRY_PRIVATE_PMX="
+  git --no-pager ls-files -s "*.pmx"
+  git --no-pager status --short
   ```
 
-- [ ] The private model and textures remain outside the repository.
-- [ ] No third-party PMX, texture, archive, derived binary, private report, or
-  identifying local path is staged or committed.
-- [ ] Inspect tracked model placeholders before publication:
+- [ ] If the optional private runtime is exercised locally, verify source
+  size/SHA-256 invariance and cleanup, then clear the variable. Never attach
+  private assets, paths, names, or reports to the pull request or release.
 
-  ```bat
-  git ls-files -s "*.pmx"
-  git status --short
-  ```
+## 4. Push, pull request, and cross-platform CI
 
-- [ ] If any private validation harness is run, keep all reports local and do
-  not attach private assets, paths, names, or reports to the PR/release.
-
-## 4. Publish the pull request
-
-- [ ] Review the complete branch diff:
+- [ ] Review the complete feature-branch scope:
 
   ```bat
   git --no-pager diff main...HEAD --check
   git --no-pager diff main...HEAD --stat
-  git --no-pager log main..HEAD --oneline
+  git --no-pager diff main...HEAD --name-status
+  git --no-pager log main..HEAD --oneline --decorate
   ```
 
-- [ ] Push the feature branch and open a pull request only after local checks
-  pass.
-- [ ] Wait for both Ubuntu and Windows jobs:
+- [ ] Push the feature branch and open a pull request only after every local
+  gate above passes.
+- [ ] Wait for all pull-request checks:
 
   ```bat
   gh pr checks --watch
   ```
 
-- [ ] Review the PR file list and confirm no private asset is present.
-- [ ] Merge only when required checks pass and review is complete.
+- [ ] Confirm both `ubuntu-latest` and `windows-latest` jobs pass the full test,
+  coverage, fresh-build, artifact-inspection, and isolated-install gates.
+- [ ] Review the PR file list and release notes; merge only after required CI
+  and review are complete.
 
-## 5. Tag and release
+## 5. Verify merged main
 
-- [ ] Synchronize local `main` after merging:
+- [ ] Synchronize and prove local `main` exactly matches `origin/main`:
 
   ```bat
   git switch main
+  git fetch --prune --tags origin
   git pull --ff-only origin main
-  git status
+  git --no-pager status
+  git --no-pager rev-parse HEAD
+  git --no-pager rev-parse origin/main
+  git --no-pager log -1 --oneline --decorate
   ```
 
-- [ ] Re-run the version and test checks on merged `main`.
-- [ ] Create and push the annotated tag:
+- [ ] Re-run the version, lint, compilation, 1,095-test coverage, fresh build,
+  artifact inspection, and clean-install gates on merged `main`.
+- [ ] Confirm the merged commit is the reviewed PR result and the working tree
+  is clean before any tag is created.
+
+## 6. Tag preflight and annotated tag
+
+- [ ] Confirm `main == origin/main`, the tree is clean, and no local/remote tag
+  or GitHub Release already uses `pre-0.9.0`:
 
   ```bat
-  git tag -a v0.8.5 -m "MMD Asset Registry v0.8.5"
-  git push origin v0.8.5
+  git --no-pager branch --show-current
+  git --no-pager status --short
+  git --no-pager rev-parse HEAD
+  git --no-pager rev-parse origin/main
+  git --no-pager tag --list pre-0.9.0
+  git ls-remote --tags origin refs/tags/pre-0.9.0 refs/tags/pre-0.9.0^{}
+  gh release view pre-0.9.0 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
-- [ ] Publish the release with reviewed notes:
+- [ ] On verified merged `main` only, create and push the annotated tag:
 
   ```bat
-  gh release create v0.8.5 --verify-tag --title "MMD Asset Registry v0.8.5" --notes-file "%USERPROFILE%\Downloads\v0.8.5-release-notes.md"
+  git tag -a pre-0.9.0 -m "MMD Asset Registry pre-0.9.0"
+  git --no-pager show pre-0.9.0 --no-patch --format=fuller
+  git push origin pre-0.9.0
   ```
 
-- [ ] Verify the published release is neither draft nor prerelease:
+- [ ] Verify the remote annotated tag resolves to the intended merged-main
+  commit:
 
   ```bat
-  gh release view v0.8.5 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  git fetch --tags origin
+  git --no-pager rev-parse "pre-0.9.0^{}"
+  git ls-remote --tags origin refs/tags/pre-0.9.0 refs/tags/pre-0.9.0^{}
   ```
 
-## 6. Post-release confirmation
+## 7. GitHub prerelease
 
-- [ ] Confirm `main`, `origin/main`, and tag `v0.8.5` identify the intended
-  release commit.
-- [ ] Confirm the release page documents the v0.8.5 stabilization work and retained v0.8.4 compatibility profiles,
-  reader/scanner parity, boundary-policy evidence, deterministic writer and
-  round-trip semantics, cross-feature integration, optional private runtime
-  validation, source SHA-256 invariance, backward compatibility, and explicit
-  editing limitations.
-- [ ] Keep the private validation output local; do not attach the production
-  PMX or textures to the GitHub release.
+- [ ] Review the release notes and create a GitHub prerelease from the verified
+  remote tag:
+
+  ```bat
+  gh release create pre-0.9.0 --verify-tag --prerelease --title "MMD Asset Registry pre-0.9.0" --notes-file "%USERPROFILE%\Downloads\pre-0.9.0-release-notes.md"
+  ```
+
+- [ ] Verify publication state and target:
+
+  ```bat
+  gh release view pre-0.9.0 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  ```
+
+- [ ] Confirm `isDraft` is `false`, `isPrerelease` is `true`, the tag is
+  `pre-0.9.0`, and the target resolves to the verified merged-main commit.
+- [ ] Do not publish the wheel or sdist to PyPI in this workflow.
+
+## 8. Final confirmation
+
+- [ ] Confirm `main`, `origin/main`, the dereferenced annotated tag, and the
+  GitHub prerelease identify the intended release commit.
+- [ ] Confirm the release notes state package version `0.9.0a0`, local evidence,
+  both passing CI operating systems, retained compatibility/safety boundaries,
+  and the absence of structural editing or other deferred v0.9 features.
+- [ ] Confirm the repository remains clean and no private data or build output
+  was committed or attached.

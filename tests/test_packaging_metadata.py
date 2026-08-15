@@ -54,8 +54,11 @@ class PackagingMetadataTests(unittest.TestCase):
             dynamic["version"],
             {"attr": "mmd_registry.__version__"},
         )
-        self.assertEqual(__version__, "0.8.5")
-        self.assertRegex(__version__, re.compile(r"^[0-9]+(?:\.[0-9]+){2}$"))
+        self.assertEqual(__version__, "0.9.0a0")
+        self.assertRegex(
+            __version__,
+            re.compile(r"^[0-9]+(?:\.[0-9]+){2}a[0-9]+$"),
+        )
 
     def test_runtime_dependencies_match_legacy_requirements(self) -> None:
         requirement_lines = [

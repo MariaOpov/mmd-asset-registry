@@ -2,6 +2,52 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## pre-0.9.0 - 2026-08-15
+
+The Git/GitHub release label `pre-0.9.0` maps to the PEP 440 runtime and
+distribution version `0.9.0a0`.
+
+### Added
+
+- Standards-based Python packaging metadata, an installed
+  `mmd-asset-registry` console entry point, deterministic wheel/sdist
+  inspection, and clean isolated-installation verification.
+- Explicit public, internal, and legacy-compatibility package boundaries plus
+  reusable CLI-independent document, validation, bounded-edit, capability, and
+  diagnostic APIs.
+- Correctness-focused linting, full-suite branch coverage reporting, and a
+  cross-platform Ubuntu/Windows build-install CI gate.
+
+### Changed
+
+- The existing `edit` CLI routes execution through the public service boundary
+  while preserving parsing, rendering, exit-code, and legacy behavior.
+- Runtime, installed metadata, artifact filenames, console output, reports, CI,
+  and release-facing contracts now agree on package version `0.9.0a0`.
+- The repository is installable as a pure-Python distribution without making
+  tests, tools, reports, sample assets, or private data import packages.
+
+### Verified
+
+- Local release-readiness validation passes all 1,095 tests with one optional
+  private-runtime skip and reports 88.26% combined statement/branch coverage.
+- Fresh artifacts pass deterministic inspection with 71 wheel members,
+  186 sdist members, and clean isolated wheel installation.
+- Ubuntu and Windows GitHub Actions remain mandatory pre-merge evidence; they
+  are not claimed as passed until the feature branch is pushed and both pull
+  request jobs complete successfully.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported.
+- PMX edit-plan schema remains `1`, and only the existing three edit operation
+  types remain authorized.
+- Existing v0.8 import, CLI, diagnostic, and process contracts are retained.
+- This architecture runway adds no structural PMX editing, model creation,
+  bone/morph/physics CRUD, GUI, Smart Tools, plugin system, or AI feature.
+- No PyPI publication is part of this release without separate explicit
+  Maintainer approval.
+
 ## 0.8.5 - 2026-08-13
 
 ### Added

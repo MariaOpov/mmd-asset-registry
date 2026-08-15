@@ -17,18 +17,47 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.8.5
+Tool version: 0.9.0a0
+Release label: pre-0.9.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. Version 0.8.5
-closes the v0.8 stabilization line with stronger deterministic, failure-safety,
-state-isolation, capability, and backward-compatibility evidence. The bounded
-PMX editing surface and registry schema `0.3` remain unchanged.
+Tool version and registry schema are intentionally independent. The Git and
+GitHub release label `pre-0.9.0` maps to the PEP 440 Python package version
+`0.9.0a0`. This pre-release establishes the architecture and distribution
+runway for v0.9 without expanding the bounded PMX editing surface; registry
+schema `0.3` remains unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
+
+## pre-0.9.0 architecture runway
+
+The `pre-0.9.0` release establishes explicit package boundaries while keeping
+the v0.8 safety contract intact:
+
+- Public CLI-independent namespaces for PMX documents, validation, bounded
+  editing, capabilities, diagnostics, and reusable services
+- An explicit private implementation namespace and preserved legacy import and
+  process entry points
+- An installed `mmd-asset-registry` console command alongside the existing
+  `check_assets.py` launcher
+- Wheel and sdist metadata, deterministic archive inspection, and clean
+  isolated-installation verification
+- Correctness-focused linting, full-suite branch coverage reporting,
+  compatibility gates, and Ubuntu/Windows build-install CI
+
+The local release-readiness baseline passes 1,095 tests with one optional
+private-runtime skip, reports 88.26% combined statement/branch coverage, and
+inspects a 71-member wheel plus a 186-member sdist before clean installation.
+Both GitHub Actions operating-system jobs must still pass on the pull request
+before merge or release.
+
+This runway does not add structural PMX editing, model creation, bone/morph/
+physics CRUD, a GUI, Smart Tools, plugins, or AI features. It packages and
+stabilizes the already bounded behavior so later v0.9 work has reviewable
+service, diagnostic, compatibility, quality, and release boundaries.
 
 ## Why this project exists
 
@@ -1283,17 +1312,17 @@ requests across Ubuntu and Windows. It performs:
 
 1. Repository checkout
 2. Python 3.12 setup
-3. Dependency installation
-4. Python source compilation
-5. Full automated test discovery
-6. Generated PMX edit matrix, diagnostics, negative-safety, and private
-   validation harness tests
-7. Exact `0.8.3` package-version assertion
-8. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
+3. Runtime and pinned development dependency installation
+4. Correctness-focused Ruff linting and Python source compilation
+5. The PMX safety, compatibility, public API, service, and cross-platform gate
+6. Full automated test discovery with branch coverage reports
+7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
+8. Exact `0.9.0a0` package-version assertion
+9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands
-9. Private registry validation using legacy and explicit syntax
-10. Registered placeholder SHA-256 verification
+10. Private registry validation using legacy and explicit syntax
+11. Registered placeholder SHA-256 verification
 
 ## Project structure
 
@@ -1399,7 +1428,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-Version 0.8.3 does not:
+pre-0.9.0 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
@@ -1422,10 +1451,12 @@ Version 0.8.3 does not:
 
 ## Roadmap
 
-Release progression through 0.8.5:
+Release progression after the completed v0.8 line:
 
-- `0.8.4` — Broader Real-model Compatibility Matrix
-- `0.8.5` — Final v0.8 Stabilization and v0.9 Gate
+- `pre-0.9.0` / package `0.9.0a0` — Architecture, packaging, public-boundary,
+  quality, and cross-platform release runway
+- `0.9.0` — Structural foundation built on the stabilized public services
+- Later v0.9 releases — Separately reviewed, safety-bounded feature work
 - Later: multilingual PMX naming with external reviewable dictionaries,
   animation-pipeline integration, PMD structural scanning, registry/browser
   workflows, a desktop inspector GUI, and carefully bounded broader PMX

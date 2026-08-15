@@ -53,3 +53,7 @@ Public modules may depend on internal implementation. Internal modules must
 not depend on CLI parsing or presentation. The CLI may consume public APIs and
 compatibility adapters, but public imports must never load the CLI, print, or
 terminate the process.
+
+The existing `edit` command routes preview and apply execution through
+`mmd_registry.services`. Argument parsing, exit-code mapping, and rendering
+remain presentation responsibilities of the CLI.

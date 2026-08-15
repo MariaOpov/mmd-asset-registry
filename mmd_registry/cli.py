@@ -33,14 +33,12 @@ from mmd_registry.pmx.editing import (
     PmxEditVerificationError,
     default_diagnostic_code,
     diagnostic_from_plan_error,
-    dry_run_pmx_edit,
     load_pmx_edit_plan,
     render_pmx_edit_diagnostic_text,
     render_pmx_edit_preview_json,
     render_pmx_edit_preview_text,
     render_pmx_edit_write_json,
     render_pmx_edit_write_text,
-    write_pmx_edit,
 )
 from mmd_registry.pmx.editing.catalog import get_pmx_edit_operation_catalog
 from mmd_registry.pmx.editing.explain import (
@@ -64,6 +62,10 @@ from mmd_registry.reporting import (
     build_json_report,
     write_credits_file,
     write_json_report,
+)
+from mmd_registry.services import (
+    apply_edit as write_pmx_edit,
+    preview_edit as dry_run_pmx_edit,
 )
 from mmd_registry.rig_cli import run_rig_command
 from mmd_registry.texture_portability_cli import (

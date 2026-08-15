@@ -36,6 +36,7 @@ PROBE_SOURCE = r'''from __future__ import annotations
 import importlib.metadata as metadata
 import json
 import sys
+from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 
@@ -136,6 +137,38 @@ except public_diagnostics.PmxServiceError as error:
     }, "installed document diagnostic mismatch"
 else:
     raise AssertionError("installed document service accepted malformed PMX")
+
+valid_validation = public_services.validate_document(installed_document)
+assert valid_validation.to_dict() == {
+    "is_valid": True,
+    "issues": [],
+}, "installed valid-document validation mismatch"
+invalid_document = replace(
+    installed_document,
+    geometry=replace(installed_document.geometry, surface_indices=(0, 0, 0)),
+)
+invalid_validation = public_services.validate_document(invalid_document)
+assert invalid_validation.to_dict() == {
+    "is_valid": False,
+    "issues": [
+        {
+            "section": "surface_indices",
+            "record_index": 0,
+            "field": "vertex_index",
+            "reason": "index 0 is invalid; expected no value.",
+        }
+    ],
+}, "installed invalid-document validation mismatch"
+try:
+    public_services.validate_document(object())
+except public_diagnostics.PmxServiceError as error:
+    assert error.to_dict() == {
+        "code": "invalid_argument",
+        "operation": "validate_document",
+        "message": "Invalid service input.",
+    }, "installed validation diagnostic mismatch"
+else:
+    raise AssertionError("installed validation service accepted invalid input")
 
 package_path = Path(mmd_registry.__file__).resolve()
 dependency_path = Path(yaml.__file__).resolve()

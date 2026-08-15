@@ -67,6 +67,14 @@ class PmxDocumentValidationResult:
 
         return not self.issues
 
+    def to_dict(self) -> dict[str, object]:
+        """Return a deterministic JSON-ready validation payload."""
+
+        return {
+            "is_valid": self.is_valid,
+            "issues": [issue.to_dict() for issue in self.issues],
+        }
+
 
 def load_document(source: str | Path | BinaryIO) -> PmxDocument:
     """Load one typed PMX document or raise one structured service failure."""
@@ -109,15 +117,24 @@ def inspect_document(document: PmxDocument) -> PmxDocumentMetadata:
 
 
 def validate_document(document: PmxDocument) -> PmxDocumentValidationResult:
-    """Return one structured deterministic result instead of terminal output."""
+    """Return a deterministic result or raise one structured service failure."""
 
-    if not isinstance(document, PmxDocument):
-        raise TypeError("document must be a PmxDocument instance.")
     try:
-        validate_pmx_document(document)
-    except PmxValidationError as error:
-        return PmxDocumentValidationResult(issues=(error.issue,))
-    return PmxDocumentValidationResult()
+        if not isinstance(document, PmxDocument):
+            raise TypeError("document must be a PmxDocument instance.")
+        try:
+            validate_pmx_document(document)
+        except PmxValidationError as error:
+            return PmxDocumentValidationResult(issues=(error.issue,))
+        return PmxDocumentValidationResult()
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.VALIDATE_DOCUMENT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 def preview_edit(source_bytes: bytes, plan: PmxEditPlan) -> PmxEditPreview:

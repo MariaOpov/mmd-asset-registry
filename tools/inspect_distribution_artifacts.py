@@ -327,6 +327,7 @@ def inspect_sdist(
                 "tests/test_public_capability_api.py",
                 "tests/test_public_diagnostics_api.py",
                 "tests/test_stable_document_service.py",
+                "tests/test_stable_validation_service.py",
                 "tools/inspect_distribution_artifacts.py",
                 "tools/verify_clean_install.py",
             }

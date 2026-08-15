@@ -79,9 +79,28 @@ Neither service prints, exits, loads the CLI, assumes the repository root, or
 exposes a wrapped implementation exception as public failure context.
 
 The direct `mmd_registry.pmx.load_pmx()` domain API and its exception behavior
-remain available for compatibility. Validation and edit diagnostic integration
-belong to their following checkpoints; this checkpoint does not change either
-pipeline or add editing authority.
+remain available for compatibility. This service does not change the PMX
+validation pipeline or add editing authority.
+
+## Validation service
+
+`mmd_registry.services.validate_document()` accepts the existing typed
+`PmxDocument` and returns an immutable `PmxDocumentValidationResult`. Its
+`is_valid` property and `to_dict()` method provide deterministic typed and
+JSON-ready views. Issues retain the existing immutable `PmxValidationIssue`
+section, record index, field, and reason fields without rendering or assigning
+an exit code.
+
+The current core validator is deliberately fail-fast, so a valid result has no
+issues and an invalid result contains the first issue found by the established
+deterministic validation order. Document invalidity is a normal result;
+invalid service arguments and unexpected implementation failures use a
+redacted `PmxServiceError` for the `validate_document` operation.
+
+The direct `mmd_registry.pmx.validate_pmx_document()` API retains its existing
+`PmxValidationError` behavior for compatibility. The service does not print,
+exit, load the CLI, alter edit execution, or add any edit operation. Stable
+edit-service diagnostic integration belongs to its following checkpoint.
 
 ## Internal surface
 

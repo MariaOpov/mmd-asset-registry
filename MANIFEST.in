@@ -1,5 +1,6 @@
 include README.md
 include pyproject.toml
+include requirements-dev.txt
 recursive-include mmd_registry *.py
 recursive-include tests *.py
 recursive-include tools *.py

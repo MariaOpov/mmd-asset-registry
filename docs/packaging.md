@@ -29,9 +29,10 @@ The runtime dependency remains `PyYAML>=6.0`, matching `requirements.txt`.
 Setuptools is the build backend and wheel is a build-system dependency. Build
 requirements are not runtime requirements.
 
-No optional development dependencies are declared yet. Lint and coverage
-tooling belong to their dedicated checkpoints and must not become runtime
-dependencies.
+Development-only tools are isolated in `requirements-dev.txt`; they are not
+declared as project, build-system, or optional distribution dependencies. Ruff
+provides the Checkpoint 11 lint gate. Coverage tooling remains deferred to its
+dedicated checkpoint and must not become a runtime dependency.
 
 ## Distribution build and inspection
 

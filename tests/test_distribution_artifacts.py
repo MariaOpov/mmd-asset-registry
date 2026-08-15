@@ -91,6 +91,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
         "pyproject.toml": b"[build-system]\n",
+        "requirements-dev.txt": b"ruff==0.16.3\n",
         "setup.cfg": b"[egg_info]\n",
         "tests/__init__.py": b"",
         "tests/mmd_fixtures.py": b"# fixtures\n",

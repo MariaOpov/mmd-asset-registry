@@ -31,11 +31,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run correctness-focused lint gate
+        run: python -m ruff check mmd_registry tests tools check_assets.py
 
       - name: Compile Python source
         run: python -m compileall mmd_registry tests check_assets.py

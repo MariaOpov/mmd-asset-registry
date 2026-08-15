@@ -100,6 +100,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "tests/test_distribution_artifacts.py": b"# tests\n",
         "tests/test_coverage_foundation.py": b"# coverage tests\n",
         "tests/test_lint_foundation.py": b"# lint tests\n",
+        "tests/test_public_capability_api.py": b"# public capability tests\n",
         "tools/inspect_distribution_artifacts.py": b"# inspector\n",
         "tools/verify_clean_install.py": b"# clean install verifier\n",
         f"{NORMALIZED_NAME}.egg-info/PKG-INFO": package_metadata(),

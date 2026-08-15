@@ -59,6 +59,7 @@ for entry in sys.path:
 
 import mmd_registry
 import mmd_registry._internal
+import mmd_registry.capabilities as public_capabilities
 import mmd_registry.pmx
 import mmd_registry.pmx.editing
 import mmd_registry.services
@@ -66,6 +67,17 @@ import yaml
 
 assert "mmd_registry.cli" not in sys.modules, "public imports loaded CLI"
 assert mmd_registry.__version__ == expectations["version"], "runtime version mismatch"
+assert public_capabilities.__all__ == (
+    "PmxCapabilityManifest",
+    "PmxRoundTripContract",
+    "get_capabilities",
+), "public capability exports mismatch"
+capability_manifest = public_capabilities.get_capabilities()
+assert capability_manifest.edit_operation_types == (
+    "set_model_info",
+    "set_texture_path",
+    "update_material",
+), "installed capability manifest mismatch"
 
 package_path = Path(mmd_registry.__file__).resolve()
 dependency_path = Path(yaml.__file__).resolve()

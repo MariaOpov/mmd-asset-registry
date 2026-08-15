@@ -1,4 +1,4 @@
-"""Immutable deterministic capability manifest for the v0.8 PMX core."""
+"""Public immutable capability manifest for the supported PMX core."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _supported_morph_types() -> tuple[int, ...]:
 
 @dataclass(frozen=True, slots=True)
 class PmxCapabilityManifest:
-    """Small internal description of stable PMX core capabilities."""
+    """Stable public description of the currently supported PMX core."""
 
     pmx_versions: tuple[float, ...]
     text_encodings: tuple[str, ...]
@@ -73,8 +73,8 @@ class PmxCapabilityManifest:
         }
 
 
-def get_pmx_capability_manifest() -> PmxCapabilityManifest:
-    """Return the deterministic internal capability manifest."""
+def get_capabilities() -> PmxCapabilityManifest:
+    """Return the deterministic public capability manifest."""
 
     operation_catalog = get_pmx_edit_operation_catalog()
     return PmxCapabilityManifest(
@@ -91,3 +91,16 @@ def get_pmx_capability_manifest() -> PmxCapabilityManifest:
         texture_portability=True,
         private_runtime_required=False,
     )
+
+
+def get_pmx_capability_manifest() -> PmxCapabilityManifest:
+    """Return the manifest through the retained v0.8 compatibility name."""
+
+    return get_capabilities()
+
+
+__all__ = (
+    "PmxCapabilityManifest",
+    "PmxRoundTripContract",
+    "get_capabilities",
+)

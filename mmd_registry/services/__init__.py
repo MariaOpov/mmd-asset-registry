@@ -8,7 +8,7 @@ from typing import BinaryIO
 
 from mmd_registry.capabilities import (
     PmxCapabilityManifest,
-    get_pmx_capability_manifest,
+    get_capabilities,
 )
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.editing.output import PmxEditWriteResult, write_pmx_edit
@@ -118,12 +118,6 @@ def apply_edit(
         plan,
         overwrite=overwrite,
     )
-
-
-def get_capabilities() -> PmxCapabilityManifest:
-    """Return the existing immutable deterministic PMX capability manifest."""
-
-    return get_pmx_capability_manifest()
 
 
 __all__ = (

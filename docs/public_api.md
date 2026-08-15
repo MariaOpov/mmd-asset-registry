@@ -14,6 +14,8 @@ assuming the repository root is the current directory.
 The current public namespaces are:
 
 - `mmd_registry`, whose only root export is `__version__`;
+- `mmd_registry.capabilities`, for the immutable current-support manifest and
+  canonical `get_capabilities()` entry point listed in its `__all__`;
 - `mmd_registry.pmx`, for the typed PMX document, reader, validation, writer,
   and round-trip surface listed in its `__all__`;
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
@@ -25,6 +27,20 @@ Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
 not by itself make that module public. The service namespace delegates to the
 existing v0.8 safety pipeline and does not expand editing authority.
+
+## Capability surface
+
+`mmd_registry.capabilities` publicly exports `PmxCapabilityManifest`,
+`PmxRoundTripContract`, and `get_capabilities`. The returned manifest is frozen,
+slotted, deterministic, independent from private runtime configuration, and
+contains only the PMX versions, encodings, index widths, deform and morph
+types, round-trip contract, texture portability, soft-body support, and three
+edit operations already implemented by v0.8.5.
+
+Absence from the manifest means unsupported; the API does not imply model
+creation, VMD editing, plugin loading, unrestricted physics editing, or any
+future edit operation. The former `get_pmx_capability_manifest()` name remains
+directly importable for compatibility, but is not a canonical `__all__` export.
 
 ## Internal surface
 
@@ -38,9 +54,10 @@ breakage before service and CLI boundaries exist.
 
 Existing documented or regression-tested import and process entry points
 remain available while the architecture is introduced. In particular, this
-includes direct PMX leaf-module imports, `mmd_registry.capabilities`,
-`mmd_registry.reporting`, `mmd_registry.validator`, `mmd_registry.cli`, and
-the `check_assets.py` launcher.
+includes direct PMX leaf-module imports, the legacy
+`mmd_registry.capabilities.get_pmx_capability_manifest` helper,
+`mmd_registry.reporting`, `mmd_registry.validator`, `mmd_registry.cli`, and the
+`check_assets.py` launcher.
 
 Compatibility does not promote those paths into new canonical public APIs.
 Callers should prefer the public namespaces above when an equivalent export is

@@ -322,6 +322,7 @@ def inspect_sdist(
                 "tests/test_coverage_foundation.py",
                 "tests/test_distribution_artifacts.py",
                 "tests/test_lint_foundation.py",
+                "tests/test_public_capability_api.py",
                 "tools/inspect_distribution_artifacts.py",
                 "tools/verify_clean_install.py",
             }

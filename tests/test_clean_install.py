@@ -129,6 +129,8 @@ class CleanInstallTests(unittest.TestCase):
         self.assertIn("package did not load from clean venv", PROBE_SOURCE)
         self.assertIn("dependency did not load from clean venv", PROBE_SOURCE)
         self.assertIn("runtime version mismatch", PROBE_SOURCE)
+        self.assertIn("public capability exports mismatch", PROBE_SOURCE)
+        self.assertIn("installed capability manifest mismatch", PROBE_SOURCE)
         self.assertIn("installed entry-point metadata mismatch", PROBE_SOURCE)
         self.assertIn("next(iter(distribution.entry_points)).load()", PROBE_SOURCE)
         self.assertNotIn("distribution.entry_points[0]", PROBE_SOURCE)

@@ -31,11 +31,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run correctness-focused lint gate
+        run: python -m ruff check mmd_registry tests tools check_assets.py
 
       - name: Compile Python source
         run: python -m compileall mmd_registry tests check_assets.py
@@ -69,15 +76,34 @@ jobs:
           tests.test_pmx_destination_safety
           tests.test_pmx_edit_replay_determinism
           tests.test_pmx_capability_manifest
+          tests.test_public_capability_api
+          tests.test_public_diagnostics_api
+          tests.test_stable_document_service
+          tests.test_stable_validation_service
+          tests.test_stable_edit_service
+          tests.test_cross_platform_build_install_gate
           tests.test_pmx_cross_feature_state_isolation
           tests.test_v08_backward_compatibility
 
-      - name: Run automated tests
-        run: python -m unittest discover -s tests -q
+      - name: Run full test suite with coverage
+        run: |
+          python -m coverage erase
+          python -m coverage run -m unittest discover -s tests -q
+          python -m coverage report
+          python -m coverage json
+
+      - name: Build and inspect distribution artifacts
+        run: |
+          python -c "import shutil; shutil.rmtree('dist', ignore_errors=True)"
+          python -m build --sdist --wheel
+          python tools/inspect_distribution_artifacts.py dist
+
+      - name: Verify clean installed package
+        run: python tools/verify_clean_install.py dist
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.8.5'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.9.0a0'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

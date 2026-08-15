@@ -18,6 +18,10 @@ from mmd_registry.dependency_diagnostics import (
     TextureDependencyDiagnostics,
     diagnose_texture_dependencies,
 )
+from mmd_registry.diagnostics import (
+    PmxServiceDiagnosticCode,
+    PmxServiceError,
+)
 from mmd_registry.hashing import check_file_sha256
 from mmd_registry.model_inspection import inspect_model_header
 from mmd_registry.model_scanning import (
@@ -31,16 +35,15 @@ from mmd_registry.pmx.editing import (
     PmxEditPlanDecodeError,
     PmxEditPlanError,
     PmxEditVerificationError,
+    build_edit_plan_json_path,
     default_diagnostic_code,
     diagnostic_from_plan_error,
-    dry_run_pmx_edit,
     load_pmx_edit_plan,
     render_pmx_edit_diagnostic_text,
     render_pmx_edit_preview_json,
     render_pmx_edit_preview_text,
     render_pmx_edit_write_json,
     render_pmx_edit_write_text,
-    write_pmx_edit,
 )
 from mmd_registry.pmx.editing.catalog import get_pmx_edit_operation_catalog
 from mmd_registry.pmx.editing.explain import (
@@ -64,6 +67,10 @@ from mmd_registry.reporting import (
     build_json_report,
     write_credits_file,
     write_json_report,
+)
+from mmd_registry.services import (
+    apply_edit as write_pmx_edit,
+    preview_edit as dry_run_pmx_edit,
 )
 from mmd_registry.rig_cli import run_rig_command
 from mmd_registry.texture_portability_cli import (
@@ -1068,6 +1075,94 @@ def _new_edit_io_diagnostic(
     )
 
 
+def _edit_service_failure(
+    error: PmxServiceError,
+) -> tuple[PmxEditDiagnostic, str, int] | None:
+    """Adapt one expected public-service failure to legacy CLI presentation."""
+
+    service_diagnostic = error.diagnostic
+    details = dict(service_diagnostic.details)
+    code = service_diagnostic.code
+
+    if code is PmxServiceDiagnosticCode.EDIT_PLAN_INVALID:
+        operation_index = details.get("operation_index")
+        if type(operation_index) is not int:
+            operation_index = None
+        field = details.get("field")
+        if type(field) is not str:
+            field = None
+        phase = (
+            PmxEditPhase.PREFLIGHT
+            if operation_index is None and field == "expected_source_sha256"
+            else PmxEditPhase.APPLY
+        )
+        path = None
+        if operation_index is not None or field is not None:
+            path = build_edit_plan_json_path(
+                operation_index=operation_index,
+                field=field,
+            )
+        return (
+            PmxEditDiagnostic(
+                code=default_diagnostic_code(phase),
+                phase=phase,
+                message=service_diagnostic.message,
+                operation_index=operation_index,
+                path=path,
+            ),
+            "invalid_plan",
+            1,
+        )
+
+    simple_failures = {
+        PmxServiceDiagnosticCode.SOURCE_INVALID: (
+            PmxEditPhase.SOURCE_PARSE,
+            "invalid_pmx",
+            1,
+        ),
+        PmxServiceDiagnosticCode.DOCUMENT_INVALID: (
+            PmxEditPhase.DOCUMENT_VALIDATE,
+            "invalid_pmx",
+            1,
+        ),
+        PmxServiceDiagnosticCode.EDIT_PATH_UNSAFE: (
+            PmxEditPhase.PREFLIGHT,
+            "path_policy",
+            2,
+        ),
+        PmxServiceDiagnosticCode.EDIT_VERIFICATION_FAILED: (
+            PmxEditPhase.SEMANTIC_VERIFY,
+            "verification",
+            1,
+        ),
+    }
+    if code in simple_failures:
+        phase, error_type, exit_code = simple_failures[code]
+        return (
+            _new_edit_diagnostic(phase, service_diagnostic.message),
+            error_type,
+            exit_code,
+        )
+
+    if code is PmxServiceDiagnosticCode.IO_FAILED:
+        errno = details.get("errno")
+        diagnostic_details = (
+            (("errno", errno),) if type(errno) is int else ()
+        )
+        return (
+            PmxEditDiagnostic(
+                code=default_diagnostic_code(PmxEditPhase.OUTPUT_COMMIT),
+                phase=PmxEditPhase.OUTPUT_COMMIT,
+                message="File operation failed.",
+                details=diagnostic_details,
+            ),
+            "io",
+            2,
+        )
+
+    return None
+
+
 def _print_edit_error(
     input_path: Path,
     plan_path: Path,
@@ -1114,6 +1209,56 @@ def _edit_path_error(path: Path, label: str) -> str | None:
         return f"{label} file does not exist: {path}"
     if not path.is_file():
         return f"{label} path is not a file: {path}"
+    return None
+
+
+def _edit_output_path_error(
+    input_path: Path,
+    output_path: Path,
+    *,
+    overwrite: bool,
+) -> str | None:
+    """Preserve legacy CLI preflight messages before service delegation."""
+
+    if input_path.suffix.lower() != ".pmx":
+        return "Input file must use the .pmx extension."
+    if output_path.suffix.lower() != ".pmx":
+        return "Output file must use the .pmx extension."
+
+    source = input_path.resolve(strict=True)
+    destination_parent = output_path.parent.resolve(strict=False)
+    if not destination_parent.exists():
+        return f"Output directory does not exist: {destination_parent}"
+    if not destination_parent.is_dir():
+        return f"Output parent is not a directory: {destination_parent}"
+
+    destination = destination_parent / output_path.name
+    if destination == source:
+        return (
+            "Input and output must be different files; in-place PMX editing "
+            "is not supported."
+        )
+    if destination.is_symlink():
+        return f"Output path must not be a symbolic link: {destination}"
+    if not destination.exists():
+        return None
+    if not destination.is_file():
+        return f"Output path is not a file: {destination}"
+
+    try:
+        aliases_source = source.samefile(destination)
+    except OSError as error:
+        return f"Unable to verify input/output file identity: {error}"
+    if aliases_source:
+        return (
+            "Input and output refer to the same file; symlink and hardlink "
+            "aliases are not supported."
+        )
+    if not overwrite:
+        return (
+            f"Output file already exists: {destination}. "
+            "Use --overwrite to replace this separate output file."
+        )
     return None
 
 
@@ -1246,6 +1391,13 @@ def _run_edit(arguments: argparse.Namespace) -> int:
                 "verification",
             )
             return 1
+        except PmxServiceError as error:
+            failure = _edit_service_failure(error)
+            if failure is None:
+                raise
+            diagnostic, error_type, exit_code = failure
+            print_error(diagnostic, error_type)
+            return exit_code
 
         if arguments.json:
             sys.stdout.write(render_pmx_edit_preview_json(preview))
@@ -1259,6 +1411,29 @@ def _run_edit(arguments: argparse.Namespace) -> int:
         return 0
 
     assert output_path is not None
+    try:
+        output_path_error = _edit_output_path_error(
+            input_path,
+            output_path,
+            overwrite=arguments.overwrite,
+        )
+    except OSError as error:
+        print_error(
+            _new_edit_io_diagnostic(
+                PmxEditPhase.OUTPUT_COMMIT,
+                "File operation failed.",
+                error,
+            ),
+            "io",
+        )
+        return 2
+    if output_path_error is not None:
+        print_error(
+            _new_edit_diagnostic(PmxEditPhase.PREFLIGHT, output_path_error),
+            "path_policy",
+        )
+        return 2
+
     try:
         result = write_pmx_edit(
             input_path,
@@ -1315,6 +1490,13 @@ def _run_edit(arguments: argparse.Namespace) -> int:
             "io",
         )
         return 2
+    except PmxServiceError as error:
+        failure = _edit_service_failure(error)
+        if failure is None:
+            raise
+        diagnostic, error_type, exit_code = failure
+        print_error(diagnostic, error_type)
+        return exit_code
 
     if arguments.json:
         sys.stdout.write(render_pmx_edit_write_json(result))

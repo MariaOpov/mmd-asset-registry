@@ -2,6 +2,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+.ruff_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
 
 # Generated reports
 reports/*.json

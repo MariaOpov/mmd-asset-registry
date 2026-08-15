@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel>=0.41"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmd-asset-registry"
+dynamic = ["version"]
+description = "Safety-first PMX/MMD asset registry, validation, and bounded editing toolkit."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["PyYAML>=6.0"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+mmd-asset-registry = "mmd_registry.cli:main"
+
+[project.urls]
+Repository = "https://github.com/MariaOpov/mmd-asset-registry"
+Issues = "https://github.com/MariaOpov/mmd-asset-registry/issues"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = { attr = "mmd_registry.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mmd_registry*"]
+exclude = ["tests*"]
+namespaces = false
+
+[tool.ruff]
+required-version = "==0.16.3"
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["mmd_registry"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.json]
+output = "coverage.json"
+pretty_print = true

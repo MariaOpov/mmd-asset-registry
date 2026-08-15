@@ -36,6 +36,7 @@ PROBE_SOURCE = r'''from __future__ import annotations
 import importlib.metadata as metadata
 import json
 import sys
+from io import BytesIO
 from pathlib import Path
 
 
@@ -63,7 +64,7 @@ import mmd_registry.capabilities as public_capabilities
 import mmd_registry.diagnostics as public_diagnostics
 import mmd_registry.pmx
 import mmd_registry.pmx.editing
-import mmd_registry.services
+import mmd_registry.services as public_services
 import yaml
 
 assert "mmd_registry.cli" not in sys.modules, "public imports loaded CLI"
@@ -95,6 +96,46 @@ assert internal_diagnostic.to_dict() == {
     "operation": "load_document",
     "message": "Unexpected internal service failure.",
 }, "installed diagnostic redaction mismatch"
+
+document_source = bytes.fromhex(
+    "504d5820000000400801000101010101010e0000005465737420504d58204d6f64656c0e"
+    "0000005465737420504d58204d6f64656c00000000000000000000000000000000000000"
+    "00000000000000000000000000000000000000000000000000"
+)
+installed_document = public_services.load_document(BytesIO(document_source))
+installed_metadata = public_services.inspect_document(installed_document)
+assert (
+    installed_metadata.version,
+    installed_metadata.encoding,
+    installed_metadata.local_name,
+    installed_metadata.universal_name,
+    installed_metadata.local_comments,
+    installed_metadata.universal_comments,
+) == (
+    2.0,
+    "utf-8",
+    "Test PMX Model",
+    "Test PMX Model",
+    "",
+    "",
+), "installed document service mismatch"
+try:
+    public_services.load_document(BytesIO(b"bad"))
+except public_diagnostics.PmxServiceError as error:
+    assert error.to_dict() == {
+        "code": "source_invalid",
+        "operation": "load_document",
+        "message": "Source PMX data is invalid.",
+        "details": {
+            "format_name": "PMX",
+            "offset": 0,
+            "parse_operation": "reading PMX signature",
+            "record_index": None,
+            "section": "signature",
+        },
+    }, "installed document diagnostic mismatch"
+else:
+    raise AssertionError("installed document service accepted malformed PMX")
 
 package_path = Path(mmd_registry.__file__).resolve()
 dependency_path = Path(yaml.__file__).resolve()

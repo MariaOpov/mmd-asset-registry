@@ -10,6 +10,11 @@ from mmd_registry.capabilities import (
     PmxCapabilityManifest,
     get_capabilities,
 )
+from mmd_registry.diagnostics import (
+    PmxServiceError,
+    PmxServiceOperation,
+    diagnostic_from_service_error,
+)
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.editing.output import PmxEditWriteResult, write_pmx_edit
 from mmd_registry.pmx.editing.plan import PmxEditPlan
@@ -64,25 +69,43 @@ class PmxDocumentValidationResult:
 
 
 def load_document(source: str | Path | BinaryIO) -> PmxDocument:
-    """Load one typed PMX document without CLI or repository-root coupling."""
+    """Load one typed PMX document or raise one structured service failure."""
 
-    return load_pmx(source)
+    try:
+        return load_pmx(source)
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.LOAD_DOCUMENT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 def inspect_document(document: PmxDocument) -> PmxDocumentMetadata:
-    """Return immutable header and model metadata for one typed document."""
+    """Return immutable metadata or raise one structured service failure."""
 
-    if not isinstance(document, PmxDocument):
-        raise TypeError("document must be a PmxDocument instance.")
-    model_info = document.model_info
-    return PmxDocumentMetadata(
-        version=document.header.version,
-        encoding=document.header.encoding,
-        local_name=model_info.local_name,
-        universal_name=model_info.universal_name,
-        local_comments=model_info.local_comments,
-        universal_comments=model_info.universal_comments,
-    )
+    try:
+        if not isinstance(document, PmxDocument):
+            raise TypeError("document must be a PmxDocument instance.")
+        model_info = document.model_info
+        return PmxDocumentMetadata(
+            version=document.header.version,
+            encoding=document.header.encoding,
+            local_name=model_info.local_name,
+            universal_name=model_info.universal_name,
+            local_comments=model_info.local_comments,
+            universal_comments=model_info.universal_comments,
+        )
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.INSPECT_DOCUMENT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 def validate_document(document: PmxDocument) -> PmxDocumentValidationResult:

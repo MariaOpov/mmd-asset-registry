@@ -133,6 +133,8 @@ class CleanInstallTests(unittest.TestCase):
         self.assertIn("installed capability manifest mismatch", PROBE_SOURCE)
         self.assertIn("public diagnostic exports mismatch", PROBE_SOURCE)
         self.assertIn("installed diagnostic redaction mismatch", PROBE_SOURCE)
+        self.assertIn("installed document service mismatch", PROBE_SOURCE)
+        self.assertIn("installed document diagnostic mismatch", PROBE_SOURCE)
         self.assertIn("installed entry-point metadata mismatch", PROBE_SOURCE)
         self.assertIn("next(iter(distribution.entry_points)).load()", PROBE_SOURCE)
         self.assertNotIn("distribution.entry_points[0]", PROBE_SOURCE)

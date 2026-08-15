@@ -57,12 +57,31 @@ terminating the process, or assigning an exit code.
 known PMX failures. Filesystem paths, arbitrary exception text, exception
 representations, and unexpected implementation details are replaced with
 coarse safe messages. Existing domain exception types and CLI diagnostics are
-not removed or redirected during this checkpoint; stable service integration
-belongs to the following service checkpoints.
+not removed or redirected.
 
 The operation and code vocabularies describe current behavior only. They do
 not promise model creation, VMD editing, plugin loading, unrestricted physics
 editing, or future edit operations.
+
+## Document service
+
+`mmd_registry.services.load_document()` accepts a filesystem path or a
+caller-owned seekable binary stream and returns the existing typed
+`PmxDocument`. Paths opened by the service are closed before return; streams
+supplied by callers remain owned by their callers. Malformed data, file I/O,
+invalid arguments, and unexpected implementation failures are reported as
+`PmxServiceError` values for the `load_document` operation.
+
+`inspect_document()` accepts a typed document and returns immutable
+`PmxDocumentMetadata` containing its version, encoding, names, and comments.
+Invalid inputs use the corresponding `inspect_document` diagnostic operation.
+Neither service prints, exits, loads the CLI, assumes the repository root, or
+exposes a wrapped implementation exception as public failure context.
+
+The direct `mmd_registry.pmx.load_pmx()` domain API and its exception behavior
+remain available for compatibility. Validation and edit diagnostic integration
+belong to their following checkpoints; this checkpoint does not change either
+pipeline or add editing authority.
 
 ## Internal surface
 

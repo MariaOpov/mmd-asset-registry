@@ -81,6 +81,7 @@ jobs:
           tests.test_stable_document_service
           tests.test_stable_validation_service
           tests.test_stable_edit_service
+          tests.test_cross_platform_build_install_gate
           tests.test_pmx_cross_feature_state_isolation
           tests.test_v08_backward_compatibility
 
@@ -90,6 +91,15 @@ jobs:
           python -m coverage run -m unittest discover -s tests -q
           python -m coverage report
           python -m coverage json
+
+      - name: Build and inspect distribution artifacts
+        run: |
+          python -c "import shutil; shutil.rmtree('dist', ignore_errors=True)"
+          python -m build --sdist --wheel
+          python tools/inspect_distribution_artifacts.py dist
+
+      - name: Verify clean installed package
+        run: python tools/verify_clean_install.py dist
 
       - name: Check release-facing commands
         run: |

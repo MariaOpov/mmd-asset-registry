@@ -93,7 +93,9 @@ def default_sdist_files() -> dict[str, bytes]:
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
         "pyproject.toml": b"[build-system]\n",
-        "requirements-dev.txt": b"ruff==0.16.3\ncoverage==7.15.4\n",
+        "requirements-dev.txt": (
+            b"ruff==0.16.3\ncoverage==7.15.4\nbuild==1.5.0\n"
+        ),
         "setup.cfg": b"[egg_info]\n",
         "tests/__init__.py": b"",
         "tests/mmd_fixtures.py": b"# fixtures\n",
@@ -101,6 +103,9 @@ def default_sdist_files() -> dict[str, bytes]:
         "tests/test_console_entry_point.py": b"# console tests\n",
         "tests/test_distribution_artifacts.py": b"# tests\n",
         "tests/test_coverage_foundation.py": b"# coverage tests\n",
+        "tests/test_cross_platform_build_install_gate.py": (
+            b"# cross-platform tests\n"
+        ),
         "tests/test_lint_foundation.py": b"# lint tests\n",
         "tests/test_public_capability_api.py": b"# public capability tests\n",
         "tests/test_public_diagnostics_api.py": b"# public diagnostic tests\n",

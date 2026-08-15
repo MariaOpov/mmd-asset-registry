@@ -322,6 +322,7 @@ def inspect_sdist(
                 "tests/test_clean_install.py",
                 "tests/test_console_entry_point.py",
                 "tests/test_coverage_foundation.py",
+                "tests/test_cross_platform_build_install_gate.py",
                 "tests/test_distribution_artifacts.py",
                 "tests/test_lint_foundation.py",
                 "tests/test_public_capability_api.py",

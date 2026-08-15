@@ -60,6 +60,30 @@ setuptools.
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
 
+## Cross-platform build and installation gate
+
+The GitHub Actions validation matrix runs the complete distribution gate on
+both `ubuntu-latest` and `windows-latest` with Python 3.12. Each matrix job
+builds a fresh wheel and sdist, inspects both archives, installs the wheel with
+its declared dependencies in a disposable environment outside the checkout,
+and exercises installed metadata, imports, capabilities, diagnostics,
+document/validation/edit services, and console entry points.
+
+The standard `build` frontend is pinned to `1.5.0` in
+`requirements-dev.txt`. It is CI/development tooling only and is not a runtime
+dependency or an additional build-system requirement. The gate uses the same
+commands on both operating systems:
+
+```text
+python -m build --sdist --wheel
+python tools/inspect_distribution_artifacts.py dist
+python tools/verify_clean_install.py dist
+```
+
+The matrix is fail-closed but does not upload or publish artifacts. A failure
+on either operating system fails validation, while `fail-fast: false` retains
+evidence from both jobs.
+
 ## Installed console command
 
 The installed console command is `mmd-asset-registry`. Packaging metadata maps
@@ -99,9 +123,10 @@ always removed, including after a failed probe, and no artifact is published.
 
 ## Deferred gates
 
-Cross-platform clean installation in both Ubuntu and Windows CI belongs to
-Checkpoint 19. Checkpoint 10 establishes the local deterministic verifier and
-its installed-package contracts without changing runtime behavior.
+Checkpoint 10 established the local deterministic verifier; Checkpoint 19
+runs that verifier after fresh builds on both supported CI operating systems.
+Artifact publication remains deferred to the separately reviewed release
+workflow.
 
 The repository currently has no tracked license file, so packaging metadata
 does not invent a license expression or license classifier. License metadata

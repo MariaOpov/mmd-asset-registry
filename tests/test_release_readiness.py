@@ -208,6 +208,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_stable_document_service", workflow)
         self.assertIn("tests.test_stable_validation_service", workflow)
         self.assertIn("tests.test_stable_edit_service", workflow)
+        self.assertIn("tests.test_cross_platform_build_install_gate", workflow)
         self.assertIn("tests.test_pmx_cross_feature_state_isolation", workflow)
         self.assertIn("tests.test_v08_backward_compatibility", workflow)
         self.assertIn(

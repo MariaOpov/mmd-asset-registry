@@ -32,7 +32,7 @@ class CoverageFoundationTests(unittest.TestCase):
 
         self.assertEqual(
             requirements,
-            ["ruff==0.16.3", "coverage==7.15.4"],
+            ["ruff==0.16.3", "coverage==7.15.4", "build==1.5.0"],
         )
         self.assertNotIn("coverage", " ".join(project["dependencies"]).lower())
         self.assertNotIn("coverage", " ".join(build_system["requires"]).lower())

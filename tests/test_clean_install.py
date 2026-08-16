@@ -138,6 +138,11 @@ class CleanInstallTests(unittest.TestCase):
         self.assertIn("installed valid-document validation mismatch", PROBE_SOURCE)
         self.assertIn("installed invalid-document validation mismatch", PROBE_SOURCE)
         self.assertIn("installed validation diagnostic mismatch", PROBE_SOURCE)
+        self.assertIn("installed reference analysis mismatch", PROBE_SOURCE)
+        self.assertIn("installed reference-node diagnostic mismatch", PROBE_SOURCE)
+        self.assertIn("installed structural preview status mismatch", PROBE_SOURCE)
+        self.assertIn("installed structural preview output mismatch", PROBE_SOURCE)
+        self.assertIn("installed structural preview verification mismatch", PROBE_SOURCE)
         self.assertIn("installed edit preview verification mismatch", PROBE_SOURCE)
         self.assertIn("installed edit apply verification mismatch", PROBE_SOURCE)
         self.assertIn("installed edit diagnostic mismatch", PROBE_SOURCE)
@@ -150,7 +155,7 @@ class CleanInstallTests(unittest.TestCase):
             "dependency_path": "/tmp/venv/site-packages/yaml/__init__.py",
             "environment_root": "/tmp/venv",
             "package_path": "/tmp/venv/site-packages/mmd_registry/__init__.py",
-            "version": "0.9.0a0",
+            "version": "0.9.0",
             "working_directory": "/tmp/work",
         }
         output = PROBE_RESULT_PREFIX + json.dumps(payload, sort_keys=True)

@@ -17,17 +17,17 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.0a0
-Release label: pre-0.9.0
+Tool version: 0.9.0
+Release label: v0.9.0
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `pre-0.9.0` maps to the PEP 440 Python package version
-`0.9.0a0`. This pre-release establishes the architecture and distribution
-runway for v0.9 without expanding the bounded PMX editing surface; registry
-schema `0.3` remains unchanged.
+GitHub release label `v0.9.0` matches the PEP 440 Python package version
+`0.9.0`. This release adds the reference-safe structural analysis and preview
+foundation while deliberately keeping public structural write disabled;
+registry schema `0.3` remains unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
@@ -58,6 +58,46 @@ This runway does not add structural PMX editing, model creation, bone/morph/
 physics CRUD, a GUI, Smart Tools, plugins, or AI features. It packages and
 stabilizes the already bounded behavior so later v0.9 work has reviewable
 service, diagnostic, compatibility, quality, and release boundaries.
+
+## Version 0.9.0 reference-safe structural foundation
+
+Version 0.9.0 promotes the v0.9 foundation to the final `0.9.0` package version
+while keeping structural execution deliberately narrower than the internal
+implementation layers:
+
+- A complete immutable PMX reference taxonomy, reference graph, diagnostics,
+  and conservative direct-impact queries cover vertex, texture, material,
+  bone, morph, and rigid-body targets.
+- Public `analyze_references()` and `analyze_reference_node()` services expose
+  deterministic read-only reference evidence without reparsing, repairing, or
+  mutating a document.
+- Immutable index-remap and structural collection-transform primitives support
+  reference-safe reorder/delete intent for existing vertices, textures,
+  materials, bones, morphs, and rigid bodies. Insertion remains unauthorized.
+- Geometry/material, deform/IK, morph/display-frame, and physics references are
+  remapped through one certified structural orchestrator with complete
+  invariant and reference-integrity checks.
+- Deterministic structural preview/audit evidence is available through the
+  public `PmxStructuralCollectionEdit`, `PmxStructuralPreviewRequest`,
+  `PmxStructuralPreviewResult`, and `preview_structural_edit()` service surface.
+- Verified structural serialization/output remains an internal kernel. The
+  public capability manifest intentionally reports `structural_preview=True`,
+  `structural_write=False`, and `structural_contract="reference_safe_preview"`.
+
+The structural path fails closed rather than guessing: opaque trailing data is
+rejected for changed structural transforms, invalid references are not replaced
+with sentinels, index widths are not resized automatically, insertion is not
+synthesized, and caller-owned source documents/files are not mutated. No public
+model-creation, arbitrary CRUD, IK authoring, physics simulation, mesh/UV
+editing, Smart Tool, plugin, GUI, or AI authority is introduced by this release.
+
+The final-release baseline contains 1,495 automated tests with one optional
+private-runtime skip and reports 88.86% combined statement/branch coverage.
+The package gate builds and inspects an 85-member wheel and 220-member sdist,
+verifies a disposable clean wheel installation, and exercises installed
+reference-analysis plus structural-preview services. The same build/install
+workflow passes on both Ubuntu and Windows. Optional private-model validation is
+read-only with respect to its source and is never part of distributed artifacts.
 
 ## Why this project exists
 
@@ -1317,7 +1357,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.0a0` package-version assertion
+8. Exact `0.9.0` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands
@@ -1428,15 +1468,18 @@ mmd-asset-registry/
 
 ## Current limitations
 
-pre-0.9.0 does not:
+v0.9.0 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
-- Add, delete, or reorder textures or materials
+- Publicly commit structural collection edits; the v0.9.0 structural service is
+  preview-only and reports `structural_write=False`
+- Insert new vertices, textures, materials, bones, morphs, or rigid bodies
+- Persist public add/delete/reorder operations for textures or materials
 - Edit material surface partitions
-- Edit vertices, normals, UVs, weights, bones, IK, morphs, display frames, or
-  physics
-- Repair or transform model data
+- Author mesh geometry, normals, UVs, weights, bone/IK data, morph payloads,
+  display frames, or physics through a public structural writer
+- Silently repair model data or automatically resize PMX index widths
 - Diagnose non-texture external dependencies
 - Register scan results back into `assets.yaml`
 - Provide batch directory scanning
@@ -1453,9 +1496,10 @@ pre-0.9.0 does not:
 
 Release progression after the completed v0.8 line:
 
-- `pre-0.9.0` / package `0.9.0a0` — Architecture, packaging, public-boundary,
-  quality, and cross-platform release runway
-- `0.9.0` — Structural foundation built on the stabilized public services
+- `pre-0.9.0` / package `0.9.0a0` — Completed architecture, packaging,
+  public-boundary, quality, and cross-platform release runway
+- `v0.9.0` / package `0.9.0` — Reference-safe structural analysis and certified
+  preview foundation with public structural write intentionally disabled
 - Later v0.9 releases — Separately reviewed, safety-bounded feature work
 - Later: multilingual PMX naming with external reviewable dictionaries,
   animation-pipeline integration, PMD structural scanning, registry/browser

@@ -2,6 +2,66 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.0 - 2026-08-16
+
+### Added
+
+- A complete immutable PMX reference taxonomy, graph, diagnostic model, direct
+  impact queries, and public read-only reference-analysis service.
+- Reference-safe index remapping and structural collection transforms for
+  vertices, textures, materials, bones, morphs, and rigid bodies, with
+  coordinated remapping across geometry/material, deform/IK,
+  morph/display-frame, and physics references.
+- A certified structural transform orchestrator, deterministic structural
+  preview/audit evidence, and verified internal serialization/output pipeline.
+- A narrow public structural preview service through
+  `PmxStructuralCollectionEdit`, `PmxStructuralPreviewRequest`,
+  `PmxStructuralPreviewResult`, and `preview_structural_edit()`.
+- Adversarial structural integration, resource/state-isolation hardening, and
+  installed-wheel smoke coverage for reference analysis and structural preview.
+
+### Changed
+
+- Runtime/distribution version is promoted from prerelease `0.9.0a0` to final
+  `0.9.0`; Git/GitHub release label is `v0.9.0`.
+- Public capability reporting now documents the v0.9 structural contract as
+  `structural_preview=True`, `structural_write=False`, and
+  `reference_safe_preview` for the six supported structural target kinds.
+- Release-facing README, public API policy, CI version assertion, artifact
+  contracts, and publication checklist are synchronized to the final release.
+
+### Verified
+
+- The final-release baseline contains 1,495 automated tests with one optional
+  private-runtime skip and 88.86% combined statement/branch coverage.
+- The distribution gate builds an 85-member wheel and 220-member sdist, passes
+  deterministic artifact inspection, and verifies a disposable clean wheel
+  installation including installed reference-analysis and structural-preview
+  service smoke tests.
+- The same lint, compile, safety, full-suite coverage, build/inspection, clean
+  install, release-command, registry, and placeholder-hash workflow passes on
+  both Ubuntu and Windows.
+- Optional private-runtime validation remains read-only with respect to the
+  source model and preserves source integrity; private assets and paths are not
+  packaged or published.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported, and
+  edit-plan schema `1` plus the three v0.8 edit operation types remain frozen.
+- Existing v0.8 import, CLI, diagnostic, process, dry-run/apply, destination,
+  and source-integrity contracts remain compatible.
+- Structural preview is public, but structural write remains non-public and the
+  capability manifest explicitly reports `structural_write=False`.
+- No insertion, automatic index-width resizing, silent repair, arbitrary
+  structural CRUD, model creation, IK authoring, physics generation/simulation,
+  mesh sculpting, UV editing, GUI, Smart Tools, plugin system, or AI editing is
+  authorized by v0.9.0.
+- Changed structural transforms fail closed on opaque trailing data and on
+  incomplete or invalid reference/invariant evidence.
+- No PyPI publication is part of this release without separate explicit
+  Maintainer approval.
+
 ## pre-0.9.0 - 2026-08-15
 
 The Git/GitHub release label `pre-0.9.0` maps to the PEP 440 runtime and

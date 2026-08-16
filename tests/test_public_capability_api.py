@@ -55,6 +55,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
             get_args(capabilities.PmxRoundTripContract),
             ("validated_semantic_roundtrip",),
         )
+        self.assertFalse(hasattr(capabilities, "PmxStructuralContract"))
         self.assertEqual(
             manifest.to_dict(),
             {
@@ -72,6 +73,17 @@ class PublicCapabilityApiTests(unittest.TestCase):
                 ],
                 "texture_portability": True,
                 "private_runtime_required": False,
+                "structural_preview": True,
+                "structural_write": False,
+                "structural_target_kinds": [
+                    "vertex",
+                    "texture",
+                    "material",
+                    "bone",
+                    "morph",
+                    "rigid_body",
+                ],
+                "structural_contract": "reference_safe_preview",
             },
         )
 
@@ -80,6 +92,8 @@ class PublicCapabilityApiTests(unittest.TestCase):
             capabilities.get_capabilities().to_dict(),
             sort_keys=True,
         )
+
+        self.assertFalse(capabilities.get_capabilities().structural_write)
 
         for unsupported in (
             "create_model",
@@ -100,6 +114,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
             manifest.deform_types,
             manifest.morph_types,
             manifest.edit_operation_types,
+            manifest.structural_target_kinds,
         ):
             with self.subTest(value=value):
                 self.assertIsInstance(value, tuple)

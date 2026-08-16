@@ -13,9 +13,15 @@ from mmd_registry.pmx.document import (
     VALID_PMX_TEXT_ENCODINGS,
 )
 from mmd_registry.pmx.editing.catalog import get_pmx_edit_operation_catalog
+from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 
 
 PmxRoundTripContract = Literal["validated_semantic_roundtrip"]
+_PmxStructuralContract = Literal["reference_safe_preview"]
+
+_STRUCTURAL_TARGET_KINDS: tuple[str, ...] = tuple(
+    target_kind.value for target_kind in PmxReferenceTargetKind
+)
 
 
 def _supported_deform_types() -> tuple[int, ...]:
@@ -55,6 +61,10 @@ class PmxCapabilityManifest:
     edit_operation_types: tuple[str, ...]
     texture_portability: bool
     private_runtime_required: bool
+    structural_preview: bool = True
+    structural_write: bool = False
+    structural_target_kinds: tuple[str, ...] = _STRUCTURAL_TARGET_KINDS
+    structural_contract: _PmxStructuralContract = "reference_safe_preview"
 
     def to_dict(self) -> dict[str, object]:
         """Return a deterministic JSON-ready capability representation."""
@@ -70,6 +80,10 @@ class PmxCapabilityManifest:
             "edit_operation_types": list(self.edit_operation_types),
             "texture_portability": self.texture_portability,
             "private_runtime_required": self.private_runtime_required,
+            "structural_preview": self.structural_preview,
+            "structural_write": self.structural_write,
+            "structural_target_kinds": list(self.structural_target_kinds),
+            "structural_contract": self.structural_contract,
         }
 
 
@@ -90,6 +104,10 @@ def get_capabilities() -> PmxCapabilityManifest:
         ),
         texture_portability=True,
         private_runtime_required=False,
+        structural_preview=True,
+        structural_write=False,
+        structural_target_kinds=_STRUCTURAL_TARGET_KINDS,
+        structural_contract="reference_safe_preview",
     )
 
 

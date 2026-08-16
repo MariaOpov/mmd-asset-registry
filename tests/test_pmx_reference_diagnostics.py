@@ -437,8 +437,10 @@ class PmxReferenceDiagnosticTests(unittest.TestCase):
         self.assertNotIn("diagnose_reference_graph", pmx.__all__)
         self.assertNotIn("PmxReferenceDiagnostic", pmx.__all__)
         self.assertNotIn("diagnose_reference_graph", services.__all__)
-        self.assertNotIn("PmxReferenceDiagnostic", services.__all__)
 
+        # CP08 intentionally exposes PmxReferenceDiagnostic through the
+        # stable service boundary; the low-level diagnostic extractor remains
+        # internal and is still forbidden from the public service surface.
         source = (
             Path(__file__).resolve().parents[1]
             / "mmd_registry"

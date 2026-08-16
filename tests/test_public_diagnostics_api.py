@@ -51,6 +51,8 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
                 "load_document",
                 "inspect_document",
                 "validate_document",
+                "analyze_references",
+                "analyze_reference_node",
                 "preview_edit",
                 "apply_edit",
             ),

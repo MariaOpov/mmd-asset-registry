@@ -29,6 +29,8 @@ class PmxServiceOperation(StrEnum):
     LOAD_DOCUMENT = "load_document"
     INSPECT_DOCUMENT = "inspect_document"
     VALIDATE_DOCUMENT = "validate_document"
+    ANALYZE_REFERENCES = "analyze_references"
+    ANALYZE_REFERENCE_NODE = "analyze_reference_node"
     PREVIEW_EDIT = "preview_edit"
     APPLY_EDIT = "apply_edit"
 

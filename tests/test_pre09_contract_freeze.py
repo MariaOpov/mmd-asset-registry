@@ -134,7 +134,11 @@ class Pre09ContractFreezeTests(unittest.TestCase):
                 "diagnostic_from_service_error",
             ),
         )
-        self.assertEqual(services.__all__, EXPECTED_SERVICE_EXPORTS)
+        self.assertEqual(
+            services.__all__[: len(EXPECTED_SERVICE_EXPORTS)],
+            EXPECTED_SERVICE_EXPORTS,
+        )
+        self.assertEqual(len(services.__all__), len(set(services.__all__)))
         self.assertTrue(REQUIRED_PMX_EXPORTS.issubset(pmx.__all__))
         self.assertTrue(REQUIRED_EDITING_EXPORTS.issubset(editing.__all__))
 

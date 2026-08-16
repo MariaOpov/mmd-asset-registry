@@ -45,6 +45,14 @@ class ServiceBoundaryFoundationTests(unittest.TestCase):
                 "load_document",
                 "preview_edit",
                 "validate_document",
+                "PmxReferenceAnalysisResult",
+                "PmxReferenceDiagnostic",
+                "PmxReferenceDiagnosticCode",
+                "PmxReferenceImpact",
+                "PmxReferenceNode",
+                "PmxReferenceTargetKind",
+                "analyze_reference_node",
+                "analyze_references",
             ),
         )
         for name in services.__all__:

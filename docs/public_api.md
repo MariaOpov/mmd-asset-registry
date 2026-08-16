@@ -23,7 +23,7 @@ The current public namespaces are:
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
   listed in its `__all__`;
 - `mmd_registry.services`, for typed CLI-independent document, validation,
-  editing, and capability use cases listed in its `__all__`.
+  reference-analysis, editing, and capability use cases listed in its `__all__`.
 
 Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
@@ -63,6 +63,11 @@ The operation and code vocabularies describe current behavior only. They do
 not promise model creation, VMD editing, plugin loading, unrestricted physics
 editing, or future edit operations.
 
+The v0.9 reference-analysis service adds the `analyze_references` and
+`analyze_reference_node` operations. Argument and unexpected implementation
+failures use the same redacted service diagnostic boundary as the existing
+document, validation, and edit services.
+
 ## Document service
 
 `mmd_registry.services.load_document()` accepts a filesystem path or a
@@ -100,6 +105,33 @@ redacted `PmxServiceError` for the `validate_document` operation.
 The direct `mmd_registry.pmx.validate_pmx_document()` API retains its existing
 `PmxValidationError` behavior for compatibility. The service does not print,
 exit, load the CLI, alter edit execution, or add any edit operation.
+
+## Reference-analysis service
+
+`mmd_registry.services.analyze_references()` accepts an existing typed
+`PmxDocument` and returns one immutable `PmxReferenceAnalysisResult`. The
+service deliberately does not prevalidate the document: semantically invalid
+but structurally parsed documents must remain analyzable so dangling,
+out-of-range, and unsupported conditional reference evidence is observable.
+
+The result retains the deterministic raw reference graph and the stable
+structured diagnostics derived from it. Its `relationship_counts` property
+summarizes valid extracted edges by stable relationship ID; `is_clean` and
+`to_dict()` remain deterministic and JSON-ready. Public result construction
+fails closed if supplied diagnostics do not exactly match the graph-derived
+diagnostics. Analysis is read-only and does not write files, normalize indices,
+infer repairs, or mutate the document.
+
+`analyze_reference_node()` accepts one existing analysis snapshot plus a typed
+`PmxReferenceNode` and returns the conservative direct `PmxReferenceImpact`
+computed from that same snapshot. It does not reparse or re-extract the model.
+Missing nodes and invalid service arguments fail through `PmxServiceError`
+using the `analyze_reference_node` operation.
+
+The public service namespace also exposes the reference node/target kind,
+diagnostic, and impact types needed to consume these two operations without
+depending on CLI or presentation modules. Structural remapping and mutation
+remain outside this service and outside Checkpoint 08.
 
 ## Edit service
 

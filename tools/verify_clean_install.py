@@ -170,6 +170,62 @@ except public_diagnostics.PmxServiceError as error:
 else:
     raise AssertionError("installed validation service accepted invalid input")
 
+reference_analysis = public_services.analyze_references(installed_document)
+assert reference_analysis.to_dict() == {
+    "is_clean": True,
+    "target_counts": {
+        "vertex": 0,
+        "texture": 0,
+        "material": 0,
+        "bone": 0,
+        "morph": 0,
+        "rigid_body": 0,
+    },
+    "edge_count": 0,
+    "relationship_counts": {},
+    "invalid_target_count": 0,
+    "unsupported_state_count": 0,
+    "diagnostics": [],
+}, "installed reference analysis mismatch"
+try:
+    public_services.analyze_reference_node(reference_analysis, object())
+except public_diagnostics.PmxServiceError as error:
+    assert error.to_dict() == {
+        "code": "invalid_argument",
+        "operation": "analyze_reference_node",
+        "message": "Invalid service input.",
+    }, "installed reference-node diagnostic mismatch"
+else:
+    raise AssertionError("installed reference-node service accepted invalid input")
+
+structural_preview = public_services.preview_structural_edit(
+    installed_document,
+    public_services.PmxStructuralPreviewRequest(),
+)
+structural_preview_payload = structural_preview.to_dict()
+assert structural_preview.status == "no_changes", "installed structural preview status mismatch"
+assert structural_preview_payload["dry_run"] is True, (
+    "installed structural preview dry-run mismatch"
+)
+assert structural_preview_payload["output"] == {
+    "written": False,
+    "target_counts": {
+        "vertex": 0,
+        "texture": 0,
+        "material": 0,
+        "bone": 0,
+        "morph": 0,
+        "rigid_body": 0,
+    },
+    "reference_edge_count": 0,
+    "reference_diagnostic_count": 0,
+}, "installed structural preview output mismatch"
+assert structural_preview_payload["verification"] == {
+    "invariants": "passed",
+    "reference_model": "passed",
+    "serialization": "not_performed",
+}, "installed structural preview verification mismatch"
+
 edit_plan = mmd_registry.pmx.editing.PmxEditPlan(
     operations=(
         mmd_registry.pmx.editing.SetModelInfo(local_name="Installed edit service"),

@@ -22,13 +22,22 @@ from mmd_registry.pmx.reference_model import (
 )
 
 
-_SOURCE_TARGET_OWNERS = {
-    PmxReferenceSourceSection.VERTICES: PmxReferenceTargetKind.VERTEX,
-    PmxReferenceSourceSection.MATERIALS: PmxReferenceTargetKind.MATERIAL,
-    PmxReferenceSourceSection.BONES: PmxReferenceTargetKind.BONE,
-    PmxReferenceSourceSection.MORPHS: PmxReferenceTargetKind.MORPH,
-    PmxReferenceSourceSection.RIGID_BODIES: PmxReferenceTargetKind.RIGID_BODY,
-}
+def _source_target_owner(
+    section: PmxReferenceSourceSection,
+) -> PmxReferenceTargetKind | None:
+    """Return the addressable owner kind for one reference-source section."""
+
+    if section is PmxReferenceSourceSection.VERTICES:
+        return PmxReferenceTargetKind.VERTEX
+    if section is PmxReferenceSourceSection.MATERIALS:
+        return PmxReferenceTargetKind.MATERIAL
+    if section is PmxReferenceSourceSection.BONES:
+        return PmxReferenceTargetKind.BONE
+    if section is PmxReferenceSourceSection.MORPHS:
+        return PmxReferenceTargetKind.MORPH
+    if section is PmxReferenceSourceSection.RIGID_BODIES:
+        return PmxReferenceTargetKind.RIGID_BODY
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +81,36 @@ class PmxReferenceImpact:
 
         return not self.unresolved_states
 
+    @classmethod
+    def _from_validated_graph_parts(
+        cls,
+        *,
+        node: PmxReferenceNode,
+        inbound_edges: tuple[PmxReferenceEdge, ...],
+        outbound_edges: tuple[PmxReferenceEdge, ...],
+        source_invalid_targets: tuple[PmxReferenceInvalidTarget, ...],
+        source_unsupported_states: tuple[PmxReferenceUnsupportedState, ...],
+        unresolved_states: tuple[PmxReferenceUnsupportedState, ...],
+    ) -> PmxReferenceImpact:
+        """Build one impact from already-validated immutable graph evidence."""
+
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "node", node)
+        object.__setattr__(instance, "inbound_edges", inbound_edges)
+        object.__setattr__(instance, "outbound_edges", outbound_edges)
+        object.__setattr__(
+            instance,
+            "source_invalid_targets",
+            source_invalid_targets,
+        )
+        object.__setattr__(
+            instance,
+            "source_unsupported_states",
+            source_unsupported_states,
+        )
+        object.__setattr__(instance, "unresolved_states", unresolved_states)
+        return instance
+
 
 def _validate_query_node(
     graph: PmxReferenceGraph,
@@ -95,7 +134,7 @@ def _source_is_owned_by_node(
     node: PmxReferenceNode,
 ) -> bool:
     return (
-        _SOURCE_TARGET_OWNERS.get(section) is node.kind
+        _source_target_owner(section) is node.kind
         and record_index == node.index
     )
 
@@ -134,6 +173,76 @@ def outbound_references(
     )
 
 
+def _analyze_reference_impacts(
+    graph: PmxReferenceGraph,
+    nodes: tuple[PmxReferenceNode, ...],
+) -> tuple[PmxReferenceImpact, ...]:
+    """Analyze many existing nodes with one bounded pass over graph evidence."""
+
+    if not isinstance(graph, PmxReferenceGraph):
+        raise TypeError("graph must be a PmxReferenceGraph value.")
+    if type(nodes) is not tuple:
+        raise TypeError("nodes must be a tuple.")
+    if not all(isinstance(node, PmxReferenceNode) for node in nodes):
+        raise TypeError("nodes must contain only PmxReferenceNode values.")
+
+    for node in nodes:
+        _validate_query_node(graph, node)
+    if not nodes:
+        return ()
+
+    requested_keys = {(node.kind, node.index) for node in nodes}
+    inbound_by_key = {key: [] for key in requested_keys}
+    outbound_by_key = {key: [] for key in requested_keys}
+    invalid_by_key = {key: [] for key in requested_keys}
+    unsupported_by_key = {key: [] for key in requested_keys}
+
+    for edge in graph.edges:
+        inbound_bucket = inbound_by_key.get((edge.target.kind, edge.target.index))
+        if inbound_bucket is not None:
+            inbound_bucket.append(edge)
+
+        owner_kind = _source_target_owner(edge.source.section)
+        if owner_kind is not None:
+            outbound_bucket = outbound_by_key.get(
+                (owner_kind, edge.source.record_index)
+            )
+            if outbound_bucket is not None:
+                outbound_bucket.append(edge)
+
+    for item in graph.invalid_targets:
+        owner_kind = _source_target_owner(item.source.section)
+        if owner_kind is not None:
+            invalid_bucket = invalid_by_key.get(
+                (owner_kind, item.source.record_index)
+            )
+            if invalid_bucket is not None:
+                invalid_bucket.append(item)
+
+    for state in graph.unsupported_states:
+        owner_kind = _source_target_owner(state.source.section)
+        if owner_kind is not None:
+            unsupported_bucket = unsupported_by_key.get(
+                (owner_kind, state.source.record_index)
+            )
+            if unsupported_bucket is not None:
+                unsupported_bucket.append(state)
+
+    return tuple(
+        PmxReferenceImpact._from_validated_graph_parts(
+            node=node,
+            inbound_edges=tuple(inbound_by_key[(node.kind, node.index)]),
+            outbound_edges=tuple(outbound_by_key[(node.kind, node.index)]),
+            source_invalid_targets=tuple(invalid_by_key[(node.kind, node.index)]),
+            source_unsupported_states=tuple(
+                unsupported_by_key[(node.kind, node.index)]
+            ),
+            unresolved_states=graph.unsupported_states,
+        )
+        for node in nodes
+    )
+
+
 def analyze_reference_impact(
     graph: PmxReferenceGraph,
     node: PmxReferenceNode,
@@ -141,44 +250,7 @@ def analyze_reference_impact(
     """Return conservative direct reference impact for one existing node."""
 
     _validate_query_node(graph, node)
-
-    inbound = tuple(edge for edge in graph.edges if edge.target == node)
-    outbound = tuple(
-        edge
-        for edge in graph.edges
-        if _source_is_owned_by_node(
-            edge.source.section,
-            edge.source.record_index,
-            node,
-        )
-    )
-    source_invalid_targets = tuple(
-        item
-        for item in graph.invalid_targets
-        if _source_is_owned_by_node(
-            item.source.section,
-            item.source.record_index,
-            node,
-        )
-    )
-    source_unsupported_states = tuple(
-        state
-        for state in graph.unsupported_states
-        if _source_is_owned_by_node(
-            state.source.section,
-            state.source.record_index,
-            node,
-        )
-    )
-
-    return PmxReferenceImpact(
-        node=node,
-        inbound_edges=inbound,
-        outbound_edges=outbound,
-        source_invalid_targets=source_invalid_targets,
-        source_unsupported_states=source_unsupported_states,
-        unresolved_states=graph.unsupported_states,
-    )
+    return _analyze_reference_impacts(graph, (node,))[0]
 
 
 __all__ = (

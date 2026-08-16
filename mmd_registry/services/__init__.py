@@ -239,9 +239,10 @@ class PmxStructuralPreviewResult:
 
 
 _STRUCTURAL_TARGET_ORDER = tuple(PmxReferenceTargetKind)
-_STRUCTURAL_TARGET_RANK = {
-    target_kind: rank for rank, target_kind in enumerate(_STRUCTURAL_TARGET_ORDER)
-}
+
+
+def _structural_target_rank(target_kind: PmxReferenceTargetKind) -> int:
+    return _STRUCTURAL_TARGET_ORDER.index(target_kind)
 
 
 def _structural_target_size(
@@ -270,7 +271,7 @@ def _build_structural_preview_intent(
     transforms: list[PmxCollectionTransform] = []
     edits = sorted(
         request.collection_edits,
-        key=lambda edit: _STRUCTURAL_TARGET_RANK[edit.target_kind],
+        key=lambda edit: _structural_target_rank(edit.target_kind),
     )
     for edit in edits:
         old_size = _structural_target_size(document, edit.target_kind)

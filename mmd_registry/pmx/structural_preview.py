@@ -55,7 +55,7 @@ from mmd_registry.pmx.reference_model import (
 )
 from mmd_registry.pmx.reference_queries import (
     PmxReferenceImpact,
-    analyze_reference_impact,
+    _analyze_reference_impacts,
 )
 from mmd_registry.pmx.structural_invariants import (
     PmxStructuralInvariantCertificate,
@@ -64,11 +64,6 @@ from mmd_registry.pmx.structural_invariants import (
 
 
 PMX_STRUCTURAL_PREVIEW_SCHEMA_VERSION: Final[int] = 1
-
-_TARGET_KIND_ORDER: Final[dict[PmxReferenceTargetKind, int]] = {
-    kind: position for position, kind in enumerate(PmxReferenceTargetKind)
-}
-
 
 def _target_collection_size(
     document: PmxDocument,
@@ -358,18 +353,28 @@ def _reference_impact_audits(
     source_graph: PmxReferenceGraph,
     collections: tuple[PmxStructuralCollectionAudit, ...],
 ) -> tuple[PmxStructuralReferenceImpactAudit, ...]:
-    result: list[PmxStructuralReferenceImpactAudit] = []
+    specs: list[tuple[PmxReferenceNode, int | None]] = []
     for collection in collections:
         for old_index in collection.changed_old_indices:
-            node = PmxReferenceNode(kind=collection.kind, index=old_index)
-            result.append(
-                PmxStructuralReferenceImpactAudit(
-                    node=node,
-                    new_index=collection.transform.remap.targets[old_index],
-                    impact=analyze_reference_impact(source_graph, node),
+            specs.append(
+                (
+                    PmxReferenceNode(kind=collection.kind, index=old_index),
+                    collection.transform.remap.targets[old_index],
                 )
             )
-    return tuple(result)
+
+    impacts = _analyze_reference_impacts(
+        source_graph,
+        tuple(node for node, _new_index in specs),
+    )
+    return tuple(
+        PmxStructuralReferenceImpactAudit(
+            node=node,
+            new_index=new_index,
+            impact=impact,
+        )
+        for (node, new_index), impact in zip(specs, impacts, strict=True)
+    )
 
 
 def _calculate_resolved_intent_sha256(

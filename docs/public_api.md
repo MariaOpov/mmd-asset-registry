@@ -1,8 +1,9 @@
 # Public API policy
 
-This document defines the package boundary introduced during the pre-0.9.0
-architecture runway. It does not expand PMX editing authority or change any
-v0.8.5 behavior.
+This document defines the public package boundary carried into v0.9.0. The
+release adds read-only reference analysis and a certified reference-safe
+structural preview service while retaining the v0.8 bounded edit contracts and
+keeping structural write non-public.
 
 ## Public surface
 
@@ -23,7 +24,8 @@ The current public namespaces are:
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
   listed in its `__all__`;
 - `mmd_registry.services`, for typed CLI-independent document, validation,
-  reference-analysis, editing, and capability use cases listed in its `__all__`.
+  reference-analysis, bounded editing, structural preview, and capability use
+  cases listed in its `__all__`.
 
 Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
@@ -36,8 +38,10 @@ existing v0.8 safety pipeline and does not expand editing authority.
 `PmxRoundTripContract`, and `get_capabilities`. The returned manifest is frozen,
 slotted, deterministic, independent from private runtime configuration, and
 contains only the PMX versions, encodings, index widths, deform and morph
-types, round-trip contract, texture portability, soft-body support, and three
-edit operations already implemented by v0.8.5.
+types, round-trip contract, texture portability, soft-body support, the three
+edit operations already implemented by v0.8.5, and the v0.9 structural-preview
+contract. The structural fields report preview support, no public structural
+write, the six supported target kinds, and `reference_safe_preview`.
 
 Absence from the manifest means unsupported; the API does not imply model
 creation, VMD editing, plugin loading, unrestricted physics editing, or any
@@ -130,8 +134,33 @@ using the `analyze_reference_node` operation.
 
 The public service namespace also exposes the reference node/target kind,
 diagnostic, and impact types needed to consume these two operations without
-depending on CLI or presentation modules. Structural remapping and mutation
-remain outside this service and outside Checkpoint 08.
+depending on CLI or presentation modules. Reference analysis itself remains
+read-only; v0.9.0 exposes structural intent only through the separately bounded
+structural preview service below.
+
+## Structural preview service
+
+Version 0.9.0 exposes one deliberately narrow structural service boundary.
+`PmxStructuralCollectionEdit` describes an ordered subset of existing indices
+for one supported target collection, `PmxStructuralPreviewRequest` combines
+non-duplicated collection edits, and `preview_structural_edit()` returns an
+immutable `PmxStructuralPreviewResult` only after the structural intent passes
+certification and fresh reference-integrity analysis.
+
+The supported public structural target kinds are `vertex`, `texture`,
+`material`, `bone`, `morph`, and `rigid_body`. Reordering and deletion of
+existing records may be previewed when all dependent references remain valid or
+are coordinately remapped. New indices/insertion are not authorized, boolean
+values are never accepted as indices, and changed transforms fail closed on
+opaque trailing data, invalid references, unsupported states, or index-width
+capacity violations.
+
+This service is dry-run only. It does not serialize, write, replace, or mutate a
+source file, and it does not expose the internal structural output kernel. The
+public report therefore keeps `dry_run` true, `output.written` false, and
+`verification.serialization` equal to `not_performed`. The capability manifest
+is authoritative: `structural_preview=True`, `structural_write=False`, and
+`structural_contract="reference_safe_preview"`.
 
 ## Edit service
 

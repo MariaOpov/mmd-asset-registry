@@ -1,4 +1,4 @@
-"""Contract tests for the pre-0.9.0 public package boundary."""
+"""Contract tests for the v0.9.0 public package boundary."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class PublicPackageArchitectureTests(unittest.TestCase):
 
     def test_package_root_has_one_explicit_export(self) -> None:
         self.assertEqual(mmd_registry.__all__, ("__version__",))
-        self.assertEqual(mmd_registry.__version__, "0.9.0a0")
+        self.assertEqual(mmd_registry.__version__, "0.9.0")
 
         namespace: dict[str, object] = {}
         exec("from mmd_registry import *", namespace)

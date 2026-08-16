@@ -103,7 +103,7 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.9.0a0'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.9.0'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

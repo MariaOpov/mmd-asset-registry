@@ -19,7 +19,7 @@ from tools.inspect_distribution_artifacts import (
 
 IDENTITY = ProjectIdentity(
     name="mmd-asset-registry",
-    version="0.9.0a0",
+    version="0.9.0",
     requires_python=">=3.12",
     dependencies=("PyYAML>=6.0",),
     console_scripts=(("mmd-asset-registry", "mmd_registry.cli:main"),),
@@ -42,7 +42,7 @@ def package_metadata(*, version: str = IDENTITY.version) -> bytes:
 
 def default_wheel_files() -> dict[str, bytes]:
     return {
-        "mmd_registry/__init__.py": b'__version__ = "0.9.0a0"\n',
+        "mmd_registry/__init__.py": b'__version__ = "0.9.0"\n',
         "mmd_registry/diagnostics.py": b"__all__ = ()\n",
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",
@@ -88,7 +88,7 @@ def default_sdist_files() -> dict[str, bytes]:
         "MANIFEST.in": b"recursive-include tests *.py\n",
         "PKG-INFO": package_metadata(),
         "README.md": b"# Test package\n",
-        "mmd_registry/__init__.py": b'__version__ = "0.9.0a0"\n',
+        "mmd_registry/__init__.py": b'__version__ = "0.9.0"\n',
         "mmd_registry/diagnostics.py": b"__all__ = ()\n",
         "mmd_registry/pmx/__init__.py": b"__all__ = ()\n",
         "mmd_registry/services/__init__.py": b"__all__ = ()\n",

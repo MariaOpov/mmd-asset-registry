@@ -53,6 +53,10 @@ class ServiceBoundaryFoundationTests(unittest.TestCase):
                 "PmxReferenceTargetKind",
                 "analyze_reference_node",
                 "analyze_references",
+                "PmxStructuralCollectionEdit",
+                "PmxStructuralPreviewRequest",
+                "PmxStructuralPreviewResult",
+                "preview_structural_edit",
             ),
         )
         for name in services.__all__:

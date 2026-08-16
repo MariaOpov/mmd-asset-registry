@@ -33,6 +33,7 @@ class PmxServiceOperation(StrEnum):
     ANALYZE_REFERENCE_NODE = "analyze_reference_node"
     PREVIEW_EDIT = "preview_edit"
     APPLY_EDIT = "apply_edit"
+    PREVIEW_STRUCTURAL_EDIT = "preview_structural_edit"
 
 
 class PmxServiceDiagnosticCode(StrEnum):
@@ -45,6 +46,7 @@ class PmxServiceDiagnosticCode(StrEnum):
     EDIT_PLAN_INVALID = "edit_plan_invalid"
     EDIT_PATH_UNSAFE = "edit_path_unsafe"
     EDIT_VERIFICATION_FAILED = "edit_verification_failed"
+    STRUCTURAL_PREVIEW_FAILED = "structural_preview_failed"
     INTERNAL_ERROR = "service_internal_error"
 
 
@@ -193,6 +195,16 @@ def diagnostic_from_service_error(
             operation,
             PmxServiceDiagnosticCode.EDIT_VERIFICATION_FAILED,
             "PMX edit verification failed.",
+        )
+
+    if (
+        operation is PmxServiceOperation.PREVIEW_STRUCTURAL_EDIT
+        and isinstance(error, ValueError)
+    ):
+        return _diagnostic(
+            operation,
+            PmxServiceDiagnosticCode.STRUCTURAL_PREVIEW_FAILED,
+            "Structural preview failed reference-safety validation.",
         )
 
     if isinstance(error, OSError):

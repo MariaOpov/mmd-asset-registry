@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
@@ -15,11 +15,16 @@ from mmd_registry.diagnostics import (
     PmxServiceOperation,
     diagnostic_from_service_error,
 )
+from mmd_registry.pmx.collection_transform import (
+    PmxCollectionTransform,
+    PmxStructuralTransformIntent,
+)
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.editing.output import PmxEditWriteResult, write_pmx_edit
 from mmd_registry.pmx.editing.plan import PmxEditPlan
 from mmd_registry.pmx.editing.preview import PmxEditPreview, dry_run_pmx_edit
 from mmd_registry.pmx.errors import PmxValidationError, PmxValidationIssue
+from mmd_registry.pmx.index_remap import PmxIndexRemap
 from mmd_registry.pmx.reader import load_pmx
 from mmd_registry.pmx.reference_diagnostics import (
     PmxReferenceDiagnostic,
@@ -37,6 +42,10 @@ from mmd_registry.pmx.reference_model import (
 from mmd_registry.pmx.reference_queries import (
     PmxReferenceImpact,
     analyze_reference_impact,
+)
+from mmd_registry.pmx.structural_preview import (
+    PmxStructuralPreview as _PmxStructuralPreview,
+    preview_pmx_structural_transform as _preview_pmx_structural_transform,
 )
 from mmd_registry.pmx.validation import validate_pmx_document
 
@@ -154,6 +163,164 @@ class PmxReferenceAnalysisResult:
             "unsupported_state_count": len(self.graph.unsupported_states),
             "diagnostics": [item.to_dict() for item in self.diagnostics],
         }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralCollectionEdit:
+    """One preview-only delete/reorder request for a structural target collection."""
+
+    target_kind: PmxReferenceTargetKind
+    old_indices_in_new_order: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_kind, PmxReferenceTargetKind):
+            raise TypeError("target_kind must be a PmxReferenceTargetKind value.")
+        if type(self.old_indices_in_new_order) is not tuple:
+            raise TypeError("old_indices_in_new_order must be a tuple.")
+        if any(type(index) is not int for index in self.old_indices_in_new_order):
+            raise TypeError(
+                "old_indices_in_new_order must contain only integer indices."
+            )
+        if any(index < 0 for index in self.old_indices_in_new_order):
+            raise ValueError("old_indices_in_new_order cannot contain negative indices.")
+        if len(set(self.old_indices_in_new_order)) != len(
+            self.old_indices_in_new_order
+        ):
+            raise ValueError("old_indices_in_new_order cannot contain duplicates.")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralPreviewRequest:
+    """Immutable public request for reference-safe structural preview only."""
+
+    collection_edits: tuple[PmxStructuralCollectionEdit, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.collection_edits) is not tuple:
+            raise TypeError("collection_edits must be a tuple.")
+        if not all(
+            isinstance(edit, PmxStructuralCollectionEdit)
+            for edit in self.collection_edits
+        ):
+            raise TypeError(
+                "collection_edits must contain only PmxStructuralCollectionEdit values."
+            )
+        kinds = tuple(edit.target_kind for edit in self.collection_edits)
+        if len(set(kinds)) != len(kinds):
+            raise ValueError("collection_edits cannot repeat one target_kind.")
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralPreviewResult:
+    """Service-facing structural preview without exporting CP17 implementation types."""
+
+    _preview: _PmxStructuralPreview = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self._preview, _PmxStructuralPreview):
+            raise TypeError("_preview must be an internal PmxStructuralPreview value.")
+
+    @property
+    def status(self) -> str:
+        """Return the stable preview status."""
+
+        return self._preview.status
+
+    @property
+    def document(self) -> PmxDocument:
+        """Return the certified intended document represented by this preview."""
+
+        return self._preview.certificate.document
+
+    def to_dict(self) -> dict[str, object]:
+        """Return deterministic JSON-ready preview evidence."""
+
+        return self._preview.to_dict()
+
+
+_STRUCTURAL_TARGET_ORDER = tuple(PmxReferenceTargetKind)
+_STRUCTURAL_TARGET_RANK = {
+    target_kind: rank for rank, target_kind in enumerate(_STRUCTURAL_TARGET_ORDER)
+}
+
+
+def _structural_target_size(
+    document: PmxDocument,
+    target_kind: PmxReferenceTargetKind,
+) -> int:
+    if target_kind is PmxReferenceTargetKind.VERTEX:
+        return len(document.vertices)
+    if target_kind is PmxReferenceTargetKind.TEXTURE:
+        return len(document.texture_paths)
+    if target_kind is PmxReferenceTargetKind.MATERIAL:
+        return len(document.materials)
+    if target_kind is PmxReferenceTargetKind.BONE:
+        return len(document.bones)
+    if target_kind is PmxReferenceTargetKind.MORPH:
+        return len(document.morphs)
+    if target_kind is PmxReferenceTargetKind.RIGID_BODY:
+        return len(document.rigid_bodies)
+    raise AssertionError(f"unsupported structural target kind: {target_kind!r}")
+
+
+def _build_structural_preview_intent(
+    document: PmxDocument,
+    request: PmxStructuralPreviewRequest,
+) -> PmxStructuralTransformIntent:
+    transforms: list[PmxCollectionTransform] = []
+    edits = sorted(
+        request.collection_edits,
+        key=lambda edit: _STRUCTURAL_TARGET_RANK[edit.target_kind],
+    )
+    for edit in edits:
+        old_size = _structural_target_size(document, edit.target_kind)
+        for old_index in edit.old_indices_in_new_order:
+            if old_index >= old_size:
+                raise ValueError(
+                    f"{edit.target_kind.value} old index {old_index} "
+                    f"is out of range for collection size {old_size}."
+                )
+
+        targets: list[int | None] = [None] * old_size
+        for new_index, old_index in enumerate(edit.old_indices_in_new_order):
+            targets[old_index] = new_index
+
+        transforms.append(
+            PmxCollectionTransform(
+                kind=edit.target_kind,
+                remap=PmxIndexRemap(
+                    targets=tuple(targets),
+                    new_size=len(edit.old_indices_in_new_order),
+                ),
+            )
+        )
+
+    return PmxStructuralTransformIntent(transforms=tuple(transforms))
+
+
+def preview_structural_edit(
+    document: PmxDocument,
+    request: PmxStructuralPreviewRequest,
+) -> PmxStructuralPreviewResult:
+    """Return a deterministic reference-safe structural preview without writing."""
+
+    try:
+        if not isinstance(document, PmxDocument):
+            raise TypeError("document must be a PmxDocument instance.")
+        if not isinstance(request, PmxStructuralPreviewRequest):
+            raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        intent = _build_structural_preview_intent(document, request)
+        return PmxStructuralPreviewResult(
+            _preview_pmx_structural_transform(document, intent)
+        )
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.PREVIEW_STRUCTURAL_EDIT,
+                error,
+            )
+        )
+    raise failure from None
 
 
 def load_document(source: str | Path | BinaryIO) -> PmxDocument:
@@ -320,4 +487,8 @@ __all__ = (
     "PmxReferenceTargetKind",
     "analyze_reference_node",
     "analyze_references",
+    "PmxStructuralCollectionEdit",
+    "PmxStructuralPreviewRequest",
+    "PmxStructuralPreviewResult",
+    "preview_structural_edit",
 )

@@ -55,6 +55,7 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
                 "analyze_reference_node",
                 "preview_edit",
                 "apply_edit",
+                "preview_structural_edit",
             ),
         )
         serialized = " ".join(

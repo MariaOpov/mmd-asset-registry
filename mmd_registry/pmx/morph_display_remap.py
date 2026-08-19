@@ -125,19 +125,19 @@ def _require_additional_uv_count(additional_uv_count: object) -> int:
     return additional_uv_count
 
 
-_EXPECTED_OFFSET_TYPES = {
-    0: PmxGroupMorphOffset,
-    1: PmxVertexMorphOffset,
-    2: PmxBoneMorphOffset,
-    3: PmxUvMorphOffset,
-    4: PmxUvMorphOffset,
-    5: PmxUvMorphOffset,
-    6: PmxUvMorphOffset,
-    7: PmxUvMorphOffset,
-    8: PmxMaterialMorphOffset,
-    9: PmxFlipMorphOffset,
-    10: PmxImpulseMorphOffset,
-}
+_EXPECTED_OFFSET_TYPES: tuple[type[object], ...] = (
+    PmxGroupMorphOffset,
+    PmxVertexMorphOffset,
+    PmxBoneMorphOffset,
+    PmxUvMorphOffset,
+    PmxUvMorphOffset,
+    PmxUvMorphOffset,
+    PmxUvMorphOffset,
+    PmxUvMorphOffset,
+    PmxMaterialMorphOffset,
+    PmxFlipMorphOffset,
+    PmxImpulseMorphOffset,
+)
 
 
 def _remap_morph_offset(
@@ -206,7 +206,7 @@ def _remap_surviving_morph(
     bone_transform: PmxCollectionTransform,
     material_transform: PmxCollectionTransform,
 ) -> PmxMorph:
-    if morph.morph_type not in _EXPECTED_OFFSET_TYPES:
+    if not 0 <= morph.morph_type < len(_EXPECTED_OFFSET_TYPES):
         raise ValueError(
             f"morphs[{source_morph_index}].morph_type must be a value from 0 through 10."
         )

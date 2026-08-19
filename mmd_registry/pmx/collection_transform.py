@@ -21,9 +21,13 @@ from mmd_registry.pmx.index_remap import PmxIndexRemap
 from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 
 
-_TARGET_KIND_ORDER = {
-    kind: position for position, kind in enumerate(PmxReferenceTargetKind)
-}
+_TARGET_KIND_ORDER: tuple[PmxReferenceTargetKind, ...] = tuple(PmxReferenceTargetKind)
+
+
+def _target_kind_position(kind: PmxReferenceTargetKind) -> int:
+    """Return canonical target-kind position without mutable lookup state."""
+
+    return _TARGET_KIND_ORDER.index(kind)
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +145,7 @@ class PmxStructuralTransformIntent:
         canonical = tuple(
             sorted(
                 self.transforms,
-                key=lambda transform: _TARGET_KIND_ORDER[transform.kind],
+                key=lambda transform: _target_kind_position(transform.kind),
             )
         )
         if self.transforms != canonical:

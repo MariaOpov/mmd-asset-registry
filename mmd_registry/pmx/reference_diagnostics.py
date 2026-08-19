@@ -33,33 +33,77 @@ class PmxReferenceDiagnosticCode(StrEnum):
     UV_LAYER_CONDITION_MISMATCH = "uv_layer_condition_mismatch"
 
 
-_MESSAGES = {
-    PmxReferenceDiagnosticCode.INVALID_TARGET:
+_MESSAGES: tuple[tuple[PmxReferenceDiagnosticCode, str], ...] = (
+    (
+        PmxReferenceDiagnosticCode.INVALID_TARGET,
         "Reference target index is invalid.",
-    PmxReferenceDiagnosticCode.ACTIVE_PAYLOAD_MISSING:
-        "Active reference payload is missing.",
-    PmxReferenceDiagnosticCode.INACTIVE_PAYLOAD_PRESENT:
-        "Inactive reference payload is present.",
-    PmxReferenceDiagnosticCode.MORPH_OFFSET_TYPE_MISMATCH:
-        "Morph offset type does not match the reference relationship.",
-    PmxReferenceDiagnosticCode.VERSION_CONDITION_MISMATCH:
-        "Reference relationship is not supported by the PMX version.",
-    PmxReferenceDiagnosticCode.UV_LAYER_CONDITION_MISMATCH:
-        "UV reference relationship exceeds available additional UV layers.",
-}
-
-_UNSUPPORTED_CODE_MAP = {
-    PmxReferenceUnsupportedStateKind.ACTIVE_PAYLOAD_MISSING:
+    ),
+    (
         PmxReferenceDiagnosticCode.ACTIVE_PAYLOAD_MISSING,
-    PmxReferenceUnsupportedStateKind.INACTIVE_PAYLOAD_PRESENT:
+        "Active reference payload is missing.",
+    ),
+    (
         PmxReferenceDiagnosticCode.INACTIVE_PAYLOAD_PRESENT,
-    PmxReferenceUnsupportedStateKind.MORPH_OFFSET_TYPE_MISMATCH:
+        "Inactive reference payload is present.",
+    ),
+    (
         PmxReferenceDiagnosticCode.MORPH_OFFSET_TYPE_MISMATCH,
-    PmxReferenceUnsupportedStateKind.VERSION_CONDITION_MISMATCH:
+        "Morph offset type does not match the reference relationship.",
+    ),
+    (
         PmxReferenceDiagnosticCode.VERSION_CONDITION_MISMATCH,
-    PmxReferenceUnsupportedStateKind.UV_LAYER_CONDITION_MISMATCH:
+        "Reference relationship is not supported by the PMX version.",
+    ),
+    (
         PmxReferenceDiagnosticCode.UV_LAYER_CONDITION_MISMATCH,
-}
+        "UV reference relationship exceeds available additional UV layers.",
+    ),
+)
+
+_UNSUPPORTED_CODE_MAP: tuple[
+    tuple[PmxReferenceUnsupportedStateKind, PmxReferenceDiagnosticCode], ...
+] = (
+    (
+        PmxReferenceUnsupportedStateKind.ACTIVE_PAYLOAD_MISSING,
+        PmxReferenceDiagnosticCode.ACTIVE_PAYLOAD_MISSING,
+    ),
+    (
+        PmxReferenceUnsupportedStateKind.INACTIVE_PAYLOAD_PRESENT,
+        PmxReferenceDiagnosticCode.INACTIVE_PAYLOAD_PRESENT,
+    ),
+    (
+        PmxReferenceUnsupportedStateKind.MORPH_OFFSET_TYPE_MISMATCH,
+        PmxReferenceDiagnosticCode.MORPH_OFFSET_TYPE_MISMATCH,
+    ),
+    (
+        PmxReferenceUnsupportedStateKind.VERSION_CONDITION_MISMATCH,
+        PmxReferenceDiagnosticCode.VERSION_CONDITION_MISMATCH,
+    ),
+    (
+        PmxReferenceUnsupportedStateKind.UV_LAYER_CONDITION_MISMATCH,
+        PmxReferenceDiagnosticCode.UV_LAYER_CONDITION_MISMATCH,
+    ),
+)
+
+
+def _message_for_code(code: PmxReferenceDiagnosticCode) -> str:
+    """Return one stable diagnostic message from immutable module state."""
+
+    for candidate_code, message in _MESSAGES:
+        if code is candidate_code:
+            return message
+    raise AssertionError(f"unsupported reference diagnostic code: {code!r}")
+
+
+def _code_for_unsupported_state(
+    kind: PmxReferenceUnsupportedStateKind,
+) -> PmxReferenceDiagnosticCode:
+    """Return one stable unsupported-state code from immutable module state."""
+
+    for candidate_kind, code in _UNSUPPORTED_CODE_MAP:
+        if kind is candidate_kind:
+            return code
+    raise AssertionError(f"unsupported reference state kind: {kind!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +124,7 @@ class PmxReferenceDiagnostic:
             raise TypeError("code must be a PmxReferenceDiagnosticCode value.")
         if type(self.message) is not str or not self.message:
             raise ValueError("message must be a non-empty string.")
-        if self.message != _MESSAGES[self.code]:
+        if self.message != _message_for_code(self.code):
             raise ValueError("message must match the stable diagnostic code message.")
         if type(self.relationship_id) is not str or not self.relationship_id:
             raise ValueError("relationship_id must be a non-empty string.")
@@ -144,7 +188,7 @@ def _diagnostic_from_invalid_target(
 ) -> PmxReferenceDiagnostic:
     return PmxReferenceDiagnostic(
         code=PmxReferenceDiagnosticCode.INVALID_TARGET,
-        message=_MESSAGES[PmxReferenceDiagnosticCode.INVALID_TARGET],
+        message=_message_for_code(PmxReferenceDiagnosticCode.INVALID_TARGET),
         relationship_id=evidence.relationship_id,
         source=evidence.source,
         target_kind=evidence.target_kind,
@@ -156,10 +200,10 @@ def _diagnostic_from_invalid_target(
 def _diagnostic_from_unsupported_state(
     evidence: PmxReferenceUnsupportedState,
 ) -> PmxReferenceDiagnostic:
-    code = _UNSUPPORTED_CODE_MAP[evidence.kind]
+    code = _code_for_unsupported_state(evidence.kind)
     return PmxReferenceDiagnostic(
         code=code,
-        message=_MESSAGES[code],
+        message=_message_for_code(code),
         relationship_id=evidence.relationship_id,
         source=evidence.source,
         observed=evidence.observed,

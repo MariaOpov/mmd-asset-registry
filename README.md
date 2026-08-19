@@ -17,20 +17,52 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.0
-Release label: v0.9.0
+Tool version: 0.9.1
+Release label: v0.9.1
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.0` matches the PEP 440 Python package version
-`0.9.0`. This release adds the reference-safe structural analysis and preview
-foundation while deliberately keeping public structural write disabled;
-registry schema `0.3` remains unchanged.
+GitHub release label `v0.9.1` matches the PEP 440 Python package version
+`0.9.1`. This release promotes the reviewed reference-safe structural pipeline
+to bounded public execution through `apply_structural_edit()` while keeping the
+raw writer private; registry schema `0.3` remains unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
+
+## Version 0.9.1 safe structural execution
+
+Version 0.9.1 additively promotes the v0.9.0 preview foundation to a bounded
+public structural execution service:
+
+- `apply_structural_edit()` accepts the same frozen reorder/delete request model
+  used by preview for vertex, texture, material, bone, morph, and rigid-body
+  collections.
+- Execution rebuilds reference-safe transforms, certifies invariants and
+  reference integrity, serializes, reparses, re-certifies, checks semantic
+  equality, re-verifies source identity/SHA-256, and only then publishes a
+  distinct output atomically.
+- Failure diagnostics expose bounded stage/provenance evidence without leaking
+  private paths or arbitrary exception text.
+- Repeated/adversarial execution remains state-isolated, and installed-package
+  plus private-real-model validation exercises the public execution boundary.
+- The v0.8 and v0.9.0 public contracts remain additively compatible.
+
+The canonical capability manifest reports `structural_preview=True`,
+`structural_write=True`, and `structural_contract="reference_safe_execution"`.
+Insertion, automatic index-width resizing, in-place source mutation, arbitrary
+structural CRUD, and direct public access to the raw structural writer remain
+unauthorized.
+
+The CP23 feature-branch release-readiness evidence passes 1,666 automated tests
+with one optional private-runtime skip and 88.57% combined statement/branch
+coverage. Fresh v0.9.1 artifacts inspect as an 85-file-member wheel and a
+235-file-member sdist, followed by successful disposable clean-install
+verification of the installed structural execution service. Artifact SHA-256
+digests are intentionally not frozen in source documentation before the final
+committed build because any later commit/rebuild changes the artifact bytes.
 
 ## pre-0.9.0 architecture runway
 
@@ -1357,7 +1389,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.0` package-version assertion
+8. Exact `0.9.1` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands
@@ -1468,17 +1500,17 @@ mmd-asset-registry/
 
 ## Current limitations
 
-v0.9.0 does not:
+v0.9.1 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
-- Publicly commit structural collection edits; the v0.9.0 structural service is
-  preview-only and reports `structural_write=False`
+- Expose the raw structural writer; bounded reorder/delete execution is available
+  only through the reviewed `apply_structural_edit()` service
 - Insert new vertices, textures, materials, bones, morphs, or rigid bodies
-- Persist public add/delete/reorder operations for textures or materials
+- Perform arbitrary structural CRUD or synthesize new collection indices
 - Edit material surface partitions
 - Author mesh geometry, normals, UVs, weights, bone/IK data, morph payloads,
-  display frames, or physics through a public structural writer
+  display frames, or physics through the structural execution service
 - Silently repair model data or automatically resize PMX index widths
 - Diagnose non-texture external dependencies
 - Register scan results back into `assets.yaml`
@@ -1500,6 +1532,8 @@ Release progression after the completed v0.8 line:
   public-boundary, quality, and cross-platform release runway
 - `v0.9.0` / package `0.9.0` — Reference-safe structural analysis and certified
   preview foundation with public structural write intentionally disabled
+- `v0.9.1` / package `0.9.1` — Bounded reference-safe structural reorder/delete
+  execution through the public service boundary with atomic verified output
 - Later v0.9 releases — Separately reviewed, safety-bounded feature work
 - Later: multilingual PMX naming with external reviewable dictionaries,
   animation-pipeline integration, PMD structural scanning, registry/browser

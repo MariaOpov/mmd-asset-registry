@@ -1,7 +1,7 @@
-# MMD Asset Registry v0.9.0 Release Checklist
+# MMD Asset Registry v0.9.1 Release Checklist
 
-The Git/GitHub release label is `v0.9.0`; the PEP 440 runtime and
-distribution version is `0.9.0`. This is a normal GitHub Release, not a prerelease.
+The Git/GitHub release label is `v0.9.1`; the PEP 440 runtime and
+distribution version is `0.9.1`. This is a normal GitHub Release, not a prerelease.
 Never tag the feature branch, never create the release before merged-main verification,
 and never publish to PyPI without separate explicit Maintainer approval.
 
@@ -22,13 +22,13 @@ and never publish to PyPI without separate explicit Maintainer approval.
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; from mmd_registry.constants import LATEST_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS; assert __version__ == '0.9.0'; assert LATEST_SCHEMA_VERSION == '0.3'; assert SUPPORTED_SCHEMA_VERSIONS == frozenset(('0.2', '0.3'))"
+  python -c "from mmd_registry import __version__; from mmd_registry.constants import LATEST_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS; assert __version__ == '0.9.1'; assert LATEST_SCHEMA_VERSION == '0.3'; assert SUPPORTED_SCHEMA_VERSIONS == frozenset(('0.2', '0.3'))"
   ```
 
-- [ ] Confirm the public structural capability boundary remains preview-only:
+- [ ] Confirm the public structural capability boundary authorizes only the reviewed bounded execution service:
 
   ```bat
-  python -c "from mmd_registry.capabilities import get_capabilities; c=get_capabilities(); assert c.structural_preview is True; assert c.structural_write is False; assert c.structural_contract == 'reference_safe_preview'; assert c.structural_target_kinds == ('vertex','texture','material','bone','morph','rigid_body')"
+  python -c "from mmd_registry.capabilities import get_capabilities; c=get_capabilities(); assert c.structural_preview is True; assert c.structural_write is True; assert c.structural_contract == 'reference_safe_execution'; assert c.structural_target_kinds == ('vertex','texture','material','bone','morph','rigid_body')"
   ```
 
 - [ ] Run Ruff, compilation, compatibility/public-boundary checks, and the full
@@ -37,12 +37,13 @@ and never publish to PyPI without separate explicit Maintainer approval.
   ```bat
   python -m ruff check mmd_registry tests tools check_assets.py
   python -m compileall -q mmd_registry tests tools check_assets.py
-  python -m unittest -q tests.test_v08_contract_freeze tests.test_v08_backward_compatibility tests.test_pre090_compatibility_contract tests.test_pre09_contract_freeze tests.test_public_package_architecture tests.test_console_entry_point tests.test_cli_service_decoupling tests.test_public_capability_api tests.test_public_diagnostics_api tests.test_stable_document_service tests.test_stable_validation_service tests.test_stable_edit_service tests.test_reference_analysis_service tests.test_structural_preview_service tests.test_cross_platform_build_install_gate
+  python -m unittest -q tests.test_v08_contract_freeze tests.test_v08_backward_compatibility tests.test_pre090_compatibility_contract tests.test_pre09_contract_freeze tests.test_public_package_architecture tests.test_console_entry_point tests.test_cli_service_decoupling tests.test_public_capability_api tests.test_public_diagnostics_api tests.test_stable_document_service tests.test_stable_validation_service tests.test_stable_edit_service tests.test_reference_analysis_service tests.test_structural_preview_service tests.test_cross_platform_build_install_gate tests.test_v091_compatibility_contract tests.test_v091_structural_execution_contract tests.test_v091_preview_execute_parity tests.test_v091_destination_safety tests.test_v091_post_write_reparse_certification tests.test_v091_vertex_structural_execution tests.test_v091_texture_structural_execution tests.test_v091_material_structural_execution tests.test_v091_bone_structural_execution tests.test_v091_morph_structural_execution tests.test_v091_rigid_body_structural_execution tests.test_v091_cross_section_coordinated_execution tests.test_v091_atomic_structural_transaction tests.test_structural_execution_failure_provenance tests.test_pmx_structural_resource_state_isolation
   python -m coverage erase
   python -m coverage run -m unittest discover -s tests -q
   python -m coverage report
   python -m coverage json
-  rem Expected final baseline: 1495 tests, skipped=1, combined coverage 88.86%%
+  rem CP23 feature-branch evidence: 1666 tests, skipped=1, coverage=88.57%.
+  rem Re-run after the final commit and on merged main; do not reuse stale evidence.
   ```
 
 - [ ] Build fresh artifacts, inspect them, and verify a disposable clean wheel
@@ -53,7 +54,11 @@ and never publish to PyPI without separate explicit Maintainer approval.
   python -m build --sdist --wheel
   python tools/inspect_distribution_artifacts.py dist
   python tools/verify_clean_install.py dist
-  rem Expected members: wheel=85, sdist=220
+  rem Clean-install probe must exercise installed apply_structural_edit() with
+  rem separate output and unchanged source bytes.
+  rem CP23 feature-branch artifact shape: wheel file members=85, sdist file members=235.
+  rem Recompute artifact SHA-256 after the final committed/merged-main build;
+  rem pre-commit digests are not final release digests.
   ```
 
 ## 2. Safety, compatibility, capability, and scope gate
@@ -63,11 +68,11 @@ and never publish to PyPI without separate explicit Maintainer approval.
 - [ ] Existing v0.8 imports, process entry points, CLI behavior, diagnostics,
   exit codes, source-integrity checks, distinct-output rules, and atomic write
   safety remain compatible.
-- [ ] The public structural surface remains exactly reference-safe preview:
-  `structural_preview=True`, `structural_write=False`, contract
-  `reference_safe_preview`, and target kinds vertex/texture/material/bone/morph/
-  rigid_body.
-- [ ] No public structural writer, insertion, automatic index-width resize,
+- [ ] The public structural surface remains exactly bounded reference-safe execution:
+  `structural_preview=True`, `structural_write=True`, contract
+  `reference_safe_execution`, and target kinds vertex/texture/material/bone/morph/
+  rigid_body. Execution is exposed only through `apply_structural_edit()`.
+- [ ] No raw public structural writer, insertion, automatic index-width resize,
   silent repair, arbitrary structural CRUD, model creation, IK authoring,
   physics generation/simulation, mesh/UV editing, GUI, Smart Tools, plugins,
   telemetry/cloud feature, or AI editing is added by the final release patch.
@@ -115,7 +120,7 @@ and never publish to PyPI without separate explicit Maintainer approval.
   ```
 
 - [ ] Confirm both `ubuntu-latest` and `windows-latest` jobs pass lint, compile,
-  safety matrix, 1,495-test coverage, build/inspection, clean installed-package
+  safety matrix, full-suite coverage, build/inspection, clean installed-package
   verification, release-facing commands, registry validation, and placeholder
   hash verification.
 - [ ] Review the final PR file list/diff and merge only after required CI and
@@ -136,7 +141,7 @@ and never publish to PyPI without separate explicit Maintainer approval.
   ```
 
 - [ ] Re-run final version/capability assertions, Ruff, compilation, the full
-  1,495-test coverage gate, fresh build, artifact inspection, and clean-install
+  coverage gate, fresh build, artifact inspection, and clean-install
   verification on merged `main`.
 - [ ] Confirm merged-main CI is successful and the tree is clean before any tag
   is created.
@@ -144,25 +149,25 @@ and never publish to PyPI without separate explicit Maintainer approval.
 ## 6. Tag preflight and annotated tag
 
 - [ ] Confirm `main == origin/main`, tree clean, and no local/remote tag or
-  GitHub Release already uses `v0.9.0`:
+  GitHub Release already uses `v0.9.1`:
 
   ```bat
   git --no-pager branch --show-current
   git --no-pager status --short
   git --no-pager rev-parse HEAD
   git --no-pager rev-parse origin/main
-  git --no-pager tag --list v0.9.0
-  git ls-remote --tags origin refs/tags/v0.9.0 refs/tags/v0.9.0^{}
-  gh release view v0.9.0 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  git --no-pager tag --list v0.9.1
+  git ls-remote --tags origin refs/tags/v0.9.1 refs/tags/v0.9.1^{}
+  gh release view v0.9.1 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
 - [ ] On verified merged `main` only, and only after explicit Maintainer
   authorization, create and push the annotated tag:
 
   ```bat
-  git tag -a v0.9.0 -m "MMD Asset Registry v0.9.0"
-  git --no-pager show v0.9.0 --no-patch --format=fuller
-  git push origin v0.9.0
+  git tag -a v0.9.1 -m "MMD Asset Registry v0.9.1"
+  git --no-pager show v0.9.1 --no-patch --format=fuller
+  git push origin v0.9.1
   ```
 
 - [ ] Verify the remote annotated tag resolves to the intended merged-main
@@ -170,35 +175,36 @@ and never publish to PyPI without separate explicit Maintainer approval.
 
   ```bat
   git fetch --tags origin
-  git --no-pager rev-parse "v0.9.0^{}"
-  git ls-remote --tags origin refs/tags/v0.9.0 refs/tags/v0.9.0^{}
+  git --no-pager rev-parse "v0.9.1^{}"
+  git ls-remote --tags origin refs/tags/v0.9.1 refs/tags/v0.9.1^{}
   ```
 
 ## 7. Normal GitHub Release
 
-- [ ] Review `v0.9.0` release notes and create a normal GitHub Release from the
+- [ ] Review `v0.9.1` release notes and create a normal GitHub Release from the
   verified remote tag, only after explicit Maintainer authorization:
 
   ```bat
-  gh release create v0.9.0 --verify-tag --title "MMD Asset Registry v0.9.0" --notes-file "%USERPROFILE%\Downloads\v0.9.0-release-notes.md"
+  gh release create v0.9.1 --verify-tag --title "MMD Asset Registry v0.9.1" --notes-file "%USERPROFILE%\Downloads\v0.9.1-release-notes.md"
   ```
 
 - [ ] Verify publication state and target:
 
   ```bat
-  gh release view v0.9.0 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  gh release view v0.9.1 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
-- [ ] Confirm `isDraft` is `false`, `isPrerelease` is `false`, tag is `v0.9.0`,
+- [ ] Confirm `isDraft` is `false`, `isPrerelease` is `false`, tag is `v0.9.1`,
   and its dereferenced target is the verified merged-main commit.
 - [ ] Do not publish the wheel or sdist to PyPI in this workflow.
 
 ## 8. Final confirmation
 
-- [ ] Confirm local `main`, `origin/main`, dereferenced annotated tag `v0.9.0`,
+- [ ] Confirm local `main`, `origin/main`, dereferenced annotated tag `v0.9.1`,
   and the normal GitHub Release identify the same intended release commit.
-- [ ] Confirm release notes state package version `0.9.0`, both passing CI
-  operating systems, retained v0.8 compatibility/safety, public structural
-  preview with `structural_write=False`, and all deferred non-goals.
+- [ ] Confirm release notes state package version `0.9.1`, both passing CI
+  operating systems, retained v0.8/v0.9.0 compatibility/safety, bounded public
+  structural execution with `structural_write=True` /
+  `reference_safe_execution`, raw writer privacy, and all deferred non-goals.
 - [ ] Confirm repository remains clean and no private/runtime-only data or build
   output was committed or attached.

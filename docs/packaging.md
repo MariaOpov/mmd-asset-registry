@@ -15,11 +15,12 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. At release readiness, the Git/GitHub label `pre-0.9.0` maps
-to the PEP 440 Python distribution version `0.9.0a0`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.1` maps
+to the PEP 440 Python distribution version `0.9.1`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
-second distribution-version source is introduced.
+second distribution-version source is introduced. Historical release mappings
+such as `pre-0.9.0` -> `0.9.0a0` remain documented in the changelog.
 
 ## Dependencies and build backend
 
@@ -58,6 +59,13 @@ setuptools.
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
 
+For the v0.9.1 CP23 feature-branch gate, canonical artifact shape is 85 regular
+file members in the wheel and 235 regular file members in the sdist. The sdist
+count intentionally excludes tar directory entries. SHA-256 digests are not
+frozen in this policy before the final committed build because any subsequent
+commit/rebuild changes artifact bytes; final release digests must be captured
+from the final release commit.
+
 ## Cross-platform build and installation gate
 
 The GitHub Actions validation matrix runs the complete distribution gate on
@@ -65,7 +73,8 @@ both `ubuntu-latest` and `windows-latest` with Python 3.12. Each matrix job
 builds a fresh wheel and sdist, inspects both archives, installs the wheel with
 its declared dependencies in a disposable environment outside the checkout,
 and exercises installed metadata, imports, capabilities, diagnostics,
-document/validation/edit services, and console entry points.
+document/validation/edit services, structural preview/execution services, and
+console entry points.
 
 The standard `build` frontend is pinned to `1.5.0` in
 `requirements-dev.txt`. It is CI/development tooling only and is not a runtime

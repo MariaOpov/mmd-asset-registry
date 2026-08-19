@@ -54,7 +54,7 @@ class PackagingMetadataTests(unittest.TestCase):
             dynamic["version"],
             {"attr": "mmd_registry.__version__"},
         )
-        self.assertEqual(__version__, "0.9.0")
+        self.assertEqual(__version__, "0.9.1")
         self.assertRegex(
             __version__,
             re.compile(r"^[0-9]+(?:\.[0-9]+){2}$"),

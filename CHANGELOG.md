@@ -2,6 +2,58 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.1 - 2026-08-19
+
+### Added
+
+- Bounded public structural execution through `PmxStructuralEditRequest`,
+  `PmxStructuralExecutionResult`, and `apply_structural_edit()` for reorder/delete
+  requests across vertex, texture, material, bone, morph, and rigid-body targets.
+- Redacted structural failure stage/provenance evidence plus adversarial,
+  atomicity, state-isolation, preview/execute-parity, and post-write
+  re-certification regression gates.
+- Installed-package and private-real-model safe-output validation for the public
+  structural execution boundary.
+
+### Changed
+
+- Runtime/distribution version and release-facing contracts are promoted from
+  `0.9.0` / `v0.9.0` to `0.9.1` / `v0.9.1`.
+- The canonical capability manifest now reports `structural_preview=True`,
+  `structural_write=True`, and `reference_safe_execution`; the dataclass
+  constructor retains its v0.9.0 preview-only defaults for compatibility.
+- Cross-platform CI and clean-install verification explicitly exercise the
+  v0.9.1 structural execution release gates.
+
+### Verified
+
+- Structural execution remains fail-closed across destination races,
+  source-change races, serialization/reparse failures, reference/invariant
+  failures, repeated execution, and mutable-global state adversaries.
+- A private PMX 2.0 model was executed to a separate verified output with
+  source SHA-256 preservation, reference-safe texture remapping, successful
+  reparse/re-certification, and no temporary-file residue.
+- Existing v0.8 and v0.9.0 public, CLI, diagnostic, edit, and service contracts
+  remain additively compatible.
+- Final local CP23 evidence passes 1,666 automated tests with one optional
+  private-runtime skip at 88.57% combined statement/branch coverage; fresh
+  distribution inspection reports 85 wheel file members and 235 sdist file
+  members, followed by successful clean installed-package execution.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`; schemas `0.2` and `0.3` remain supported, and
+  edit-plan schema `1` plus the three v0.8 edit operation types remain frozen.
+- The raw structural writer remains private. Insertion, automatic index-width
+  resizing, silent repair, arbitrary structural CRUD, model creation, IK
+  authoring, physics generation/simulation, mesh/UV authoring, GUI, Smart Tools,
+  plugins, and AI editing remain unauthorized.
+- Structural execution never writes the caller's source in place and publishes
+  only after verified serialization, reparse, semantic comparison, source
+  re-verification, and destination safety checks.
+- No PyPI publication is authorized without separate explicit Maintainer
+  approval.
+
 ## 0.9.0 - 2026-08-16
 
 ### Added

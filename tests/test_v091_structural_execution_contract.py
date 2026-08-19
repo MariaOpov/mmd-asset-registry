@@ -54,7 +54,7 @@ def _texture_reverse_intent(document) -> PmxStructuralTransformIntent:
 
 
 class V091StructuralExecutionContractTests(unittest.TestCase):
-    """Freeze safety semantics before public structural execution is exposed."""
+    """Freeze safety semantics around the reviewed public execution service."""
 
     def test_threat_model_tracks_all_frozen_threat_ids(self) -> None:
         text = (
@@ -75,6 +75,14 @@ class V091StructuralExecutionContractTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(pmx_public, name))
                 self.assertFalse(hasattr(services_public, name))
+
+
+    def test_reviewed_service_is_public_but_raw_kernel_remains_private(self) -> None:
+        self.assertIn("apply_structural_edit", services_public.__all__)
+        self.assertIn("PmxStructuralExecutionResult", services_public.__all__)
+        self.assertFalse(hasattr(services_public, "write_pmx_structural_transform"))
+        self.assertFalse(hasattr(services_public, "PmxStructuralWriteResult"))
+        self.assertTrue(services_public.get_capabilities().structural_write)
 
     def test_insertion_capable_collection_transform_is_out_of_contract(self) -> None:
         remap = PmxIndexRemap(

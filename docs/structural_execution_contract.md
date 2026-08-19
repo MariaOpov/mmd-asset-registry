@@ -2,7 +2,7 @@
 
 This document freezes the safety semantics that v0.9.1 structural execution
 must preserve while the existing v0.9.0 internal structural-output kernel is
-hardened and eventually exposed through a separately reviewed public service.
+hardened and exposed only through the separately reviewed v0.9.1 service layer.
 
 It is a correctness and filesystem-safety contract, not a Python sandbox or a
 claim that private implementation objects are security boundaries.
@@ -26,10 +26,10 @@ Execution may keep, delete, or reorder existing records. It does not authorize
 insertion, arbitrary CRUD, automatic index-width resizing, silent repair,
 in-place editing, source replacement, or mutation of opaque trailing data.
 
-The v0.9.0 internal `mmd_registry.pmx.structural_output` module is an
-implementation substrate. Its presence does not by itself authorize a public
-structural-write capability. Capability promotion and a public execution
-service are separate later review gates.
+The internal `mmd_registry.pmx.structural_output` module remains an
+implementation substrate. v0.9.1 authorizes structural execution only through
+`mmd_registry.services.apply_structural_edit`; the raw writer, transform intent,
+serialization objects, and filesystem commit hooks are not canonical public API.
 
 ## Required execution pipeline
 
@@ -140,27 +140,34 @@ There is no automatic repair and no automatic PMX index-width resizing.
 
 ## Public-boundary rule
 
-Until the dedicated public structural-execution service checkpoint is reviewed,
-the raw structural-output kernel must not be re-exported from canonical public
-namespaces such as `mmd_registry.pmx` or `mmd_registry.services`.
+CP16 exposes one intentionally reviewed service entry point:
+`mmd_registry.services.apply_structural_edit`. It accepts only the frozen bounded
+collection-edit request vocabulary and distinct source/output paths. It does not
+accept raw transform intents or remap primitives from callers.
 
-A later public service may wrap the internal kernel through a new intentionally
-reviewed API. It must not make the raw implementation function public merely by
-incidental re-export.
+The raw structural-output kernel must remain absent from canonical public
+namespaces such as `mmd_registry.pmx` and `mmd_registry.services`; specifically,
+`write_pmx_structural_transform`, `PmxStructuralWriteResult`, serialization
+helpers, and filesystem commit hooks remain implementation details.
 
-The capability manifest remains under its own promotion gate. CP03 does not
-promote `structural_write`.
+The canonical capability manifest is promoted by CP16 to
+`structural_write=True` and `reference_safe_execution`, while the manifest
+constructor keeps the v0.9.0 preview-only defaults for additive compatibility.
 
 ## Diagnostic rule
 
-The current structural writer is internal and may use implementation-level
-exceptions. Before structural execution becomes a public service, expected path,
-validation, and verification failures must cross a stable structured diagnostic
-boundary. Unexpected failures must be redacted so private paths, arbitrary
-exception text, and implementation details are not exposed.
+The structural writer remains internal and may use implementation-level
+exceptions. The CP16 service translates expected path and verification failures
+to stable coarse `structural_path_unsafe` and
+`structural_verification_failed` diagnostics under the
+`apply_structural_edit` operation. Parse/validation/I/O failures continue through
+the existing public diagnostic adapter. Unexpected failures are redacted so
+private paths, arbitrary exception text, and implementation details are not
+exposed.
 
-Process-control exceptions must not be swallowed or converted into ordinary
-service failures.
+CP17 owns richer stage/provenance evidence; it must remain additive to this
+coarse CP16 error surface. Process-control exceptions must not be swallowed or
+converted into ordinary service failures.
 
 ## Determinism, state isolation, and resource behavior
 
@@ -195,8 +202,8 @@ resource attacks are already eliminated.
 | T11 | Silent repair / normalization | Explicitly prohibited | No later checkpoint may add it implicitly |
 | T12 | Preview/execute semantic divergence | Execute must derive from the same certified preview semantics | CP06 parity gate |
 | T13 | Unsupported insertion/new indices | Collection transform rejects new indices without old sources | Out of scope for v0.9.1 |
-| T14 | Accidental public raw-writer exposure | Raw kernel remains absent from canonical public namespaces | CP16 owns reviewed public service boundary |
-| T15 | Diagnostic/private-path leakage | Public execution must use structured redacted diagnostics before exposure | CP17 owns diagnostic/provenance boundary |
+| T14 | Accidental public raw-writer exposure | CP16 exposes only the bounded service wrapper; raw kernel remains absent from canonical public namespaces | Preserve through release gates |
+| T15 | Diagnostic/private-path leakage | CP16 uses coarse structured redacted execution diagnostics | CP17 expands stage/provenance evidence |
 | T16 | Non-determinism | Canonical ordering, deterministic intent hash, repeated serialization equality | Recheck in CP19 |
 | T17 | Mutable/shared-state leakage | Structural path is immutable/state-isolated; no mutable global lookup tables | Recheck in CP19 |
 | T18 | Resource amplification | Batched reference-impact analysis scales with graph evidence rather than changed-node rescans | CP19 expands adversarial/resource gate |

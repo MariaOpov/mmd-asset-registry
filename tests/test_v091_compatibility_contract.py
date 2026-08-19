@@ -235,6 +235,41 @@ class V091CompatibilityContractTests(unittest.TestCase):
         self.assertEqual(parameters[0].name, "document")
         self.assertEqual(parameters[1].name, "request")
 
+
+    def test_v091_structural_execution_service_is_additive_and_bounded(self) -> None:
+        self.assertIs(
+            services.PmxStructuralEditRequest,
+            services.PmxStructuralPreviewRequest,
+        )
+        for name in (
+            "PmxStructuralEditRequest",
+            "PmxStructuralExecutionResult",
+            "apply_structural_edit",
+        ):
+            self.assertIn(name, services.__all__)
+
+        signature = inspect.signature(services.apply_structural_edit)
+        parameters = tuple(signature.parameters.values())
+        self.assertEqual(parameters[0].name, "input_path")
+        self.assertEqual(parameters[1].name, "output_path")
+        self.assertEqual(parameters[2].name, "request")
+        self.assertEqual(parameters[3].name, "overwrite")
+        self.assertEqual(parameters[3].kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameters[3].default, False)
+
+        self.assertEqual(
+            PmxServiceOperation.APPLY_STRUCTURAL_EDIT.value,
+            "apply_structural_edit",
+        )
+        self.assertEqual(
+            PmxServiceDiagnosticCode.STRUCTURAL_PATH_UNSAFE.value,
+            "structural_path_unsafe",
+        )
+        self.assertEqual(
+            PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED.value,
+            "structural_verification_failed",
+        )
+
     def test_internal_structural_writer_is_not_retroactively_public(self) -> None:
         # v0.9.1 may add a reviewed execution service later, but the v0.9.0
         # internal kernel itself must not become public by incidental re-export.

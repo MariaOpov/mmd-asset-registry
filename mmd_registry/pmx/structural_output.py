@@ -13,12 +13,13 @@ verification exceptions into structural-output exceptions.
 
 That private dependency is deliberate and temporary: changing or extracting the
 v0.8 hooks here would invalidate existing negative-safety tests that monkeypatch
-those exact module-local hooks.  CP19 owns the service/capability boundary and
-may introduce a shared public-neutral abstraction later without weakening the
-frozen v0.8 behavior.
+those exact module-local hooks. CP16 exposes execution only through a reviewed
+service wrapper; this raw writer and its transaction helper remain implementation
+details.
 
-CP18 does not resize index widths, repair documents, expose a service/CLI API,
-or modify the CP17 preview contract.  A structural serialization result exists
+This module does not resize index widths, repair documents, expose a CLI mutation
+command, or modify the certified preview contract. A structural serialization
+result exists
 only after:
 
 * CP17 produced a CP16-certified intended document;
@@ -43,6 +44,7 @@ import io
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from mmd_registry.pmx.collection_transform import PmxStructuralTransformIntent
 from mmd_registry.pmx.document import PmxDocument
@@ -286,17 +288,17 @@ def _translate_edit_verification_error(
     raise PmxStructuralOutputVerificationError(str(error)) from None
 
 
-def write_pmx_structural_transform(
+def _write_pmx_structural_transaction(
     input_path: str | Path,
     output_path: str | Path,
-    intent: PmxStructuralTransformIntent,
+    intent_factory: Callable[[PmxDocument], PmxStructuralTransformIntent],
     *,
     overwrite: bool = False,
 ) -> PmxStructuralWriteResult:
-    """Transform, verify, and atomically write one distinct structural PMX output."""
+    """Execute one structural write against exactly one captured source snapshot."""
 
-    if not isinstance(intent, PmxStructuralTransformIntent):
-        raise TypeError("intent must be a PmxStructuralTransformIntent value.")
+    if not callable(intent_factory):
+        raise TypeError("intent_factory must be callable.")
     if not isinstance(overwrite, bool):
         raise TypeError("overwrite must be a boolean.")
 
@@ -314,6 +316,11 @@ def write_pmx_structural_transform(
     source_bytes = source.read_bytes()
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     source_document = load_pmx(io.BytesIO(source_bytes))
+    intent = intent_factory(source_document)
+    if not isinstance(intent, PmxStructuralTransformIntent):
+        raise TypeError(
+            "intent_factory must return a PmxStructuralTransformIntent value."
+        )
 
     serialization = verify_pmx_structural_serialization(
         source_document,
@@ -343,6 +350,26 @@ def write_pmx_structural_transform(
         source_sha256=source_sha256,
         source_size_bytes=len(source_bytes),
         serialization=serialization,
+    )
+
+
+def write_pmx_structural_transform(
+    input_path: str | Path,
+    output_path: str | Path,
+    intent: PmxStructuralTransformIntent,
+    *,
+    overwrite: bool = False,
+) -> PmxStructuralWriteResult:
+    """Transform, verify, and atomically write one distinct structural PMX output."""
+
+    if not isinstance(intent, PmxStructuralTransformIntent):
+        raise TypeError("intent must be a PmxStructuralTransformIntent value.")
+
+    return _write_pmx_structural_transaction(
+        input_path,
+        output_path,
+        lambda _source_document: intent,
+        overwrite=overwrite,
     )
 
 

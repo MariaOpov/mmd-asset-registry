@@ -167,7 +167,7 @@ class PmxReferenceAnalysisResult:
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralCollectionEdit:
-    """One preview-only delete/reorder request for a structural target collection."""
+    """One bounded delete/reorder request for a structural target collection."""
 
     target_kind: PmxReferenceTargetKind
     old_indices_in_new_order: tuple[int, ...]
@@ -191,7 +191,7 @@ class PmxStructuralCollectionEdit:
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewRequest:
-    """Immutable public request for reference-safe structural preview only."""
+    """Immutable public request shared by structural preview and execution."""
 
     collection_edits: tuple[PmxStructuralCollectionEdit, ...] = ()
 
@@ -212,7 +212,7 @@ class PmxStructuralPreviewRequest:
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
-    """Service-facing structural preview without exporting CP17 implementation types."""
+    """Service-facing structural preview without exporting implementation types."""
 
     _preview: _PmxStructuralPreview = field(repr=False)
 
@@ -236,6 +236,63 @@ class PmxStructuralPreviewResult:
         """Return deterministic JSON-ready preview evidence."""
 
         return self._preview.to_dict()
+
+
+# v0.9.1 execution deliberately reuses the already-frozen request validation
+# instead of introducing a competing structural-intent vocabulary.
+PmxStructuralEditRequest = PmxStructuralPreviewRequest
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralExecutionResult:
+    """Service-facing committed structural output without exporting the raw writer."""
+
+    _result: object = field(repr=False)
+
+    def __post_init__(self) -> None:
+        from mmd_registry.pmx.structural_output import PmxStructuralWriteResult
+
+        if not isinstance(self._result, PmxStructuralWriteResult):
+            raise TypeError(
+                "_result must be an internal PmxStructuralWriteResult value."
+            )
+
+    @property
+    def status(self) -> str:
+        return self._result.status
+
+    @property
+    def input_path(self) -> Path:
+        return self._result.input_path
+
+    @property
+    def output_path(self) -> Path:
+        return self._result.output_path
+
+    @property
+    def source_sha256(self) -> str:
+        return self._result.source_sha256
+
+    @property
+    def output_sha256(self) -> str:
+        return self._result.output_sha256
+
+    @property
+    def source_size_bytes(self) -> int:
+        return self._result.source_size_bytes
+
+    @property
+    def output_size_bytes(self) -> int:
+        return self._result.output_size_bytes
+
+    @property
+    def document(self) -> PmxDocument:
+        return self._result.serialization.preview.certificate.document
+
+    def to_dict(self) -> dict[str, object]:
+        """Return deterministic JSON-ready committed-output evidence."""
+
+        return self._result.to_dict()
 
 
 _STRUCTURAL_TARGET_ORDER = tuple(PmxReferenceTargetKind)
@@ -318,6 +375,44 @@ def preview_structural_edit(
         failure = PmxServiceError(
             diagnostic_from_service_error(
                 PmxServiceOperation.PREVIEW_STRUCTURAL_EDIT,
+                error,
+            )
+        )
+    raise failure from None
+
+
+def apply_structural_edit(
+    input_path: str | Path,
+    output_path: str | Path,
+    request: PmxStructuralEditRequest,
+    *,
+    overwrite: bool = False,
+) -> PmxStructuralExecutionResult:
+    """Safely execute one bounded structural request against one source snapshot."""
+
+    try:
+        if not isinstance(request, PmxStructuralPreviewRequest):
+            raise TypeError("request must be a PmxStructuralEditRequest instance.")
+        if not isinstance(overwrite, bool):
+            raise TypeError("overwrite must be a boolean.")
+
+        # Import the internal output kernel only when execution is requested.
+        # Merely importing mmd_registry.services therefore remains side-effect-light.
+        from mmd_registry.pmx.structural_output import (
+            _write_pmx_structural_transaction,
+        )
+
+        result = _write_pmx_structural_transaction(
+            input_path,
+            output_path,
+            lambda document: _build_structural_preview_intent(document, request),
+            overwrite=overwrite,
+        )
+        return PmxStructuralExecutionResult(result)
+    except Exception as error:
+        failure = PmxServiceError(
+            diagnostic_from_service_error(
+                PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
                 error,
             )
         )
@@ -492,4 +587,7 @@ __all__ = (
     "PmxStructuralPreviewRequest",
     "PmxStructuralPreviewResult",
     "preview_structural_edit",
+    "PmxStructuralEditRequest",
+    "PmxStructuralExecutionResult",
+    "apply_structural_edit",
 )

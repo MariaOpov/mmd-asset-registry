@@ -332,11 +332,11 @@ class StructuralAdversarialIntegrationTests(unittest.TestCase):
                 {input_path, output_path},
             )
 
-    def test_cp20_does_not_expand_public_structural_write_authority(self) -> None:
+    def test_public_execution_does_not_expose_raw_structural_writer(self) -> None:
         self.assertFalse(hasattr(services, "write_pmx_structural_transform"))
         self.assertFalse(hasattr(services, "PmxStructuralWriteResult"))
         self.assertFalse(hasattr(pmx_public, "write_pmx_structural_transform"))
-        self.assertFalse(services.get_capabilities().structural_write)
+        self.assertTrue(services.get_capabilities().structural_write)
 
 
 if __name__ == "__main__":

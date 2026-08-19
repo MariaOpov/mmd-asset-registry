@@ -383,5 +383,64 @@ class V091PreviewExecuteParityTests(unittest.TestCase):
         self.assertIs(internal.certificate.document, source)
 
 
+    def test_service_texture_execution_matches_service_preview(self) -> None:
+        source = _clean_document()
+        source_bytes = serialize_pmx(source)
+        order = tuple(reversed(range(len(source.texture_paths))))
+        request = services.PmxStructuralEditRequest(
+            (
+                services.PmxStructuralCollectionEdit(
+                    services.PmxReferenceTargetKind.TEXTURE,
+                    order,
+                ),
+            )
+        )
+        preview = services.preview_structural_edit(source, request)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "source.pmx"
+            output_path = root / "service-output.pmx"
+            input_path.write_bytes(source_bytes)
+
+            result = services.apply_structural_edit(
+                input_path,
+                output_path,
+                request,
+            )
+
+            self.assertEqual(result.document, preview.document)
+            self.assertEqual(load_pmx(output_path), preview.document)
+            self.assertEqual(input_path.read_bytes(), source_bytes)
+            report = result.to_dict()
+            self.assertFalse(report["dry_run"])
+            self.assertTrue(report["output"]["written"])
+            self.assertEqual(report["verification"]["serialization"], "passed")
+
+    def test_service_noop_execution_matches_service_preview(self) -> None:
+        source = _clean_document()
+        source_bytes = serialize_pmx(source)
+        request = services.PmxStructuralEditRequest()
+        preview = services.preview_structural_edit(source, request)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "source.pmx"
+            output_path = root / "service-noop.pmx"
+            input_path.write_bytes(source_bytes)
+
+            result = services.apply_structural_edit(
+                input_path,
+                output_path,
+                request,
+            )
+
+            self.assertEqual(result.status, "no_changes")
+            self.assertEqual(result.document, preview.document)
+            self.assertEqual(load_pmx(output_path), preview.document)
+            self.assertEqual(input_path.read_bytes(), source_bytes)
+
+
+
 if __name__ == "__main__":
     unittest.main()

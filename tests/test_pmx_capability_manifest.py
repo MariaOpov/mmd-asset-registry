@@ -39,12 +39,12 @@ class PmxCapabilityManifestTests(unittest.TestCase):
         self.assertTrue(manifest.texture_portability)
         self.assertFalse(manifest.private_runtime_required)
         self.assertTrue(manifest.structural_preview)
-        self.assertFalse(manifest.structural_write)
+        self.assertTrue(manifest.structural_write)
         self.assertEqual(
             manifest.structural_target_kinds,
             ("vertex", "texture", "material", "bone", "morph", "rigid_body"),
         )
-        self.assertEqual(manifest.structural_contract, "reference_safe_preview")
+        self.assertEqual(manifest.structural_contract, "reference_safe_execution")
 
     def test_edit_operations_come_from_authoritative_catalog(self) -> None:
         manifest = get_pmx_capability_manifest()
@@ -102,7 +102,7 @@ class PmxCapabilityManifestTests(unittest.TestCase):
                 "texture_portability": True,
                 "private_runtime_required": False,
                 "structural_preview": True,
-                "structural_write": False,
+                "structural_write": True,
                 "structural_target_kinds": [
                     "vertex",
                     "texture",
@@ -111,7 +111,7 @@ class PmxCapabilityManifestTests(unittest.TestCase):
                     "morph",
                     "rigid_body",
                 ],
-                "structural_contract": "reference_safe_preview",
+                "structural_contract": "reference_safe_execution",
             },
         )
 

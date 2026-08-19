@@ -56,6 +56,7 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
                 "preview_edit",
                 "apply_edit",
                 "preview_structural_edit",
+                "apply_structural_edit",
             ),
         )
         serialized = " ".join(
@@ -69,6 +70,21 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
         ):
             with self.subTest(unsupported=unsupported):
                 self.assertNotIn(unsupported, serialized)
+
+
+    def test_structural_execution_vocabularies_are_public_and_additive(self) -> None:
+        self.assertEqual(
+            diagnostics.PmxServiceOperation.APPLY_STRUCTURAL_EDIT.value,
+            "apply_structural_edit",
+        )
+        self.assertEqual(
+            diagnostics.PmxServiceDiagnosticCode.STRUCTURAL_PATH_UNSAFE.value,
+            "structural_path_unsafe",
+        )
+        self.assertEqual(
+            diagnostics.PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED.value,
+            "structural_verification_failed",
+        )
 
     def test_diagnostic_is_immutable_deterministic_and_json_ready(self) -> None:
         diagnostic = diagnostics.PmxServiceDiagnostic(

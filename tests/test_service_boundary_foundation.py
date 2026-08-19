@@ -57,6 +57,9 @@ class ServiceBoundaryFoundationTests(unittest.TestCase):
                 "PmxStructuralPreviewRequest",
                 "PmxStructuralPreviewResult",
                 "preview_structural_edit",
+                "PmxStructuralEditRequest",
+                "PmxStructuralExecutionResult",
+                "apply_structural_edit",
             ),
         )
         for name in services.__all__:

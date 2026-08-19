@@ -34,6 +34,7 @@ class PmxServiceOperation(StrEnum):
     PREVIEW_EDIT = "preview_edit"
     APPLY_EDIT = "apply_edit"
     PREVIEW_STRUCTURAL_EDIT = "preview_structural_edit"
+    APPLY_STRUCTURAL_EDIT = "apply_structural_edit"
 
 
 class PmxServiceDiagnosticCode(StrEnum):
@@ -47,6 +48,8 @@ class PmxServiceDiagnosticCode(StrEnum):
     EDIT_PATH_UNSAFE = "edit_path_unsafe"
     EDIT_VERIFICATION_FAILED = "edit_verification_failed"
     STRUCTURAL_PREVIEW_FAILED = "structural_preview_failed"
+    STRUCTURAL_PATH_UNSAFE = "structural_path_unsafe"
+    STRUCTURAL_VERIFICATION_FAILED = "structural_verification_failed"
     INTERNAL_ERROR = "service_internal_error"
 
 
@@ -206,6 +209,33 @@ def diagnostic_from_service_error(
             PmxServiceDiagnosticCode.STRUCTURAL_PREVIEW_FAILED,
             "Structural preview failed reference-safety validation.",
         )
+
+    if operation is PmxServiceOperation.APPLY_STRUCTURAL_EDIT:
+        # Keep the structural-output dependency lazy so importing the public
+        # diagnostics/service namespaces does not load the writer kernel.
+        from mmd_registry.pmx.structural_output import (
+            PmxStructuralOutputPathError,
+            PmxStructuralOutputVerificationError,
+        )
+
+        if isinstance(error, PmxStructuralOutputPathError):
+            return _diagnostic(
+                operation,
+                PmxServiceDiagnosticCode.STRUCTURAL_PATH_UNSAFE,
+                "Structural output path failed safety validation.",
+            )
+        if isinstance(error, PmxStructuralOutputVerificationError):
+            return _diagnostic(
+                operation,
+                PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED,
+                "Structural output verification failed.",
+            )
+        if isinstance(error, ValueError):
+            return _diagnostic(
+                operation,
+                PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED,
+                "Structural execution failed reference-safety validation.",
+            )
 
     if isinstance(error, OSError):
         details = (("errno", error.errno),) if type(error.errno) is int else ()

@@ -1,9 +1,10 @@
 # Public API policy
 
-This document defines the public package boundary carried into v0.9.0. The
-release adds read-only reference analysis and a certified reference-safe
-structural preview service while retaining the v0.8 bounded edit contracts and
-keeping structural write non-public.
+This document defines the public package boundary carried from v0.9.0 into
+v0.9.1. The release retains read-only reference analysis and certified
+structural preview while additively exposing a bounded structural execution
+service over the already-verified safe-output kernel. Raw structural writer
+internals remain non-public.
 
 ## Public surface
 
@@ -24,8 +25,8 @@ The current public namespaces are:
 - `mmd_registry.pmx.editing`, for the bounded declarative editing surface
   listed in its `__all__`;
 - `mmd_registry.services`, for typed CLI-independent document, validation,
-  reference-analysis, bounded editing, structural preview, and capability use
-  cases listed in its `__all__`.
+  reference-analysis, bounded editing, structural preview/execution, and
+  capability use cases listed in its `__all__`.
 
 Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
@@ -39,9 +40,11 @@ existing v0.8 safety pipeline and does not expand editing authority.
 slotted, deterministic, independent from private runtime configuration, and
 contains only the PMX versions, encodings, index widths, deform and morph
 types, round-trip contract, texture portability, soft-body support, the three
-edit operations already implemented by v0.8.5, and the v0.9 structural-preview
-contract. The structural fields report preview support, no public structural
-write, the six supported target kinds, and `reference_safe_preview`.
+edit operations already implemented by v0.8.5, and the reviewed structural
+contract. The canonical v0.9.1 manifest reports preview and bounded structural
+write support, the six supported target kinds, and `reference_safe_execution`.
+The dataclass constructor keeps its v0.9.0 preview-only defaults so callers that
+construct the manifest with the old argument shape remain compatible.
 
 Absence from the manifest means unsupported; the API does not imply model
 creation, VMD editing, plugin loading, unrestricted physics editing, or any
@@ -65,7 +68,9 @@ not removed or redirected.
 
 The operation and code vocabularies describe current behavior only. They do
 not promise model creation, VMD editing, plugin loading, unrestricted physics
-editing, or future edit operations.
+editing, or future edit operations. CP17 does not add new structural diagnostic
+codes; structural execution reuses the existing deterministic `details` channel
+for bounded redacted failure provenance.
 
 The v0.9 reference-analysis service adds the `analyze_references` and
 `analyze_reference_node` operations. Argument and unexpected implementation
@@ -140,27 +145,61 @@ structural preview service below.
 
 ## Structural preview service
 
-Version 0.9.0 exposes one deliberately narrow structural service boundary.
+Version 0.9.0 introduced the deliberately narrow preview boundary.
 `PmxStructuralCollectionEdit` describes an ordered subset of existing indices
 for one supported target collection, `PmxStructuralPreviewRequest` combines
 non-duplicated collection edits, and `preview_structural_edit()` returns an
 immutable `PmxStructuralPreviewResult` only after the structural intent passes
 certification and fresh reference-integrity analysis.
 
-The supported public structural target kinds are `vertex`, `texture`,
-`material`, `bone`, `morph`, and `rigid_body`. Reordering and deletion of
-existing records may be previewed when all dependent references remain valid or
-are coordinately remapped. New indices/insertion are not authorized, boolean
-values are never accepted as indices, and changed transforms fail closed on
-opaque trailing data, invalid references, unsupported states, or index-width
-capacity violations.
+The released v0.9.0 capability vocabulary for this preview-only boundary was
+`structural_write=False` and `structural_contract="reference_safe_preview"`.
+Those literals remain documented as compatibility history; the authoritative
+current capability is the v0.9.1 execution contract below.
 
-This service is dry-run only. It does not serialize, write, replace, or mutate a
-source file, and it does not expose the internal structural output kernel. The
-public report therefore keeps `dry_run` true, `output.written` false, and
-`verification.serialization` equal to `not_performed`. The capability manifest
-is authoritative: `structural_preview=True`, `structural_write=False`, and
-`structural_contract="reference_safe_preview"`.
+### Structural execution service (v0.9.1)
+
+v0.9.1 additively exposes `PmxStructuralEditRequest` as the same frozen request
+contract and `apply_structural_edit(input_path, output_path, request,
+*, overwrite=False)` as the reviewed execution boundary. Execution returns a
+`PmxStructuralExecutionResult`; the raw `PmxStructuralWriteResult`, transform
+intent, remap primitives, serializer, and filesystem commit hooks remain
+implementation details and are not exported through canonical public namespaces.
+
+The supported public structural target kinds are `vertex`, `texture`,
+`material`, `bone`, `morph`, and `rigid_body`. Preview and execution may reorder
+or delete existing records when dependent references remain valid or are
+coordinately remapped. New indices/insertion are not authorized, boolean values
+are never accepted as indices, and changed transforms fail closed on opaque
+trailing data, invalid references, unsupported states, or index-width capacity
+violations.
+
+Execution resolves source/destination safety first, captures one source snapshot,
+builds the request-derived intent against exactly that parsed snapshot, then
+reuses the certified preview -> serialize -> reparse -> recertify -> semantic
+equality pipeline before atomic publication. The source identity and SHA-256 are
+rechecked immediately before publication, and overwrite applies only to a
+separate destination. No in-place structural editing is exposed.
+
+The execution service is imported lazily so merely importing
+`mmd_registry.services` does not load the structural writer. Expected failures
+cross the structured service diagnostic boundary under `apply_structural_edit`.
+CP17 adds only two deterministic safe details to those service failures:
+`stage` and `provenance`. They never contain filesystem paths, exception text,
+module/class names, or raw writer objects. The coarse diagnostic code remains the
+authoritative failure category.
+
+The bounded structural stages are `service_validation`, `path_resolution`,
+`source_snapshot`, `source_parse`, `intent_resolution`,
+`structural_certification`, `serialization`, `reparse`,
+`reparse_certification`, `semantic_compare`, and `output_commit`. Provenance is
+restricted to `service_boundary`, `source_input`, `structural_pipeline`, or
+`safe_output`. These labels describe reviewed semantic phases rather than private
+function names, and they do not expand structural editing authority.
+
+The capability manifest is authoritative for the current release:
+`structural_preview=True`, `structural_write=True`, and
+`structural_contract="reference_safe_execution"`.
 
 ## Edit service
 

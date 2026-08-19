@@ -38,15 +38,22 @@ def _clean_document():
 
 
 class StructuralPreviewServiceTests(unittest.TestCase):
-    def test_public_service_surface_appends_preview_only_contract(self) -> None:
+    def test_public_service_surface_keeps_preview_and_adds_bounded_execution(self) -> None:
         expected_suffix = (
             "PmxStructuralCollectionEdit",
             "PmxStructuralPreviewRequest",
             "PmxStructuralPreviewResult",
             "preview_structural_edit",
+            "PmxStructuralEditRequest",
+            "PmxStructuralExecutionResult",
+            "apply_structural_edit",
         )
 
         self.assertEqual(services.__all__[-len(expected_suffix) :], expected_suffix)
+        self.assertIs(
+            services.PmxStructuralEditRequest,
+            services.PmxStructuralPreviewRequest,
+        )
         self.assertNotIn("write_pmx_structural_transform", services.__all__)
         self.assertNotIn("PmxStructuralWriteResult", services.__all__)
         self.assertFalse(hasattr(services, "PmxStructuralPreview"))
@@ -58,12 +65,12 @@ class StructuralPreviewServiceTests(unittest.TestCase):
                 self.assertFalse(hasattr(namespace, "write_pmx_structural_transform"))
                 self.assertFalse(hasattr(namespace, "PmxStructuralWriteResult"))
 
-    def test_service_operation_is_additive_and_preview_only(self) -> None:
+    def test_service_operation_adds_reviewed_structural_execution(self) -> None:
         values = tuple(operation.value for operation in PmxServiceOperation)
 
-        self.assertEqual(values[-1], "preview_structural_edit")
+        self.assertEqual(values[-2:], ("preview_structural_edit", "apply_structural_edit"))
         self.assertEqual(values.count("preview_structural_edit"), 1)
-        self.assertNotIn("apply_structural_edit", values)
+        self.assertEqual(values.count("apply_structural_edit"), 1)
 
     def test_collection_edit_and_request_are_immutable_and_hashable(self) -> None:
         edit = services.PmxStructuralCollectionEdit(
@@ -272,19 +279,19 @@ class StructuralPreviewServiceTests(unittest.TestCase):
                 services.preview_structural_edit(document, request)
         self.assertEqual(raised.exception.code, 7)
 
-    def test_capability_manifest_advertises_preview_but_denies_public_write(self) -> None:
+    def test_capability_manifest_advertises_reviewed_structural_execution(self) -> None:
         manifest = services.get_capabilities()
 
         self.assertTrue(manifest.structural_preview)
-        self.assertFalse(manifest.structural_write)
-        self.assertEqual(manifest.structural_contract, "reference_safe_preview")
+        self.assertTrue(manifest.structural_write)
+        self.assertEqual(manifest.structural_contract, "reference_safe_execution")
         self.assertEqual(
             manifest.structural_target_kinds,
             ("vertex", "texture", "material", "bone", "morph", "rigid_body"),
         )
         payload = manifest.to_dict()
         self.assertTrue(payload["structural_preview"])
-        self.assertFalse(payload["structural_write"])
+        self.assertTrue(payload["structural_write"])
         self.assertNotIn("write_pmx_structural_transform", json.dumps(payload))
 
     def test_capability_manifest_old_constructor_shape_remains_accepted(self) -> None:
@@ -328,7 +335,7 @@ class StructuralPreviewServiceTests(unittest.TestCase):
                 "import sys",
                 "import mmd_registry.services as services",
                 "assert services.get_capabilities().structural_preview is True",
-                "assert services.get_capabilities().structural_write is False",
+                "assert services.get_capabilities().structural_write is True",
                 "assert 'mmd_registry.pmx.structural_output' not in sys.modules",
                 "assert 'mmd_registry.cli' not in sys.modules",
                 "assert 'argparse' not in sys.modules",

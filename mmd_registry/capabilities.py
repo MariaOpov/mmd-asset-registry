@@ -17,7 +17,7 @@ from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 
 
 PmxRoundTripContract = Literal["validated_semantic_roundtrip"]
-_PmxStructuralContract = Literal["reference_safe_preview"]
+_PmxStructuralContract = Literal["reference_safe_preview", "reference_safe_execution"]
 
 _STRUCTURAL_TARGET_KINDS: tuple[str, ...] = tuple(
     target_kind.value for target_kind in PmxReferenceTargetKind
@@ -105,9 +105,9 @@ def get_capabilities() -> PmxCapabilityManifest:
         texture_portability=True,
         private_runtime_required=False,
         structural_preview=True,
-        structural_write=False,
+        structural_write=True,
         structural_target_kinds=_STRUCTURAL_TARGET_KINDS,
-        structural_contract="reference_safe_preview",
+        structural_contract="reference_safe_execution",
     )
 
 

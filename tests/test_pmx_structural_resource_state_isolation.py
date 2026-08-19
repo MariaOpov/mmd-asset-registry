@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib
 import io
+import tempfile
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 import mmd_registry.pmx as pmx_public
@@ -33,6 +35,7 @@ from mmd_registry.pmx.reference_queries import (
     _analyze_reference_impacts,
 )
 from mmd_registry.pmx.structural_preview import preview_pmx_structural_transform
+from mmd_registry.pmx.writer import serialize_pmx
 from tests.pmx_roundtrip_fixtures import build_pmx_roundtrip_fixture
 
 
@@ -41,6 +44,15 @@ reference_queries_module = importlib.import_module(
 )
 structural_preview_module = importlib.import_module(
     "mmd_registry.pmx.structural_preview"
+)
+collection_transform_module = importlib.import_module(
+    "mmd_registry.pmx.collection_transform"
+)
+morph_display_remap_module = importlib.import_module(
+    "mmd_registry.pmx.morph_display_remap"
+)
+reference_diagnostics_module = importlib.import_module(
+    "mmd_registry.pmx.reference_diagnostics"
 )
 
 
@@ -150,6 +162,18 @@ def _full_reverse_intent(document) -> PmxStructuralTransformIntent:
     return PmxStructuralTransformIntent(transforms=tuple(transforms))
 
 
+def _full_reverse_request(document) -> services_public.PmxStructuralEditRequest:
+    return services_public.PmxStructuralEditRequest(
+        tuple(
+            services_public.PmxStructuralCollectionEdit(
+                kind,
+                tuple(reversed(range(_target_size(document, kind)))),
+            )
+            for kind in PmxReferenceTargetKind
+        )
+    )
+
+
 class StructuralResourceStateIsolationTests(unittest.TestCase):
     def test_batch_impact_analysis_is_linear_in_graph_evidence_not_changed_nodes(
         self,
@@ -244,6 +268,63 @@ class StructuralResourceStateIsolationTests(unittest.TestCase):
         )
         self.assertFalse(hasattr(services_public, "_STRUCTURAL_TARGET_RANK"))
         self.assertIsInstance(services_public._STRUCTURAL_TARGET_ORDER, tuple)
+        self.assertIsInstance(collection_transform_module._TARGET_KIND_ORDER, tuple)
+        self.assertIsInstance(morph_display_remap_module._EXPECTED_OFFSET_TYPES, tuple)
+        self.assertIsInstance(reference_diagnostics_module._MESSAGES, tuple)
+        self.assertIsInstance(reference_diagnostics_module._UNSUPPORTED_CODE_MAP, tuple)
+        self.assertTrue(
+            all(
+                isinstance(item, tuple) and len(item) == 2
+                for item in reference_diagnostics_module._MESSAGES
+            )
+        )
+        self.assertTrue(
+            all(
+                isinstance(item, tuple) and len(item) == 2
+                for item in reference_diagnostics_module._UNSUPPORTED_CODE_MAP
+            )
+        )
+
+    def test_repeated_public_execution_isolated_across_unrelated_calls(self) -> None:
+        document_a = _document(version=2.1)
+        document_b = _document(version=2.0)
+        source_a_bytes = serialize_pmx(document_a)
+        source_b_bytes = serialize_pmx(document_b)
+        request_a = _full_reverse_request(document_a)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_a = root / "source-a.pmx"
+            source_b = root / "source-b.pmx"
+            output_a = root / "output-a.pmx"
+            output_b = root / "output-b.pmx"
+            source_a.write_bytes(source_a_bytes)
+            source_b.write_bytes(source_b_bytes)
+
+            first = services_public.apply_structural_edit(
+                source_a,
+                output_a,
+                request_a,
+            )
+            first_output = output_a.read_bytes()
+
+            services_public.apply_structural_edit(
+                source_b,
+                output_b,
+                services_public.PmxStructuralEditRequest(),
+            ).to_dict()
+
+            second = services_public.apply_structural_edit(
+                source_a,
+                output_a,
+                request_a,
+                overwrite=True,
+            )
+
+            self.assertEqual(first.to_dict(), second.to_dict())
+            self.assertEqual(output_a.read_bytes(), first_output)
+            self.assertEqual(source_a.read_bytes(), source_a_bytes)
+            self.assertEqual(source_b.read_bytes(), source_b_bytes)
 
     def test_batch_helper_remains_internal(self) -> None:
         self.assertNotIn(

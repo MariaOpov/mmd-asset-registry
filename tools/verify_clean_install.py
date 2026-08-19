@@ -81,6 +81,13 @@ assert capability_manifest.edit_operation_types == (
     "set_texture_path",
     "update_material",
 ), "installed capability manifest mismatch"
+assert (
+    capability_manifest.structural_preview is True
+    and capability_manifest.structural_write is True
+    and capability_manifest.structural_target_kinds
+    == ("vertex", "texture", "material", "bone", "morph", "rigid_body")
+    and capability_manifest.structural_contract == "reference_safe_execution"
+), "installed structural capability mismatch"
 assert public_diagnostics.__all__ == (
     "PmxServiceDiagnostic",
     "PmxServiceDiagnosticCode",
@@ -225,6 +232,39 @@ assert structural_preview_payload["verification"] == {
     "reference_model": "passed",
     "serialization": "not_performed",
 }, "installed structural preview verification mismatch"
+
+structural_source_path = working_directory / "installed-structural-source.pmx"
+structural_output_path = working_directory / "installed-structural-output.pmx"
+structural_source_path.write_bytes(document_source)
+structural_execution = public_services.apply_structural_edit(
+    structural_source_path,
+    structural_output_path,
+    public_services.PmxStructuralEditRequest(),
+)
+structural_execution_payload = structural_execution.to_dict()
+assert structural_execution.status == "no_changes", (
+    "installed structural execution status mismatch"
+)
+assert structural_execution.document == structural_preview.document, (
+    "installed structural execution document mismatch"
+)
+assert structural_source_path.read_bytes() == document_source, (
+    "installed structural execution changed source"
+)
+assert structural_output_path.is_file(), (
+    "installed structural execution created no output"
+)
+assert structural_output_path.read_bytes() == document_source, (
+    "installed structural execution output mismatch"
+)
+assert structural_execution_payload["output"]["written"] is True, (
+    "installed structural execution write evidence mismatch"
+)
+assert structural_execution_payload["verification"]["invariants"] == "passed"
+assert structural_execution_payload["verification"]["reference_model"] == "passed"
+assert structural_execution_payload["verification"]["serialization"] == "passed"
+assert structural_execution_payload["verification"]["semantic"] == "passed"
+assert structural_execution_payload["verification"]["input_unchanged"] is True
 
 edit_plan = mmd_registry.pmx.editing.PmxEditPlan(
     operations=(

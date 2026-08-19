@@ -74,7 +74,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
                 "texture_portability": True,
                 "private_runtime_required": False,
                 "structural_preview": True,
-                "structural_write": False,
+                "structural_write": True,
                 "structural_target_kinds": [
                     "vertex",
                     "texture",
@@ -83,7 +83,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
                     "morph",
                     "rigid_body",
                 ],
-                "structural_contract": "reference_safe_preview",
+                "structural_contract": "reference_safe_execution",
             },
         )
 
@@ -93,7 +93,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
             sort_keys=True,
         )
 
-        self.assertFalse(capabilities.get_capabilities().structural_write)
+        self.assertTrue(capabilities.get_capabilities().structural_write)
 
         for unsupported in (
             "create_model",

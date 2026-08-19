@@ -47,6 +47,9 @@ class ReferenceAnalysisServiceTests(unittest.TestCase):
             "PmxStructuralPreviewRequest",
             "PmxStructuralPreviewResult",
             "preview_structural_edit",
+            "PmxStructuralEditRequest",
+            "PmxStructuralExecutionResult",
+            "apply_structural_edit",
         )
 
         self.assertEqual(services.__all__, expected)
@@ -67,6 +70,7 @@ class ReferenceAnalysisServiceTests(unittest.TestCase):
                 "preview_edit",
                 "apply_edit",
                 "preview_structural_edit",
+                "apply_structural_edit",
             ),
         )
 

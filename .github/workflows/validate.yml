@@ -84,6 +84,21 @@ jobs:
           tests.test_cross_platform_build_install_gate
           tests.test_pmx_cross_feature_state_isolation
           tests.test_v08_backward_compatibility
+          tests.test_v091_compatibility_contract
+          tests.test_v091_structural_execution_contract
+          tests.test_v091_preview_execute_parity
+          tests.test_v091_destination_safety
+          tests.test_v091_post_write_reparse_certification
+          tests.test_v091_vertex_structural_execution
+          tests.test_v091_texture_structural_execution
+          tests.test_v091_material_structural_execution
+          tests.test_v091_bone_structural_execution
+          tests.test_v091_morph_structural_execution
+          tests.test_v091_rigid_body_structural_execution
+          tests.test_v091_cross_section_coordinated_execution
+          tests.test_v091_atomic_structural_transaction
+          tests.test_structural_execution_failure_provenance
+          tests.test_pmx_structural_resource_state_isolation
 
       - name: Run full test suite with coverage
         run: |
@@ -103,7 +118,7 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.9.0'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.9.1'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

@@ -86,6 +86,40 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
             "structural_verification_failed",
         )
 
+    def test_cp17_reuses_details_without_expanding_diagnostic_codes(self) -> None:
+        self.assertEqual(
+            tuple(code.value for code in diagnostics.PmxServiceDiagnosticCode),
+            (
+                "invalid_argument",
+                "service_io_failed",
+                "source_invalid",
+                "document_invalid",
+                "edit_plan_invalid",
+                "edit_path_unsafe",
+                "edit_verification_failed",
+                "structural_preview_failed",
+                "structural_path_unsafe",
+                "structural_verification_failed",
+                "service_internal_error",
+            ),
+        )
+        diagnostic = diagnostics.PmxServiceDiagnostic(
+            code=diagnostics.PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED,
+            operation=diagnostics.PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
+            message="Structural output verification failed.",
+            details=(
+                ("stage", "reparse"),
+                ("provenance", "structural_pipeline"),
+            ),
+        )
+        self.assertEqual(
+            diagnostic.to_dict()["details"],
+            {
+                "provenance": "structural_pipeline",
+                "stage": "reparse",
+            },
+        )
+
     def test_diagnostic_is_immutable_deterministic_and_json_ready(self) -> None:
         diagnostic = diagnostics.PmxServiceDiagnostic(
             code=diagnostics.PmxServiceDiagnosticCode.EDIT_PLAN_INVALID,

@@ -11,6 +11,7 @@ from mmd_registry.capabilities import (
     get_capabilities,
 )
 from mmd_registry.diagnostics import (
+    PmxServiceDiagnostic as _PmxServiceDiagnostic,
     PmxServiceError,
     PmxServiceOperation,
     diagnostic_from_service_error,
@@ -295,6 +296,53 @@ class PmxStructuralExecutionResult:
         return self._result.to_dict()
 
 
+_STRUCTURAL_FAILURE_PROVENANCE: tuple[tuple[str, str], ...] = (
+    ("service_validation", "service_boundary"),
+    ("path_resolution", "safe_output"),
+    ("source_snapshot", "source_input"),
+    ("source_parse", "source_input"),
+    ("intent_resolution", "service_boundary"),
+    ("structural_certification", "structural_pipeline"),
+    ("serialization", "structural_pipeline"),
+    ("reparse", "structural_pipeline"),
+    ("reparse_certification", "structural_pipeline"),
+    ("semantic_compare", "structural_pipeline"),
+    ("output_commit", "safe_output"),
+)
+
+
+def _structural_failure_provenance(stage: str) -> str:
+    """Resolve one frozen semantic stage without mutable process-global state."""
+
+    for candidate_stage, provenance in _STRUCTURAL_FAILURE_PROVENANCE:
+        if stage == candidate_stage:
+            return provenance
+    raise AssertionError(f"unsupported structural execution stage: {stage!r}")
+
+
+def _with_structural_failure_provenance(
+    diagnostic: _PmxServiceDiagnostic,
+    stage: str,
+) -> _PmxServiceDiagnostic:
+    """Attach bounded redacted structural execution provenance to one diagnostic."""
+
+    provenance = _structural_failure_provenance(stage)
+    if any(key in {"stage", "provenance"} for key, _value in diagnostic.details):
+        raise AssertionError(
+            "diagnostic already contains structural provenance details"
+        )
+    return _PmxServiceDiagnostic(
+        code=diagnostic.code,
+        operation=diagnostic.operation,
+        message=diagnostic.message,
+        details=diagnostic.details
+        + (
+            ("stage", stage),
+            ("provenance", provenance),
+        ),
+    )
+
+
 _STRUCTURAL_TARGET_ORDER = tuple(PmxReferenceTargetKind)
 
 
@@ -390,6 +438,13 @@ def apply_structural_edit(
 ) -> PmxStructuralExecutionResult:
     """Safely execute one bounded structural request against one source snapshot."""
 
+    failure_stage = "service_validation"
+
+    def record_stage(stage: str) -> None:
+        nonlocal failure_stage
+        _structural_failure_provenance(stage)
+        failure_stage = stage
+
     try:
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
@@ -402,19 +457,22 @@ def apply_structural_edit(
             _write_pmx_structural_transaction,
         )
 
+        failure_stage = "path_resolution"
         result = _write_pmx_structural_transaction(
             input_path,
             output_path,
             lambda document: _build_structural_preview_intent(document, request),
             overwrite=overwrite,
+            _stage_callback=record_stage,
         )
         return PmxStructuralExecutionResult(result)
     except Exception as error:
+        diagnostic = diagnostic_from_service_error(
+            PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
+            error,
+        )
         failure = PmxServiceError(
-            diagnostic_from_service_error(
-                PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
-                error,
-            )
+            _with_structural_failure_provenance(diagnostic, failure_stage)
         )
     raise failure from None
 

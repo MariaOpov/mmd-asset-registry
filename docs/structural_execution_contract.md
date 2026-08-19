@@ -165,9 +165,34 @@ the existing public diagnostic adapter. Unexpected failures are redacted so
 private paths, arbitrary exception text, and implementation details are not
 exposed.
 
-CP17 owns richer stage/provenance evidence; it must remain additive to this
-coarse CP16 error surface. Process-control exceptions must not be swallowed or
-converted into ordinary service failures.
+CP17 adds bounded stage/provenance evidence while preserving this coarse CP16
+error surface. No new structural diagnostic code is introduced. Public
+`apply_structural_edit` failures add deterministic `details.stage` and
+`details.provenance` values only; paths, exception strings, Python type names,
+module names, and raw writer objects remain forbidden. Process-control exceptions
+must not be swallowed or converted into ordinary service failures.
+
+The frozen stage vocabulary is:
+
+- `service_validation`;
+- `path_resolution`;
+- `source_snapshot`;
+- `source_parse`;
+- `intent_resolution`;
+- `structural_certification`;
+- `serialization`;
+- `reparse`;
+- `reparse_certification`;
+- `semantic_compare`;
+- `output_commit`.
+
+The frozen provenance vocabulary is `service_boundary`, `source_input`,
+`structural_pipeline`, and `safe_output`. Stage-to-provenance mapping is semantic:
+service validation and intent resolution belong to `service_boundary`; source
+snapshot/parse belong to `source_input`; certification through semantic comparison
+belong to `structural_pipeline`; and path resolution plus the whole verified
+commit/publication unit belong to `safe_output`. CP17 deliberately does not parse
+exception messages to infer sub-stages inside the reused safe-output kernel.
 
 ## Determinism, state isolation, and resource behavior
 
@@ -203,7 +228,7 @@ resource attacks are already eliminated.
 | T12 | Preview/execute semantic divergence | Execute must derive from the same certified preview semantics | CP06 parity gate |
 | T13 | Unsupported insertion/new indices | Collection transform rejects new indices without old sources | Out of scope for v0.9.1 |
 | T14 | Accidental public raw-writer exposure | CP16 exposes only the bounded service wrapper; raw kernel remains absent from canonical public namespaces | Preserve through release gates |
-| T15 | Diagnostic/private-path leakage | CP16 uses coarse structured redacted execution diagnostics | CP17 expands stage/provenance evidence |
+| T15 | Diagnostic/private-path leakage | CP17 adds bounded redacted stage/provenance details without new structural codes | Preserve through release gates |
 | T16 | Non-determinism | Canonical ordering, deterministic intent hash, repeated serialization equality | Recheck in CP19 |
 | T17 | Mutable/shared-state leakage | Structural path is immutable/state-isolated; no mutable global lookup tables | Recheck in CP19 |
 | T18 | Resource amplification | Batched reference-impact analysis scales with graph evidence rather than changed-node rescans | CP19 expands adversarial/resource gate |

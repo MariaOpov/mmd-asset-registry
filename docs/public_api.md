@@ -68,7 +68,9 @@ not removed or redirected.
 
 The operation and code vocabularies describe current behavior only. They do
 not promise model creation, VMD editing, plugin loading, unrestricted physics
-editing, or future edit operations.
+editing, or future edit operations. CP17 does not add new structural diagnostic
+codes; structural execution reuses the existing deterministic `details` channel
+for bounded redacted failure provenance.
 
 The v0.9 reference-analysis service adds the `analyze_references` and
 `analyze_reference_node` operations. Argument and unexpected implementation
@@ -181,8 +183,19 @@ separate destination. No in-place structural editing is exposed.
 
 The execution service is imported lazily so merely importing
 `mmd_registry.services` does not load the structural writer. Expected failures
-cross the structured service diagnostic boundary under `apply_structural_edit`;
-CP17 may add richer provenance without changing this stable service shape.
+cross the structured service diagnostic boundary under `apply_structural_edit`.
+CP17 adds only two deterministic safe details to those service failures:
+`stage` and `provenance`. They never contain filesystem paths, exception text,
+module/class names, or raw writer objects. The coarse diagnostic code remains the
+authoritative failure category.
+
+The bounded structural stages are `service_validation`, `path_resolution`,
+`source_snapshot`, `source_parse`, `intent_resolution`,
+`structural_certification`, `serialization`, `reparse`,
+`reparse_certification`, `semantic_compare`, and `output_commit`. Provenance is
+restricted to `service_boundary`, `source_input`, `structural_pipeline`, or
+`safe_output`. These labels describe reviewed semantic phases rather than private
+function names, and they do not expand structural editing authority.
 
 The capability manifest is authoritative for the current release:
 `structural_preview=True`, `structural_write=True`, and

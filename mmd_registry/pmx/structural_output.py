@@ -68,6 +68,19 @@ from mmd_registry.pmx.writer import serialize_pmx
 _LOWERCASE_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
+_StructuralStageCallback = Callable[[str], None]
+
+
+def _notify_structural_stage(
+    callback: _StructuralStageCallback | None,
+    stage: str,
+) -> None:
+    """Record one bounded execution stage for service-side failure provenance."""
+
+    if callback is not None:
+        callback(stage)
+
+
 class PmxStructuralOutputPathError(ValueError):
     """Raised when structural input/output paths violate safe-write policy."""
 
@@ -98,18 +111,43 @@ class PmxStructuralSerializationResult:
     output_sha256: str = field(init=False)
 
     def __post_init__(self) -> None:
+        self._derive_verified_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        source_document: PmxDocument,
+        intent: PmxStructuralTransformIntent,
+        stage_callback: _StructuralStageCallback,
+    ) -> "PmxStructuralSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "source_document", source_document)
+        object.__setattr__(result, "intent", intent)
+        result._derive_verified_evidence(stage_callback)
+        return result
+
+    def _derive_verified_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
         if not isinstance(self.source_document, PmxDocument):
             raise TypeError("source_document must be a PmxDocument instance.")
         if not isinstance(self.intent, PmxStructuralTransformIntent):
             raise TypeError("intent must be a PmxStructuralTransformIntent value.")
+        if stage_callback is not None and not callable(stage_callback):
+            raise TypeError("stage_callback must be callable or None.")
 
+        _notify_structural_stage(stage_callback, "structural_certification")
         preview = preview_pmx_structural_transform(
             self.source_document,
             self.intent,
         )
         intended_document = preview.certificate.document
+
+        _notify_structural_stage(stage_callback, "serialization")
         serialized = serialize_pmx(intended_document)
 
+        _notify_structural_stage(stage_callback, "reparse")
         try:
             reparsed_document = load_pmx(io.BytesIO(serialized))
         except Exception as error:
@@ -117,6 +155,7 @@ class PmxStructuralSerializationResult:
                 f"serialized structural PMX could not be reparsed: {error}"
             ) from error
 
+        _notify_structural_stage(stage_callback, "reparse_certification")
         try:
             reparsed_certificate = PmxStructuralInvariantCertificate(
                 document=reparsed_document
@@ -127,6 +166,7 @@ class PmxStructuralSerializationResult:
                 f"{error}"
             ) from error
 
+        _notify_structural_stage(stage_callback, "semantic_compare")
         if reparsed_document != intended_document:
             raise PmxStructuralOutputVerificationError(
                 "serialized structural PMX does not match the intended "
@@ -173,12 +213,22 @@ class PmxStructuralSerializationResult:
 def verify_pmx_structural_serialization(
     document: PmxDocument,
     intent: PmxStructuralTransformIntent,
+    *,
+    _stage_callback: _StructuralStageCallback | None = None,
 ) -> PmxStructuralSerializationResult:
     """Return verified deterministic bytes without touching the filesystem."""
 
-    return PmxStructuralSerializationResult(
-        source_document=document,
-        intent=intent,
+    if _stage_callback is None:
+        return PmxStructuralSerializationResult(
+            source_document=document,
+            intent=intent,
+        )
+    if not callable(_stage_callback):
+        raise TypeError("_stage_callback must be callable or None.")
+    return PmxStructuralSerializationResult._with_stage_callback(
+        document,
+        intent,
+        _stage_callback,
     )
 
 
@@ -294,6 +344,7 @@ def _write_pmx_structural_transaction(
     intent_factory: Callable[[PmxDocument], PmxStructuralTransformIntent],
     *,
     overwrite: bool = False,
+    _stage_callback: _StructuralStageCallback | None = None,
 ) -> PmxStructuralWriteResult:
     """Execute one structural write against exactly one captured source snapshot."""
 
@@ -301,7 +352,10 @@ def _write_pmx_structural_transaction(
         raise TypeError("intent_factory must be callable.")
     if not isinstance(overwrite, bool):
         raise TypeError("overwrite must be a boolean.")
+    if _stage_callback is not None and not callable(_stage_callback):
+        raise TypeError("_stage_callback must be callable or None.")
 
+    _notify_structural_stage(_stage_callback, "path_resolution")
     try:
         requested_source, source, destination = _edit_output._resolve_edit_paths(
             input_path,
@@ -312,10 +366,15 @@ def _write_pmx_structural_transaction(
         _translate_edit_path_error(error)
         raise AssertionError("unreachable")
 
+    _notify_structural_stage(_stage_callback, "source_snapshot")
     source_identity = _edit_output._file_identity(source)
     source_bytes = source.read_bytes()
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+
+    _notify_structural_stage(_stage_callback, "source_parse")
     source_document = load_pmx(io.BytesIO(source_bytes))
+
+    _notify_structural_stage(_stage_callback, "intent_resolution")
     intent = intent_factory(source_document)
     if not isinstance(intent, PmxStructuralTransformIntent):
         raise TypeError(
@@ -325,8 +384,10 @@ def _write_pmx_structural_transaction(
     serialization = verify_pmx_structural_serialization(
         source_document,
         intent,
+        _stage_callback=_stage_callback,
     )
 
+    _notify_structural_stage(_stage_callback, "output_commit")
     try:
         _edit_output._commit_verified_bytes(
             serialization.serialized_bytes,

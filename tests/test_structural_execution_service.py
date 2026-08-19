@@ -164,6 +164,10 @@ class StructuralExecutionServiceTests(unittest.TestCase):
                     "code": "structural_path_unsafe",
                     "operation": "apply_structural_edit",
                     "message": "Structural output path failed safety validation.",
+                    "details": {
+                        "provenance": "safe_output",
+                        "stage": "path_resolution",
+                    },
                 },
             )
             self.assertEqual(source.read_bytes(), source_bytes)
@@ -218,6 +222,10 @@ class StructuralExecutionServiceTests(unittest.TestCase):
                     "code": "structural_verification_failed",
                     "operation": "apply_structural_edit",
                     "message": "Structural execution failed reference-safety validation.",
+                    "details": {
+                        "provenance": "service_boundary",
+                        "stage": "intent_resolution",
+                    },
                 },
             )
             self.assertFalse(output.exists())
@@ -254,6 +262,13 @@ class StructuralExecutionServiceTests(unittest.TestCase):
                         raised.exception.diagnostic.operation,
                         PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
                     )
+                    self.assertEqual(
+                        raised.exception.to_dict()["details"],
+                        {
+                            "provenance": "service_boundary",
+                            "stage": "service_validation",
+                        },
+                    )
                     self.assertFalse(output.exists())
 
     def test_source_change_after_request_resolution_fails_before_publication(self) -> None:
@@ -288,6 +303,13 @@ class StructuralExecutionServiceTests(unittest.TestCase):
                 raised.exception.diagnostic.code,
                 PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED,
             )
+            self.assertEqual(
+                raised.exception.to_dict()["details"],
+                {
+                    "provenance": "safe_output",
+                    "stage": "output_commit",
+                },
+            )
             self.assertFalse(output.exists())
 
     def test_unexpected_failure_is_redacted_and_context_suppressed(self) -> None:
@@ -313,6 +335,13 @@ class StructuralExecutionServiceTests(unittest.TestCase):
             self.assertEqual(
                 error.diagnostic.operation,
                 PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
+            )
+            self.assertEqual(
+                error.to_dict()["details"],
+                {
+                    "provenance": "safe_output",
+                    "stage": "path_resolution",
+                },
             )
             self.assertNotIn(PRIVATE_DETAIL, repr(error.to_dict()))
             self.assertNotIn("RuntimeError", repr(error.to_dict()))

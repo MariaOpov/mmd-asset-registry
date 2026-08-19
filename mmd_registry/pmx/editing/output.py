@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import io
 import json
 import os
 import re
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +28,9 @@ from mmd_registry.pmx.editing.preview import (
 
 
 _LOWERCASE_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_AT_FDCWD = -100
+_LINUX_RENAME_NOREPLACE = 1
+_DARWIN_RENAME_EXCL = 0x00000004
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +117,103 @@ def _file_identity(path: Path) -> tuple[int, int]:
 
     stat_result = path.stat()
     return (stat_result.st_dev, stat_result.st_ino)
+
+
+def _raise_no_clobber_rename_error(
+    error_number: int,
+    destination: Path,
+) -> None:
+    """Raise the platform rename failure while preserving EEXIST semantics."""
+
+    if error_number == errno.EEXIST:
+        raise FileExistsError(
+            error_number,
+            os.strerror(error_number),
+            destination,
+        )
+    raise OSError(
+        error_number,
+        os.strerror(error_number),
+        destination,
+    )
+
+
+def _publish_no_clobber_linux(source: Path, destination: Path) -> None:
+    """Atomically rename one verified temp file without replacing on Linux."""
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        raise PmxEditVerificationError(
+            "atomic no-clobber publication is unavailable: "
+            "renameat2 is not provided by the runtime C library."
+        )
+
+    renameat2.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renameat2.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    result = renameat2(
+        _AT_FDCWD,
+        os.fsencode(source),
+        _AT_FDCWD,
+        os.fsencode(destination),
+        _LINUX_RENAME_NOREPLACE,
+    )
+    if result == 0:
+        return
+    _raise_no_clobber_rename_error(ctypes.get_errno(), destination)
+
+
+def _publish_no_clobber_darwin(source: Path, destination: Path) -> None:
+    """Atomically rename one verified temp file without replacing on macOS."""
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    renamex_np = getattr(libc, "renamex_np", None)
+    if renamex_np is None:
+        raise PmxEditVerificationError(
+            "atomic no-clobber publication is unavailable: "
+            "renamex_np is not provided by the runtime C library."
+        )
+
+    renamex_np.argtypes = (
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renamex_np.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    result = renamex_np(
+        os.fsencode(source),
+        os.fsencode(destination),
+        _DARWIN_RENAME_EXCL,
+    )
+    if result == 0:
+        return
+    _raise_no_clobber_rename_error(ctypes.get_errno(), destination)
+
+
+def _publish_no_clobber(source: Path, destination: Path) -> None:
+    """Atomically consume a verified temp file without replacing a racer."""
+
+    if os.name == "nt":
+        os.rename(source, destination)
+        return
+    if sys.platform.startswith("linux"):
+        _publish_no_clobber_linux(source, destination)
+        return
+    if sys.platform == "darwin":
+        _publish_no_clobber_darwin(source, destination)
+        return
+    raise PmxEditVerificationError(
+        "atomic no-clobber publication is unsupported on this platform; "
+        "refusing non-atomic fallback."
+    )
 
 
 def _validate_destination_state(
@@ -286,13 +389,12 @@ def _commit_verified_bytes(
             temporary_path = None
         else:
             try:
-                os.link(temporary_path, destination)
+                _publish_no_clobber(temporary_path, destination)
             except FileExistsError as error:
                 raise PmxEditPathError(
                     f"Output file already exists: {destination}. "
                     "Use --overwrite to replace this separate output file."
                 ) from error
-            temporary_path.unlink()
             temporary_path = None
     finally:
         if temporary_path is not None:

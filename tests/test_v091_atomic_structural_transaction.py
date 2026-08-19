@@ -85,11 +85,11 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
         self.assertEqual(self._temporary_outputs(destination), [])
 
     def test_no_clobber_publication_sees_complete_verified_payload(self) -> None:
-        destination = self.root / "complete-before-link.pmx"
-        original_link = edit_output.os.link
+        destination = self.root / "complete-before-publish.pmx"
+        original_publish = edit_output._publish_no_clobber
         observed = False
 
-        def inspect_then_link(source, target, *args, **kwargs):
+        def inspect_then_publish(source, target):
             nonlocal observed
             temporary = Path(source)
             publish_target = Path(target)
@@ -99,11 +99,11 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
                 self.verified.serialized_bytes,
             )
             observed = True
-            return original_link(source, target, *args, **kwargs)
+            return original_publish(source, target)
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
-            side_effect=inspect_then_link,
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
+            side_effect=inspect_then_publish,
         ):
             write_pmx_structural_transform(
                 self.source,
@@ -116,13 +116,13 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
         self.assertEqual(self._temporary_outputs(destination), [])
 
     def test_no_clobber_transaction_order_is_fail_closed(self) -> None:
-        destination = self.root / "ordered-link.pmx"
+        destination = self.root / "ordered-publish.pmx"
         events: list[str] = []
         original_fsync = edit_output.os.fsync
         original_hash = edit_output._hash_file
         original_verify_source = edit_output._verify_source_unchanged
         original_validate = edit_output._validate_destination_state
-        original_link = edit_output.os.link
+        original_publish = edit_output._publish_no_clobber
         validate_calls = 0
 
         def record_fsync(fd: int) -> None:
@@ -150,9 +150,9 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
                 events.append("destination_revalidate")
             return original_validate(source, output, overwrite=overwrite)
 
-        def record_link(source, target, *args, **kwargs):
+        def record_publish(source: Path, target: Path) -> None:
             events.append("publish")
-            return original_link(source, target, *args, **kwargs)
+            return original_publish(source, target)
 
         with patch(
             "mmd_registry.pmx.editing.output.os.fsync",
@@ -167,8 +167,8 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
             "mmd_registry.pmx.editing.output._validate_destination_state",
             side_effect=record_validate,
         ), patch(
-            "mmd_registry.pmx.editing.output.os.link",
-            side_effect=record_link,
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
+            side_effect=record_publish,
         ):
             write_pmx_structural_transform(
                 self.source,
@@ -267,14 +267,14 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), self.verified.serialized_bytes)
         self.assertEqual(self._temporary_outputs(destination), [])
 
-    def test_structural_link_failure_leaves_no_partial_output(self) -> None:
-        destination = self.root / "link-failure.pmx"
+    def test_structural_publish_failure_leaves_no_partial_output(self) -> None:
+        destination = self.root / "publish-failure.pmx"
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
-            side_effect=OSError("simulated structural link failure"),
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
+            side_effect=OSError("simulated structural publish failure"),
         ):
-            with self.assertRaisesRegex(OSError, "structural link failure"):
+            with self.assertRaisesRegex(OSError, "structural publish failure"):
                 write_pmx_structural_transform(
                     self.source,
                     destination,
@@ -282,6 +282,28 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
                 )
 
         self.assertFalse(destination.exists())
+        self.assertEqual(self.source.read_bytes(), self.source_bytes)
+        self.assertEqual(self._temporary_outputs(destination), [])
+
+    def test_no_clobber_success_has_no_post_publish_temp_unlink(self) -> None:
+        destination = self.root / "single-step-publish.pmx"
+
+        with patch.object(
+            Path,
+            "unlink",
+            side_effect=AssertionError("post-publication unlink must not run"),
+        ) as unlink:
+            result = write_pmx_structural_transform(
+                self.source,
+                destination,
+                self.intent,
+            )
+
+        unlink.assert_not_called()
+        self.assertEqual(
+            destination.read_bytes(),
+            result.serialization.serialized_bytes,
+        )
         self.assertEqual(self.source.read_bytes(), self.source_bytes)
         self.assertEqual(self._temporary_outputs(destination), [])
 
@@ -329,7 +351,7 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
             "mmd_registry.pmx.editing.output._validate_destination_state",
             side_effect=fail_second_validation,
         ), patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
         ) as publish:
             with self.assertRaisesRegex(
                 PmxStructuralOutputPathError,
@@ -362,7 +384,7 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
         ), patch(
             "mmd_registry.pmx.editing.output._verify_source_unchanged",
         ) as source_verify, patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
         ) as publish:
             with self.assertRaisesRegex(
                 PmxStructuralOutputVerificationError,
@@ -388,7 +410,7 @@ class V091AtomicStructuralTransactionTests(unittest.TestCase):
                 "simulated source verification failure"
             ),
         ), patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
         ) as publish:
             with self.assertRaisesRegex(
                 PmxStructuralOutputVerificationError,

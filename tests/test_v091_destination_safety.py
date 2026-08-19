@@ -203,7 +203,7 @@ class V091DestinationSafetyTests(unittest.TestCase):
         racer = b"CP04 edit racer"
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
             side_effect=self._publish_collision(destination, racer),
         ):
             with self.assertRaisesRegex(PmxEditPathError, "already exists"):
@@ -224,7 +224,7 @@ class V091DestinationSafetyTests(unittest.TestCase):
         racer = b"CP04 structural racer"
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
             side_effect=self._publish_collision(destination, racer),
         ):
             with self.assertRaisesRegex(

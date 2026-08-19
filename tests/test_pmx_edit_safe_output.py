@@ -254,13 +254,13 @@ class PmxEditSafeOutputTests(unittest.TestCase):
         self.assertEqual(self.temporary_outputs(output_path), [])
 
     def test_atomic_create_failure_leaves_no_partial_output(self) -> None:
-        output_path = self.project_root / "link-failure.pmx"
+        output_path = self.project_root / "publish-failure.pmx"
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
-            side_effect=OSError("simulated link failure"),
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
+            side_effect=OSError("simulated publish failure"),
         ):
-            with self.assertRaisesRegex(OSError, "link failure"):
+            with self.assertRaisesRegex(OSError, "publish failure"):
                 write_pmx_edit(self.input_path, output_path, self.plan)
 
         self.assertFalse(output_path.exists())
@@ -270,7 +270,7 @@ class PmxEditSafeOutputTests(unittest.TestCase):
         output_path = self.project_root / "race.pmx"
 
         with patch(
-            "mmd_registry.pmx.editing.output.os.link",
+            "mmd_registry.pmx.editing.output._publish_no_clobber",
             side_effect=FileExistsError("simulated race"),
         ):
             with self.assertRaisesRegex(PmxEditPathError, "already exists"):

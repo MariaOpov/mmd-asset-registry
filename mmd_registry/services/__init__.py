@@ -16,6 +16,9 @@ from mmd_registry.diagnostics import (
     PmxServiceOperation,
     diagnostic_from_service_error,
 )
+from mmd_registry.services.structural_texture import (
+    PmxStructuralTextureInsertion as _PmxStructuralTextureInsertion,
+)
 from mmd_registry.pmx.collection_transform import (
     PmxCollectionTransform,
     PmxStructuralTransformIntent,
@@ -44,9 +47,17 @@ from mmd_registry.pmx.reference_queries import (
     PmxReferenceImpact,
     analyze_reference_impact,
 )
+from mmd_registry.pmx.structural_insert_intent import (
+    PmxStructuralInsertPosition as _PmxStructuralInsertPosition,
+)
 from mmd_registry.pmx.structural_preview import (
     PmxStructuralPreview as _PmxStructuralPreview,
     preview_pmx_structural_transform as _preview_pmx_structural_transform,
+)
+from mmd_registry.pmx.structural_texture_insertion import (
+    PmxTextureInsertionPayload as _PmxTextureInsertionPayload,
+    PmxTextureInsertionPreview as _PmxTextureInsertionPreview,
+    preview_pmx_texture_insertions as _preview_pmx_texture_insertions,
 )
 from mmd_registry.pmx.validation import validate_pmx_document
 
@@ -195,6 +206,7 @@ class PmxStructuralPreviewRequest:
     """Immutable public request shared by structural preview and execution."""
 
     collection_edits: tuple[PmxStructuralCollectionEdit, ...] = ()
+    texture_insertions: tuple[_PmxStructuralTextureInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -210,16 +222,36 @@ class PmxStructuralPreviewRequest:
         if len(set(kinds)) != len(kinds):
             raise ValueError("collection_edits cannot repeat one target_kind.")
 
+        if type(self.texture_insertions) is not tuple:
+            raise TypeError("texture_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralTextureInsertion)
+            for insertion in self.texture_insertions
+        ):
+            raise TypeError(
+                "texture_insertions must contain only "
+                "PmxStructuralTextureInsertion values."
+            )
+
+        if self.collection_edits and self.texture_insertions:
+            raise ValueError(
+                "texture insertions cannot be combined with legacy collection edits "
+                "in the preview-only texture insertion gate."
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
     """Service-facing structural preview without exporting implementation types."""
 
-    _preview: _PmxStructuralPreview = field(repr=False)
+    _preview: _PmxStructuralPreview | _PmxTextureInsertionPreview = field(repr=False)
 
     def __post_init__(self) -> None:
-        if not isinstance(self._preview, _PmxStructuralPreview):
-            raise TypeError("_preview must be an internal PmxStructuralPreview value.")
+        if not isinstance(
+            self._preview,
+            (_PmxStructuralPreview, _PmxTextureInsertionPreview),
+        ):
+            raise TypeError("_preview must be an internal structural preview value.")
 
     @property
     def status(self) -> str:
@@ -369,6 +401,28 @@ def _structural_target_size(
     raise AssertionError(f"unsupported structural target kind: {target_kind!r}")
 
 
+def _build_texture_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxTextureInsertionPayload, ...]:
+    payloads: list[_PmxTextureInsertionPayload] = []
+    for insertion in request.texture_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+        payloads.append(
+            _PmxTextureInsertionPayload(
+                path=insertion.path,
+                position=position,
+            )
+        )
+    return tuple(payloads)
+
+
 def _build_structural_preview_intent(
     document: PmxDocument,
     request: PmxStructuralPreviewRequest,
@@ -415,6 +469,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.texture_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_texture_insertions(
+                    document,
+                    _build_texture_insertion_payloads(request),
+                )
+            )
         intent = _build_structural_preview_intent(document, request)
         return PmxStructuralPreviewResult(
             _preview_pmx_structural_transform(document, intent)
@@ -450,6 +511,8 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        if request.texture_insertions:
+            raise ValueError("texture insertion execution is not enabled.")
 
         # Import the internal output kernel only when execution is requested.
         # Merely importing mmd_registry.services therefore remains side-effect-light.

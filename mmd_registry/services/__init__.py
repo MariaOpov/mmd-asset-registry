@@ -16,6 +16,9 @@ from mmd_registry.diagnostics import (
     PmxServiceOperation,
     diagnostic_from_service_error,
 )
+from mmd_registry.services.structural_material import (
+    PmxStructuralMaterialInsertion as _PmxStructuralMaterialInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion as _PmxStructuralTextureInsertion,
 )
@@ -49,6 +52,11 @@ from mmd_registry.pmx.reference_queries import (
 )
 from mmd_registry.pmx.structural_insert_intent import (
     PmxStructuralInsertPosition as _PmxStructuralInsertPosition,
+)
+from mmd_registry.pmx.structural_material_insertion import (
+    PmxMaterialInsertionPayload as _PmxMaterialInsertionPayload,
+    PmxMaterialInsertionPreview as _PmxMaterialInsertionPreview,
+    preview_pmx_material_insertions as _preview_pmx_material_insertions,
 )
 from mmd_registry.pmx.structural_preview import (
     PmxStructuralPreview as _PmxStructuralPreview,
@@ -207,6 +215,7 @@ class PmxStructuralPreviewRequest:
 
     collection_edits: tuple[PmxStructuralCollectionEdit, ...] = ()
     texture_insertions: tuple[_PmxStructuralTextureInsertion, ...] = ()
+    material_insertions: tuple[_PmxStructuralMaterialInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -239,17 +248,44 @@ class PmxStructuralPreviewRequest:
                 "in the preview-only texture insertion gate."
             )
 
+        if type(self.material_insertions) is not tuple:
+            raise TypeError("material_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralMaterialInsertion)
+            for insertion in self.material_insertions
+        ):
+            raise TypeError(
+                "material_insertions must contain only "
+                "PmxStructuralMaterialInsertion values."
+            )
+
+        if self.material_insertions and (
+            self.collection_edits or self.texture_insertions
+        ):
+            raise ValueError(
+                "material insertions cannot be combined with legacy collection edits "
+                "or texture insertions in the preview-only material insertion gate."
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
     """Service-facing structural preview without exporting implementation types."""
 
-    _preview: _PmxStructuralPreview | _PmxTextureInsertionPreview = field(repr=False)
+    _preview: (
+        _PmxStructuralPreview
+        | _PmxTextureInsertionPreview
+        | _PmxMaterialInsertionPreview
+    ) = field(repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(
             self._preview,
-            (_PmxStructuralPreview, _PmxTextureInsertionPreview),
+            (
+                _PmxStructuralPreview,
+                _PmxTextureInsertionPreview,
+                _PmxMaterialInsertionPreview,
+            ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
 
@@ -423,6 +459,43 @@ def _build_texture_insertion_payloads(
     return tuple(payloads)
 
 
+def _build_material_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxMaterialInsertionPayload, ...]:
+    payloads: list[_PmxMaterialInsertionPayload] = []
+    for insertion in request.material_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+
+        payloads.append(
+            _PmxMaterialInsertionPayload(
+                local_name=insertion.local_name,
+                universal_name=insertion.universal_name,
+                memo=insertion.memo,
+                texture_index=insertion.texture_index,
+                sphere_texture_index=insertion.sphere_texture_index,
+                sphere_mode=insertion.sphere_mode,
+                toon_reference_mode=insertion.toon_reference_mode,
+                toon_reference_index=insertion.toon_reference_index,
+                diffuse=insertion.diffuse,
+                specular=insertion.specular,
+                specular_strength=insertion.specular_strength,
+                ambient=insertion.ambient,
+                drawing_flags=insertion.drawing_flags,
+                edge_color=insertion.edge_color,
+                edge_scale=insertion.edge_scale,
+                position=position,
+            )
+        )
+    return tuple(payloads)
+
+
 def _build_structural_preview_intent(
     document: PmxDocument,
     request: PmxStructuralPreviewRequest,
@@ -469,6 +542,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.material_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_material_insertions(
+                    document,
+                    _build_material_insertion_payloads(request),
+                )
+            )
         if request.texture_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_texture_insertions(
@@ -511,6 +591,8 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        if request.material_insertions:
+            raise ValueError("material insertion execution is not enabled.")
 
         texture_payloads = (
             _build_texture_insertion_payloads(request)

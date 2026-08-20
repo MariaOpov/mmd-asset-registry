@@ -33,6 +33,9 @@ from mmd_registry.pmx.document import (
     PmxSoftBodyAnchor,
 )
 from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
+from mmd_registry.pmx.structural_reference_shift import (
+    PmxCollectionReferenceShiftPlan,
+)
 
 
 class PmxPhysicsReferenceRemapError(ValueError):
@@ -307,6 +310,69 @@ def remap_joint_rigid_body_references(
     if not changed:
         return joints
     return tuple(rewritten)
+
+
+def remap_soft_body_material_references_for_insertion(
+    soft_bodies: tuple[PmxSoftBody, ...],
+    material_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+) -> tuple[PmxSoftBody, ...]:
+    """Rewrite CP14-owned soft-body material references through insertion evidence.
+
+    Rigid-body anchors and pinned-vertex references are intentionally preserved;
+    their target collections are unchanged by material-only insertion.
+    """
+
+    if type(soft_bodies) is not tuple:
+        raise TypeError("soft_bodies must be a tuple.")
+    if not all(isinstance(body, PmxSoftBody) for body in soft_bodies):
+        raise TypeError("soft_bodies must contain only PmxSoftBody records.")
+    if not isinstance(material_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "material_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if material_shift.target_kind is not PmxReferenceTargetKind.MATERIAL:
+        raise ValueError("material_shift target_kind must be material.")
+
+    version = _require_pmx_version(pmx_version)
+    if version == 2.0:
+        if soft_bodies:
+            raise ValueError("PMX 2.0 cannot contain a soft-body section.")
+        return soft_bodies
+
+    rewritten_bodies: list[PmxSoftBody] = []
+    changed = False
+    for body_index, body in enumerate(soft_bodies):
+        field_name = f"soft_bodies[{body_index}].material_index"
+        material_index = _require_plain_index(body.material_index, field_name)
+        if material_index == -1:
+            rewritten_bodies.append(body)
+            continue
+        if material_index < -1:
+            raise ValueError(f"{field_name} cannot be smaller than -1.")
+        if material_index >= material_shift.current_count:
+            raise ValueError(
+                f"{field_name}={material_index} is outside material old_size "
+                f"{material_shift.current_count}."
+            )
+
+        mapped = material_shift.remap.target_for(material_index)
+        if mapped is None:
+            raise PmxPhysicsReferenceRemapError(
+                f"{field_name} references removed material index {material_index}; "
+                "removed targets are not converted to the -1 sentinel."
+            )
+        if mapped == material_index:
+            rewritten_bodies.append(body)
+            continue
+
+        rewritten_bodies.append(replace(body, material_index=mapped))
+        changed = True
+
+    if not changed:
+        return soft_bodies
+    return tuple(rewritten_bodies)
 
 
 def remap_soft_body_references(

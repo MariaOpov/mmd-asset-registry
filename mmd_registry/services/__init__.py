@@ -511,23 +511,37 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
-        if request.texture_insertions:
-            raise ValueError("texture insertion execution is not enabled.")
+
+        texture_payloads = (
+            _build_texture_insertion_payloads(request)
+            if request.texture_insertions
+            else ()
+        )
 
         # Import the internal output kernel only when execution is requested.
         # Merely importing mmd_registry.services therefore remains side-effect-light.
         from mmd_registry.pmx.structural_output import (
             _write_pmx_structural_transaction,
+            _write_pmx_texture_insertion_transaction,
         )
 
         failure_stage = "path_resolution"
-        result = _write_pmx_structural_transaction(
-            input_path,
-            output_path,
-            lambda document: _build_structural_preview_intent(document, request),
-            overwrite=overwrite,
-            _stage_callback=record_stage,
-        )
+        if texture_payloads:
+            result = _write_pmx_texture_insertion_transaction(
+                input_path,
+                output_path,
+                texture_payloads,
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        else:
+            result = _write_pmx_structural_transaction(
+                input_path,
+                output_path,
+                lambda document: _build_structural_preview_intent(document, request),
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
         return PmxStructuralExecutionResult(result)
     except Exception as error:
         diagnostic = diagnostic_from_service_error(

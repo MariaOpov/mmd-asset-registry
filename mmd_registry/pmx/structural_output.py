@@ -35,6 +35,10 @@ guard, not a Python security boundary against deliberate private-method or
 object-model bypass. Structural no-op intents still follow this full
 verification path and,
 when a filesystem write is requested, produce a distinct verified output file.
+
+CP08 extends only the certified-preview/serialization adapter so texture insertion can
+reuse this exact transaction authority. The legacy transform classes and public raw
+structural-output surface remain unchanged; insertion-specific helpers stay private.
 """
 
 from __future__ import annotations
@@ -61,6 +65,11 @@ from mmd_registry.pmx.structural_preview import (
     PMX_STRUCTURAL_PREVIEW_SCHEMA_VERSION,
     PmxStructuralPreview,
     preview_pmx_structural_transform,
+)
+from mmd_registry.pmx.structural_texture_insertion import (
+    PmxTextureInsertionPayload,
+    PmxTextureInsertionPreview,
+    preview_pmx_texture_insertions,
 )
 from mmd_registry.pmx.writer import serialize_pmx
 
@@ -97,6 +106,95 @@ def _require_sha256(value: object, field_name: str) -> str:
             f"{field_name} must be exactly 64 lowercase hexadecimal characters."
         )
     return value
+
+
+_StructuralPreview = PmxStructuralPreview | PmxTextureInsertionPreview
+
+
+def _derive_verified_structural_serialization(
+    preview_factory: Callable[[], _StructuralPreview],
+    stage_callback: _StructuralStageCallback | None,
+) -> tuple[
+    _StructuralPreview,
+    bytes,
+    PmxStructuralInvariantCertificate,
+    str,
+]:
+    """Serialize one certified preview and independently verify its exact meaning."""
+
+    if not callable(preview_factory):
+        raise TypeError("preview_factory must be callable.")
+    if stage_callback is not None and not callable(stage_callback):
+        raise TypeError("stage_callback must be callable or None.")
+
+    _notify_structural_stage(stage_callback, "structural_certification")
+    preview = preview_factory()
+    if not isinstance(preview, (PmxStructuralPreview, PmxTextureInsertionPreview)):
+        raise TypeError(
+            "preview_factory must return a supported certified structural preview."
+        )
+    intended_document = preview.certificate.document
+
+    _notify_structural_stage(stage_callback, "serialization")
+    serialized = serialize_pmx(intended_document)
+
+    _notify_structural_stage(stage_callback, "reparse")
+    try:
+        reparsed_document = load_pmx(io.BytesIO(serialized))
+    except Exception as error:
+        raise PmxStructuralOutputVerificationError(
+            f"serialized structural PMX could not be reparsed: {error}"
+        ) from error
+
+    _notify_structural_stage(stage_callback, "reparse_certification")
+    try:
+        reparsed_certificate = PmxStructuralInvariantCertificate(
+            document=reparsed_document
+        )
+    except Exception as error:
+        raise PmxStructuralOutputVerificationError(
+            "reparsed structural PMX failed complete invariant certification: "
+            f"{error}"
+        ) from error
+
+    _notify_structural_stage(stage_callback, "semantic_compare")
+    if reparsed_document != intended_document:
+        raise PmxStructuralOutputVerificationError(
+            "serialized structural PMX does not match the intended certified document."
+        )
+
+    return (
+        preview,
+        serialized,
+        reparsed_certificate,
+        hashlib.sha256(serialized).hexdigest(),
+    )
+
+
+def _verified_serialization_report(
+    preview: _StructuralPreview,
+    output_sha256: str,
+    output_size_bytes: int,
+) -> dict[str, object]:
+    """Promote preview evidence only after deterministic serialization verification."""
+
+    report = preview.to_dict()
+    output = report["output"]
+    if not isinstance(output, dict):
+        raise AssertionError("structural preview output evidence must be a dictionary.")
+    report["output"] = {
+        **output,
+        "written": False,
+        "sha256": output_sha256,
+        "size_bytes": output_size_bytes,
+    }
+    report["verification"] = {
+        "invariants": "passed",
+        "reference_model": "passed",
+        "serialization": "passed",
+        "semantic": "passed",
+    }
+    return report
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,50 +235,23 @@ class PmxStructuralSerializationResult:
         if stage_callback is not None and not callable(stage_callback):
             raise TypeError("stage_callback must be callable or None.")
 
-        _notify_structural_stage(stage_callback, "structural_certification")
-        preview = preview_pmx_structural_transform(
-            self.source_document,
-            self.intent,
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_verified_structural_serialization(
+                lambda: preview_pmx_structural_transform(
+                    self.source_document,
+                    self.intent,
+                ),
+                stage_callback,
+            )
         )
-        intended_document = preview.certificate.document
-
-        _notify_structural_stage(stage_callback, "serialization")
-        serialized = serialize_pmx(intended_document)
-
-        _notify_structural_stage(stage_callback, "reparse")
-        try:
-            reparsed_document = load_pmx(io.BytesIO(serialized))
-        except Exception as error:
-            raise PmxStructuralOutputVerificationError(
-                f"serialized structural PMX could not be reparsed: {error}"
-            ) from error
-
-        _notify_structural_stage(stage_callback, "reparse_certification")
-        try:
-            reparsed_certificate = PmxStructuralInvariantCertificate(
-                document=reparsed_document
-            )
-        except Exception as error:
-            raise PmxStructuralOutputVerificationError(
-                "reparsed structural PMX failed complete invariant certification: "
-                f"{error}"
-            ) from error
-
-        _notify_structural_stage(stage_callback, "semantic_compare")
-        if reparsed_document != intended_document:
-            raise PmxStructuralOutputVerificationError(
-                "serialized structural PMX does not match the intended "
-                "certified document."
+        if not isinstance(preview, PmxStructuralPreview):
+            raise AssertionError(
+                "legacy structural serialization returned wrong preview."
             )
 
-        output_sha256 = hashlib.sha256(serialized).hexdigest()
         object.__setattr__(self, "preview", preview)
         object.__setattr__(self, "serialized_bytes", serialized)
-        object.__setattr__(
-            self,
-            "reparsed_certificate",
-            reparsed_certificate,
-        )
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
         object.__setattr__(self, "output_sha256", output_sha256)
 
     @property
@@ -194,20 +265,97 @@ class PmxStructuralSerializationResult:
     def to_dict(self) -> dict[str, object]:
         """Return deterministic JSON-ready verified-serialization evidence."""
 
-        report = self.preview.to_dict()
-        report["output"] = {
-            **report["output"],
-            "written": False,
-            "sha256": self.output_sha256,
-            "size_bytes": self.output_size_bytes,
-        }
-        report["verification"] = {
-            "invariants": "passed",
-            "reference_model": "passed",
-            "serialization": "passed",
-            "semantic": "passed",
-        }
-        return report
+        return _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _PmxTextureInsertionSerializationResult:
+    """Verified serialization evidence for the CP08 texture insertion path."""
+
+    source_document: PmxDocument
+    insertions: tuple[PmxTextureInsertionPayload, ...]
+    preview: PmxTextureInsertionPreview = field(init=False)
+    serialized_bytes: bytes = field(init=False, repr=False)
+    reparsed_certificate: PmxStructuralInvariantCertificate = field(init=False)
+    output_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._derive_verified_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        source_document: PmxDocument,
+        insertions: tuple[PmxTextureInsertionPayload, ...],
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxTextureInsertionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "source_document", source_document)
+        object.__setattr__(result, "insertions", insertions)
+        result._derive_verified_evidence(stage_callback)
+        return result
+
+    def _derive_verified_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
+        if not isinstance(self.source_document, PmxDocument):
+            raise TypeError("source_document must be a PmxDocument instance.")
+        if type(self.insertions) is not tuple:
+            raise TypeError("insertions must be a tuple.")
+        if not self.insertions:
+            raise ValueError(
+                "texture insertion execution requires at least one insertion."
+            )
+        if not all(
+            isinstance(insertion, PmxTextureInsertionPayload)
+            for insertion in self.insertions
+        ):
+            raise TypeError(
+                "insertions must contain only PmxTextureInsertionPayload values."
+            )
+        if stage_callback is not None and not callable(stage_callback):
+            raise TypeError("stage_callback must be callable or None.")
+
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_verified_structural_serialization(
+                lambda: preview_pmx_texture_insertions(
+                    self.source_document,
+                    self.insertions,
+                ),
+                stage_callback,
+            )
+        )
+        if not isinstance(preview, PmxTextureInsertionPreview):
+            raise AssertionError(
+                "texture insertion serialization returned wrong preview."
+            )
+
+        object.__setattr__(self, "preview", preview)
+        object.__setattr__(self, "serialized_bytes", serialized)
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
+        object.__setattr__(self, "output_sha256", output_sha256)
+
+    @property
+    def output_size_bytes(self) -> int:
+        return len(self.serialized_bytes)
+
+    @property
+    def status(self) -> str:
+        return self.preview.status
+
+    def to_dict(self) -> dict[str, object]:
+        """Return deterministic JSON-ready verified-serialization evidence."""
+
+        return _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
 
 
 def verify_pmx_structural_serialization(
@@ -232,6 +380,28 @@ def verify_pmx_structural_serialization(
     )
 
 
+def _verify_pmx_texture_insertion_serialization(
+    document: PmxDocument,
+    insertions: tuple[PmxTextureInsertionPayload, ...],
+    *,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> _PmxTextureInsertionSerializationResult:
+    """Return verified insertion bytes without exposing another mutation authority."""
+
+    if _stage_callback is None:
+        return _PmxTextureInsertionSerializationResult(
+            source_document=document,
+            insertions=insertions,
+        )
+    if not callable(_stage_callback):
+        raise TypeError("_stage_callback must be callable or None.")
+    return _PmxTextureInsertionSerializationResult._with_stage_callback(
+        document,
+        insertions,
+        _stage_callback,
+    )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class PmxStructuralWriteResult:
     """Report whose supported creation path follows successful atomic commit."""
@@ -240,7 +410,9 @@ class PmxStructuralWriteResult:
     output_path: Path
     source_sha256: str
     source_size_bytes: int
-    serialization: PmxStructuralSerializationResult
+    serialization: (
+        PmxStructuralSerializationResult | _PmxTextureInsertionSerializationResult
+    )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
@@ -257,7 +429,9 @@ class PmxStructuralWriteResult:
         output_path: Path,
         source_sha256: str,
         source_size_bytes: int,
-        serialization: PmxStructuralSerializationResult,
+        serialization: (
+            PmxStructuralSerializationResult | _PmxTextureInsertionSerializationResult
+        ),
     ) -> "PmxStructuralWriteResult":
         if not isinstance(input_path, Path):
             raise TypeError("input_path must be a Path instance.")
@@ -268,9 +442,12 @@ class PmxStructuralWriteResult:
             raise TypeError("source_size_bytes must be an integer.")
         if source_size_bytes < 0:
             raise ValueError("source_size_bytes cannot be negative.")
-        if not isinstance(serialization, PmxStructuralSerializationResult):
+        if not isinstance(
+            serialization,
+            (PmxStructuralSerializationResult, _PmxTextureInsertionSerializationResult),
+        ):
             raise TypeError(
-                "serialization must be a PmxStructuralSerializationResult value."
+                "serialization must be a verified structural serialization value."
             )
 
         result = object.__new__(cls)
@@ -338,18 +515,21 @@ def _translate_edit_verification_error(
     raise PmxStructuralOutputVerificationError(str(error)) from None
 
 
-def _write_pmx_structural_transaction(
+def _write_verified_structural_transaction(
     input_path: str | Path,
     output_path: str | Path,
-    intent_factory: Callable[[PmxDocument], PmxStructuralTransformIntent],
+    serialization_factory: Callable[
+        [PmxDocument, _StructuralStageCallback | None],
+        PmxStructuralSerializationResult | _PmxTextureInsertionSerializationResult,
+    ],
     *,
     overwrite: bool = False,
     _stage_callback: _StructuralStageCallback | None = None,
 ) -> PmxStructuralWriteResult:
-    """Execute one structural write against exactly one captured source snapshot."""
+    """Run the one structural filesystem transaction around verified serialization."""
 
-    if not callable(intent_factory):
-        raise TypeError("intent_factory must be callable.")
+    if not callable(serialization_factory):
+        raise TypeError("serialization_factory must be callable.")
     if not isinstance(overwrite, bool):
         raise TypeError("overwrite must be a boolean.")
     if _stage_callback is not None and not callable(_stage_callback):
@@ -375,17 +555,14 @@ def _write_pmx_structural_transaction(
     source_document = load_pmx(io.BytesIO(source_bytes))
 
     _notify_structural_stage(_stage_callback, "intent_resolution")
-    intent = intent_factory(source_document)
-    if not isinstance(intent, PmxStructuralTransformIntent):
+    serialization = serialization_factory(source_document, _stage_callback)
+    if not isinstance(
+        serialization,
+        (PmxStructuralSerializationResult, _PmxTextureInsertionSerializationResult),
+    ):
         raise TypeError(
-            "intent_factory must return a PmxStructuralTransformIntent value."
+            "serialization_factory must return verified structural serialization."
         )
-
-    serialization = verify_pmx_structural_serialization(
-        source_document,
-        intent,
-        _stage_callback=_stage_callback,
-    )
 
     _notify_structural_stage(_stage_callback, "output_commit")
     try:
@@ -411,6 +588,83 @@ def _write_pmx_structural_transaction(
         source_sha256=source_sha256,
         source_size_bytes=len(source_bytes),
         serialization=serialization,
+    )
+
+
+def _write_pmx_structural_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    intent_factory: Callable[[PmxDocument], PmxStructuralTransformIntent],
+    *,
+    overwrite: bool = False,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> PmxStructuralWriteResult:
+    """Execute one legacy structural write against one captured source snapshot."""
+
+    if not callable(intent_factory):
+        raise TypeError("intent_factory must be callable.")
+
+    def serialize_legacy(
+        source_document: PmxDocument,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> PmxStructuralSerializationResult:
+        intent = intent_factory(source_document)
+        if not isinstance(intent, PmxStructuralTransformIntent):
+            raise TypeError(
+                "intent_factory must return a PmxStructuralTransformIntent value."
+            )
+        return verify_pmx_structural_serialization(
+            source_document,
+            intent,
+            _stage_callback=stage_callback,
+        )
+
+    return _write_verified_structural_transaction(
+        input_path,
+        output_path,
+        serialize_legacy,
+        overwrite=overwrite,
+        _stage_callback=_stage_callback,
+    )
+
+
+def _write_pmx_texture_insertion_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    insertions: tuple[PmxTextureInsertionPayload, ...],
+    *,
+    overwrite: bool = False,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> PmxStructuralWriteResult:
+    """Execute CP08 texture insertion through the shared structural transaction."""
+
+    if type(insertions) is not tuple:
+        raise TypeError("insertions must be a tuple.")
+    if not insertions:
+        raise ValueError("texture insertion execution requires at least one insertion.")
+    if not all(
+        isinstance(insertion, PmxTextureInsertionPayload) for insertion in insertions
+    ):
+        raise TypeError(
+            "insertions must contain only PmxTextureInsertionPayload values."
+        )
+
+    def serialize_insertions(
+        source_document: PmxDocument,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> _PmxTextureInsertionSerializationResult:
+        return _verify_pmx_texture_insertion_serialization(
+            source_document,
+            insertions,
+            _stage_callback=stage_callback,
+        )
+
+    return _write_verified_structural_transaction(
+        input_path,
+        output_path,
+        serialize_insertions,
+        overwrite=overwrite,
+        _stage_callback=_stage_callback,
     )
 
 

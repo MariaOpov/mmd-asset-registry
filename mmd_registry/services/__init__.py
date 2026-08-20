@@ -16,6 +16,9 @@ from mmd_registry.diagnostics import (
     PmxServiceOperation,
     diagnostic_from_service_error,
 )
+from mmd_registry.services.structural_bone import (
+    PmxStructuralBoneInsertion as _PmxStructuralBoneInsertion,
+)
 from mmd_registry.services.structural_material import (
     PmxStructuralMaterialInsertion as _PmxStructuralMaterialInsertion,
 )
@@ -52,6 +55,13 @@ from mmd_registry.pmx.reference_queries import (
 )
 from mmd_registry.pmx.structural_insert_intent import (
     PmxStructuralInsertPosition as _PmxStructuralInsertPosition,
+)
+from mmd_registry.pmx.structural_bone_insertion import (
+    PmxBoneIkInsertionPayload as _PmxBoneIkInsertionPayload,
+    PmxBoneIkLinkInsertionPayload as _PmxBoneIkLinkInsertionPayload,
+    PmxBoneInsertionPayload as _PmxBoneInsertionPayload,
+    PmxBoneInsertionPreview as _PmxBoneInsertionPreview,
+    preview_pmx_bone_insertions as _preview_pmx_bone_insertions,
 )
 from mmd_registry.pmx.structural_material_insertion import (
     PmxMaterialInsertionPayload as _PmxMaterialInsertionPayload,
@@ -216,6 +226,7 @@ class PmxStructuralPreviewRequest:
     collection_edits: tuple[PmxStructuralCollectionEdit, ...] = ()
     texture_insertions: tuple[_PmxStructuralTextureInsertion, ...] = ()
     material_insertions: tuple[_PmxStructuralMaterialInsertion, ...] = ()
+    bone_insertions: tuple[_PmxStructuralBoneInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -260,11 +271,31 @@ class PmxStructuralPreviewRequest:
             )
 
         if self.material_insertions and (
-            self.collection_edits or self.texture_insertions
+            self.collection_edits or self.texture_insertions or self.bone_insertions
         ):
             raise ValueError(
                 "material insertions cannot be combined with legacy collection edits "
-                "or texture insertions in the preview-only material insertion gate."
+                "or another insertion target in the structural insertion gate."
+            )
+
+        if type(self.bone_insertions) is not tuple:
+            raise TypeError("bone_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralBoneInsertion)
+            for insertion in self.bone_insertions
+        ):
+            raise TypeError(
+                "bone_insertions must contain only PmxStructuralBoneInsertion values."
+            )
+
+        if self.bone_insertions and (
+            self.collection_edits
+            or self.texture_insertions
+            or self.material_insertions
+        ):
+            raise ValueError(
+                "bone insertions cannot be combined with legacy collection edits "
+                "or another insertion target in the preview-only bone insertion gate."
             )
 
 
@@ -276,6 +307,7 @@ class PmxStructuralPreviewResult:
         _PmxStructuralPreview
         | _PmxTextureInsertionPreview
         | _PmxMaterialInsertionPreview
+        | _PmxBoneInsertionPreview
     ) = field(repr=False)
 
     def __post_init__(self) -> None:
@@ -285,6 +317,7 @@ class PmxStructuralPreviewResult:
                 _PmxStructuralPreview,
                 _PmxTextureInsertionPreview,
                 _PmxMaterialInsertionPreview,
+                _PmxBoneInsertionPreview,
             ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
@@ -459,6 +492,66 @@ def _build_texture_insertion_payloads(
     return tuple(payloads)
 
 
+def _build_bone_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxBoneInsertionPayload, ...]:
+    payloads: list[_PmxBoneInsertionPayload] = []
+    for insertion in request.bone_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+
+        ik_payload = None
+        if insertion.ik is not None:
+            ik_payload = _PmxBoneIkInsertionPayload(
+                target_bone_index=insertion.ik.target_bone_index,
+                loop_count=insertion.ik.loop_count,
+                angle_limit=insertion.ik.angle_limit,
+                links=tuple(
+                    _PmxBoneIkLinkInsertionPayload(
+                        bone_index=link.bone_index,
+                        lower_limit=link.lower_limit,
+                        upper_limit=link.upper_limit,
+                    )
+                    for link in insertion.ik.links
+                ),
+            )
+
+        payloads.append(
+            _PmxBoneInsertionPayload(
+                local_name=insertion.local_name,
+                universal_name=insertion.universal_name,
+                bone_position=insertion.bone_position,
+                parent_bone_index=insertion.parent_bone_index,
+                transform_layer=insertion.transform_layer,
+                rotatable=insertion.rotatable,
+                translatable=insertion.translatable,
+                visible=insertion.visible,
+                enabled=insertion.enabled,
+                local_append=insertion.local_append,
+                after_physics=insertion.after_physics,
+                tail_offset=insertion.tail_offset,
+                tail_bone_index=insertion.tail_bone_index,
+                inherit_rotation=insertion.inherit_rotation,
+                inherit_translation=insertion.inherit_translation,
+                inherit_parent_bone_index=insertion.inherit_parent_bone_index,
+                inherit_weight=insertion.inherit_weight,
+                fixed_axis=insertion.fixed_axis,
+                local_axis_x=insertion.local_axis_x,
+                local_axis_z=insertion.local_axis_z,
+                external_parent_key=insertion.external_parent_key,
+                ik=ik_payload,
+                position=position,
+            )
+        )
+    return tuple(payloads)
+
+
 def _build_material_insertion_payloads(
     request: PmxStructuralPreviewRequest,
 ) -> tuple[_PmxMaterialInsertionPayload, ...]:
@@ -542,6 +635,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.bone_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_bone_insertions(
+                    document,
+                    _build_bone_insertion_payloads(request),
+                )
+            )
         if request.material_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_material_insertions(
@@ -591,6 +691,8 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        if request.bone_insertions:
+            raise ValueError("bone insertion execution is not enabled.")
 
         material_payloads = (
             _build_material_insertion_payloads(request)

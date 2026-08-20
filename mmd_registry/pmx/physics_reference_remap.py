@@ -506,3 +506,53 @@ def remap_soft_body_references(
     if not changed:
         return soft_bodies
     return tuple(rewritten_bodies)
+
+
+def remap_rigid_body_bone_references_for_insertion(
+    rigid_bodies: tuple[PmxRigidBody, ...],
+    bone_shift: PmxCollectionReferenceShiftPlan,
+) -> tuple[PmxRigidBody, ...]:
+    """Rewrite existing rigid-body -> bone refs through additive bone insertion."""
+
+    if type(rigid_bodies) is not tuple:
+        raise TypeError("rigid_bodies must be a tuple.")
+    if not all(isinstance(body, PmxRigidBody) for body in rigid_bodies):
+        raise TypeError("rigid_bodies must contain only PmxRigidBody records.")
+    if not isinstance(bone_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "bone_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if bone_shift.target_kind is not PmxReferenceTargetKind.BONE:
+        raise ValueError("bone_shift target_kind must be bone.")
+
+    rewritten: list[PmxRigidBody] = []
+    changed = False
+    for body_index, body in enumerate(rigid_bodies):
+        field_name = f"rigid_bodies[{body_index}].bone_index"
+        bone_index = _require_plain_index(body.bone_index, field_name)
+        if bone_index == -1:
+            rewritten.append(body)
+            continue
+        if bone_index < -1:
+            raise ValueError(f"{field_name} cannot be smaller than -1.")
+        if bone_index >= bone_shift.current_count:
+            raise ValueError(
+                f"{field_name}={bone_index} is outside bone old_size "
+                f"{bone_shift.current_count}."
+            )
+
+        mapped = bone_shift.remap.target_for(bone_index)
+        if mapped is None:
+            raise PmxPhysicsReferenceRemapError(
+                f"{field_name} references removed bone index {bone_index}; "
+                "insertion shifts cannot remove source bones."
+            )
+        if mapped == bone_index:
+            rewritten.append(body)
+            continue
+        rewritten.append(replace(body, bone_index=mapped))
+        changed = True
+
+    if not changed:
+        return rigid_bodies
+    return tuple(rewritten)

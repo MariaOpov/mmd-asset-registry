@@ -954,29 +954,6 @@ class BoneInsertionPreviewTests(unittest.TestCase):
             self.assertEqual(result.status, "changes_pending")
             self.assertFalse(marker.exists())
 
-    def test_apply_refuses_bone_insertion_before_output_creation(self) -> None:
-        source = _clean_document()
-        request = services.PmxStructuralEditRequest(
-            bone_insertions=(PmxStructuralBoneInsertion(local_name="Preview only"),),
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source_path = root / "source.pmx"
-            output_path = root / "output.pmx"
-            source_bytes = build_pmx_roundtrip_fixture(version=2.1)
-            source_path.write_bytes(source_bytes)
-
-            with self.assertRaises(PmxServiceError):
-                services.apply_structural_edit(
-                    source_path,
-                    output_path,
-                    request,
-                )
-
-            self.assertFalse(output_path.exists())
-            self.assertEqual(source_path.read_bytes(), source_bytes)
-            self.assertEqual(source.bones, _clean_document().bones)
-
     def test_texture_material_and_legacy_preview_paths_still_work(self) -> None:
         source = _clean_document()
         legacy = services.preview_structural_edit(

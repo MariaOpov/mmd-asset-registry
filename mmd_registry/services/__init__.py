@@ -295,7 +295,7 @@ class PmxStructuralPreviewRequest:
         ):
             raise ValueError(
                 "bone insertions cannot be combined with legacy collection edits "
-                "or another insertion target in the preview-only bone insertion gate."
+                "or another insertion target in the structural insertion gate."
             )
 
 
@@ -691,9 +691,11 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
-        if request.bone_insertions:
-            raise ValueError("bone insertion execution is not enabled.")
-
+        bone_payloads = (
+            _build_bone_insertion_payloads(request)
+            if request.bone_insertions
+            else ()
+        )
         material_payloads = (
             _build_material_insertion_payloads(request)
             if request.material_insertions
@@ -708,13 +710,22 @@ def apply_structural_edit(
         # Import the internal output kernel only when execution is requested.
         # Merely importing mmd_registry.services therefore remains side-effect-light.
         from mmd_registry.pmx.structural_output import (
+            _write_pmx_bone_insertion_transaction,
             _write_pmx_material_insertion_transaction,
             _write_pmx_structural_transaction,
             _write_pmx_texture_insertion_transaction,
         )
 
         failure_stage = "path_resolution"
-        if material_payloads:
+        if bone_payloads:
+            result = _write_pmx_bone_insertion_transaction(
+                input_path,
+                output_path,
+                bone_payloads,
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        elif material_payloads:
             result = _write_pmx_material_insertion_transaction(
                 input_path,
                 output_path,

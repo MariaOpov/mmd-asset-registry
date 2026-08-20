@@ -2,15 +2,18 @@
 
 ## Scope
 
-CP11 adds **preview-only semantic insertion of PMX bone records** through the
-existing public structural preview authority:
+CP11 introduced **preview-first semantic insertion of PMX bone records** through
+the existing public structural preview authority:
 
 ```python
 preview_structural_edit(...)
 ```
 
-It does not serialize output, mutate a source file, add a public writer, resize
-PMX index widths, or promote the `structural_insert` capability.
+CP12 later enables execution of the same bounded request through the existing
+verified structural transaction. CP11 remains the source of truth for the intended
+document, reference shifts, float32 canonicalization, and privacy-bounded preview.
+Neither checkpoint adds a public raw writer, automatic PMX index-width resizing,
+or the `structural_insert` capability.
 
 The canonical public request DTOs are:
 
@@ -275,10 +278,9 @@ PmxStructuralEditRequest is PmxStructuralPreviewRequest
 
 ## Execution boundary
 
-`apply_structural_edit(...)` explicitly refuses any request containing
-`bone_insertions` before importing or invoking the structural output transaction.
-
-Bone insertion execution belongs to CP12.
+CP11 itself stopped at certified preview. CP12 enables the same request through
+the existing public `apply_structural_edit(...)` authority and the shared verified
+structural transaction. There is still no public raw bone writer.
 
 Existing CP08 texture insertion execution, CP10 material insertion execution,
 and v0.9.1 legacy structural execution remain unchanged.
@@ -308,9 +310,8 @@ Capability promotion remains deferred to CP24.
 
 ## Non-goals
 
-CP11 does not authorize:
+The bounded CP11/CP12 bone insertion path does not authorize:
 
-- bone insertion execution;
 - new-bone -> new-bone references;
 - raw PMX flag words or raw section records;
 - automatic bone-index width expansion;
@@ -324,7 +325,7 @@ CP11 does not authorize:
 
 ## Required regression evidence
 
-Before commit, CP11 must cover:
+The combined CP11 preview and CP12 execution regression stack covers:
 
 - public DTO immutability and type safety;
 - semantic flag derivation;
@@ -344,7 +345,7 @@ Before commit, CP11 must cover:
 - PMX float32 canonicalization and overflow refusal before planning;
 - deterministic privacy-bounded preview evidence;
 - source immutability and no filesystem output;
-- execution refusal before output creation;
+- exact CP12 preview/execute semantic parity and safe publication;
 - CP07–CP10 insertion regressions;
 - v0.9.1 bone structural regression;
 - complete repository suite, Ruff, and compileall.

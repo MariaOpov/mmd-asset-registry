@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import struct
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError, replace
@@ -14,7 +15,7 @@ from unittest.mock import patch
 import mmd_registry.pmx as pmx_public
 import mmd_registry.services as services
 import mmd_registry.services.structural_material as structural_material_service
-from mmd_registry.diagnostics import PmxServiceError, PmxServiceOperation
+from mmd_registry.diagnostics import PmxServiceError
 from mmd_registry.pmx.document import PmxMaterialMorphOffset
 from mmd_registry.pmx.reader import load_pmx
 from mmd_registry.pmx.structural_insert_intent import PmxStructuralInsertPosition
@@ -529,45 +530,56 @@ class MaterialInsertionPreviewTests(unittest.TestCase):
         with self.assertRaises(PmxServiceError):
             services.preview_structural_edit(empty, invalid)
 
-    def test_apply_refuses_material_insertion_before_structural_writer_io(self) -> None:
+    def test_preview_canonicalizes_visual_numeric_values_to_pmx_float32(self) -> None:
+        source = _clean_document()
         request = services.PmxStructuralPreviewRequest(
             material_insertions=(
-                PmxStructuralMaterialInsertion(local_name="Preview only"),
+                PmxStructuralMaterialInsertion(
+                    local_name="Float32",
+                    diffuse=(0.1, 0.2, 0.3, 0.4),
+                    specular=(0.1, 0.2, 0.3),
+                    specular_strength=0.1,
+                    ambient=(0.1, 0.2, 0.3),
+                    edge_color=(0.1, 0.2, 0.3, 0.4),
+                    edge_scale=0.1,
+                ),
             ),
         )
 
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            missing_source = root / "missing-source.pmx"
-            output = root / "must-not-exist.pmx"
+        inserted = services.preview_structural_edit(source, request).document.materials[-1]
 
-            with (
-                patch(
-                    "mmd_registry.pmx.structural_output."
-                    "_write_pmx_structural_transaction",
-                    side_effect=AssertionError("legacy writer must not run"),
-                ) as legacy_writer,
-                patch(
-                    "mmd_registry.pmx.structural_output."
-                    "_write_pmx_texture_insertion_transaction",
-                    side_effect=AssertionError("texture writer must not run"),
-                ) as texture_writer,
+        def f32(value: float) -> float:
+            return struct.unpack("<f", struct.pack("<f", value))[0]
+
+        self.assertEqual(inserted.diffuse, tuple(f32(v) for v in (0.1, 0.2, 0.3, 0.4)))
+        self.assertEqual(inserted.specular, tuple(f32(v) for v in (0.1, 0.2, 0.3)))
+        self.assertEqual(inserted.specular_strength, f32(0.1))
+        self.assertEqual(inserted.ambient, tuple(f32(v) for v in (0.1, 0.2, 0.3)))
+        self.assertEqual(
+            inserted.edge_color,
+            tuple(f32(v) for v in (0.1, 0.2, 0.3, 0.4)),
+        )
+        self.assertEqual(inserted.edge_scale, f32(0.1))
+        self.assertNotEqual(inserted.edge_scale, 0.1)
+        self.assertEqual(inserted.surface_index_count, 0)
+
+    def test_unrepresentable_float32_fails_before_reference_shift_allocation(
+        self,
+    ) -> None:
+        source = _clean_document()
+        payload = replace(_material_payload("Float overflow"), edge_scale=1e300)
+
+        with patch(
+            "mmd_registry.pmx.structural_material_insertion."
+            "plan_collection_reference_shift",
+            side_effect=AssertionError("planner must not run"),
+        ) as planner:
+            with self.assertRaisesRegex(
+                PmxStructuralMaterialInsertionError,
+                "PMX float32",
             ):
-                with self.assertRaises(PmxServiceError) as raised:
-                    services.apply_structural_edit(
-                        missing_source,
-                        output,
-                        request,
-                    )
-
-            self.assertEqual(
-                raised.exception.diagnostic.operation,
-                PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
-            )
-            legacy_writer.assert_not_called()
-            texture_writer.assert_not_called()
-            self.assertFalse(output.exists())
-            self.assertFalse(missing_source.exists())
+                preview_pmx_material_insertions(source, (payload,))
+        planner.assert_not_called()
 
     def test_material_insertion_preview_has_no_filesystem_side_effects(self) -> None:
         source = _clean_document()

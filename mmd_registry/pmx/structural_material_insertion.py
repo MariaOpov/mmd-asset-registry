@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import struct
 from dataclasses import dataclass, field, replace
 from typing import Final, Literal
 
@@ -92,6 +93,34 @@ def _require_float_tuple(
         _require_finite_float(item, f"{field_name} value")
 
 
+def _canonical_pmx_float32(value: float, field_name: str) -> float:
+    """Return the exact finite binary32 value PMX will serialize and reparse."""
+
+    _require_finite_float(value, field_name)
+    try:
+        encoded = struct.pack("<f", value)
+    except (OverflowError, struct.error):
+        raise PmxStructuralMaterialInsertionError(
+            f"{field_name} must be representable as a finite PMX float32 value."
+        ) from None
+    canonical = struct.unpack("<f", encoded)[0]
+    if not math.isfinite(canonical):
+        raise PmxStructuralMaterialInsertionError(
+            f"{field_name} must be representable as a finite PMX float32 value."
+        )
+    return canonical
+
+
+def _canonical_pmx_float_tuple(
+    values: tuple[float, ...],
+    *,
+    field_name: str,
+) -> tuple[float, ...]:
+    return tuple(
+        _canonical_pmx_float32(value, f"{field_name} value") for value in values
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class PmxMaterialInsertionPayload:
     """One internal zero-surface material paired with a source-domain position."""
@@ -160,7 +189,7 @@ class PmxMaterialInsertionPayload:
             raise TypeError("position must be a PmxStructuralInsertPosition value.")
 
     def to_material(self) -> PmxMaterial:
-        """Construct the immutable PMX material; CP09 always owns zero surfaces."""
+        """Construct the exact PMX-representable immutable zero-surface material."""
 
         return PmxMaterial(
             local_name=self.local_name,
@@ -172,13 +201,31 @@ class PmxMaterialInsertionPayload:
             toon_reference_index=self.toon_reference_index,
             memo=self.memo,
             surface_index_count=0,
-            diffuse=self.diffuse,
-            specular=self.specular,
-            specular_strength=self.specular_strength,
-            ambient=self.ambient,
+            diffuse=_canonical_pmx_float_tuple(
+                self.diffuse,
+                field_name="material diffuse",
+            ),
+            specular=_canonical_pmx_float_tuple(
+                self.specular,
+                field_name="material specular",
+            ),
+            specular_strength=_canonical_pmx_float32(
+                self.specular_strength,
+                "material specular_strength",
+            ),
+            ambient=_canonical_pmx_float_tuple(
+                self.ambient,
+                field_name="material ambient",
+            ),
             drawing_flags=self.drawing_flags,
-            edge_color=self.edge_color,
-            edge_scale=self.edge_scale,
+            edge_color=_canonical_pmx_float_tuple(
+                self.edge_color,
+                field_name="material edge_color",
+            ),
+            edge_scale=_canonical_pmx_float32(
+                self.edge_scale,
+                "material edge_scale",
+            ),
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -290,6 +337,31 @@ def _validate_payload_for_source(
             texture_count=texture_count,
             label="material toon_reference_index",
         )
+
+    _canonical_pmx_float_tuple(
+        insertion.diffuse,
+        field_name="material diffuse",
+    )
+    _canonical_pmx_float_tuple(
+        insertion.specular,
+        field_name="material specular",
+    )
+    _canonical_pmx_float32(
+        insertion.specular_strength,
+        "material specular_strength",
+    )
+    _canonical_pmx_float_tuple(
+        insertion.ambient,
+        field_name="material ambient",
+    )
+    _canonical_pmx_float_tuple(
+        insertion.edge_color,
+        field_name="material edge_color",
+    )
+    _canonical_pmx_float32(
+        insertion.edge_scale,
+        "material edge_scale",
+    )
 
 
 def _require_reader_safe_result_count(

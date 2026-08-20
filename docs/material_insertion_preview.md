@@ -2,10 +2,11 @@
 
 ## Scope
 
-CP09 adds **preview-only structural insertion of PMX material records** through the
-existing public structural service. It does not add a second mutation authority,
-does not serialize or publish output, and does not enable material insertion
-execution.
+CP09 introduced **preview-first structural insertion of PMX material records**
+through the existing public structural service. CP10 later enables execution of
+the same bounded request through the existing verified structural transaction;
+the preview contract, payload vocabulary, and zero-surface safety rules remain
+the source of truth for the intended document.
 
 The public mutation authorities remain:
 
@@ -60,10 +61,16 @@ later cross-section checkpoint.
 It is not a raw `PmxMaterial` section object and exposes no bytes, hooks, callbacks,
 or arbitrary payload.
 
-## Text and parser bounds
+## Text, numeric, and parser bounds
 
 Preview validates inserted text against the source PMX encoding without
 normalization or repair.
+
+Material visual properties are serialized by PMX as IEEE-754 binary32 values.
+The preview therefore validates that every finite visual numeric value is
+representable as PMX float32 and materializes the exact binary32 value that will
+be reparsed after serialization. This preserves exact preview/execute semantic
+equality without weakening the structural semantic-compare gate.
 
 The existing reader safety limits remain authoritative:
 
@@ -147,10 +154,9 @@ composition to the dedicated cross-section checkpoint.
 
 ## Execution boundary
 
-`apply_structural_edit(...)` explicitly refuses any request containing
-`material_insertions` before structural writer I/O.
-
-Material insertion execution belongs to CP10.
+CP09 itself stopped at certified preview. CP10 enables execution through the same
+public `apply_structural_edit(...)` authority and the shared verified structural
+transaction. There is still no public raw material writer.
 
 Texture insertion execution from CP08 and legacy v0.9.1 structural execution remain
 unchanged.
@@ -164,7 +170,6 @@ promotion remains deferred to the release capability checkpoint.
 
 CP09 does not provide:
 
-- material insertion execution;
 - material deletion/reorder changes beyond the existing legacy path;
 - surface assignment or triangle ownership editing;
 - texture insertion composition;

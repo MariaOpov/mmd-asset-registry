@@ -22,6 +22,15 @@ from mmd_registry.services.structural_bone import (
 from mmd_registry.services.structural_material import (
     PmxStructuralMaterialInsertion as _PmxStructuralMaterialInsertion,
 )
+from mmd_registry.services.structural_morph import (
+    PmxStructuralMorphBoneOffset as _PmxStructuralMorphBoneOffset,
+    PmxStructuralMorphFlipOffset as _PmxStructuralMorphFlipOffset,
+    PmxStructuralMorphGroupOffset as _PmxStructuralMorphGroupOffset,
+    PmxStructuralMorphInsertion as _PmxStructuralMorphInsertion,
+    PmxStructuralMorphMaterialOffset as _PmxStructuralMorphMaterialOffset,
+    PmxStructuralMorphUvOffset as _PmxStructuralMorphUvOffset,
+    PmxStructuralMorphVertexOffset as _PmxStructuralMorphVertexOffset,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion as _PmxStructuralTextureInsertion,
 )
@@ -67,6 +76,17 @@ from mmd_registry.pmx.structural_material_insertion import (
     PmxMaterialInsertionPayload as _PmxMaterialInsertionPayload,
     PmxMaterialInsertionPreview as _PmxMaterialInsertionPreview,
     preview_pmx_material_insertions as _preview_pmx_material_insertions,
+)
+from mmd_registry.pmx.structural_morph_insertion import (
+    PmxBoneMorphInsertionOffsetPayload as _PmxBoneMorphInsertionOffsetPayload,
+    PmxFlipMorphInsertionOffsetPayload as _PmxFlipMorphInsertionOffsetPayload,
+    PmxGroupMorphInsertionOffsetPayload as _PmxGroupMorphInsertionOffsetPayload,
+    PmxMaterialMorphInsertionOffsetPayload as _PmxMaterialMorphInsertionOffsetPayload,
+    PmxMorphInsertionPayload as _PmxMorphInsertionPayload,
+    PmxMorphInsertionPreview as _PmxMorphInsertionPreview,
+    PmxUvMorphInsertionOffsetPayload as _PmxUvMorphInsertionOffsetPayload,
+    PmxVertexMorphInsertionOffsetPayload as _PmxVertexMorphInsertionOffsetPayload,
+    preview_pmx_morph_insertions as _preview_pmx_morph_insertions,
 )
 from mmd_registry.pmx.structural_preview import (
     PmxStructuralPreview as _PmxStructuralPreview,
@@ -227,6 +247,7 @@ class PmxStructuralPreviewRequest:
     texture_insertions: tuple[_PmxStructuralTextureInsertion, ...] = ()
     material_insertions: tuple[_PmxStructuralMaterialInsertion, ...] = ()
     bone_insertions: tuple[_PmxStructuralBoneInsertion, ...] = ()
+    morph_insertions: tuple[_PmxStructuralMorphInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -271,7 +292,10 @@ class PmxStructuralPreviewRequest:
             )
 
         if self.material_insertions and (
-            self.collection_edits or self.texture_insertions or self.bone_insertions
+            self.collection_edits
+            or self.texture_insertions
+            or self.bone_insertions
+            or self.morph_insertions
         ):
             raise ValueError(
                 "material insertions cannot be combined with legacy collection edits "
@@ -292,9 +316,31 @@ class PmxStructuralPreviewRequest:
             self.collection_edits
             or self.texture_insertions
             or self.material_insertions
+            or self.morph_insertions
         ):
             raise ValueError(
                 "bone insertions cannot be combined with legacy collection edits "
+                "or another insertion target in the structural insertion gate."
+            )
+
+        if type(self.morph_insertions) is not tuple:
+            raise TypeError("morph_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralMorphInsertion)
+            for insertion in self.morph_insertions
+        ):
+            raise TypeError(
+                "morph_insertions must contain only PmxStructuralMorphInsertion values."
+            )
+
+        if self.morph_insertions and (
+            self.collection_edits
+            or self.texture_insertions
+            or self.material_insertions
+            or self.bone_insertions
+        ):
+            raise ValueError(
+                "morph insertions cannot be combined with legacy collection edits "
                 "or another insertion target in the structural insertion gate."
             )
 
@@ -308,6 +354,7 @@ class PmxStructuralPreviewResult:
         | _PmxTextureInsertionPreview
         | _PmxMaterialInsertionPreview
         | _PmxBoneInsertionPreview
+        | _PmxMorphInsertionPreview
     ) = field(repr=False)
 
     def __post_init__(self) -> None:
@@ -318,6 +365,7 @@ class PmxStructuralPreviewResult:
                 _PmxTextureInsertionPreview,
                 _PmxMaterialInsertionPreview,
                 _PmxBoneInsertionPreview,
+                _PmxMorphInsertionPreview,
             ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
@@ -589,6 +637,112 @@ def _build_material_insertion_payloads(
     return tuple(payloads)
 
 
+def _build_morph_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxMorphInsertionPayload, ...]:
+    panel_codes = {
+        "system": 0,
+        "eyebrow": 1,
+        "eye": 2,
+        "mouth": 3,
+        "other": 4,
+    }
+    morph_type_codes = {
+        "group": 0,
+        "vertex": 1,
+        "bone": 2,
+        "uv": 3,
+        "additional_uv_1": 4,
+        "additional_uv_2": 5,
+        "additional_uv_3": 6,
+        "additional_uv_4": 7,
+        "material": 8,
+        "flip": 9,
+    }
+
+    payloads: list[_PmxMorphInsertionPayload] = []
+    for insertion in request.morph_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+
+        offsets: list[object] = []
+        for offset in insertion.offsets:
+            if isinstance(offset, _PmxStructuralMorphGroupOffset):
+                offsets.append(
+                    _PmxGroupMorphInsertionOffsetPayload(
+                        morph_index=offset.morph_index,
+                        weight=offset.weight,
+                    )
+                )
+            elif isinstance(offset, _PmxStructuralMorphVertexOffset):
+                offsets.append(
+                    _PmxVertexMorphInsertionOffsetPayload(
+                        vertex_index=offset.vertex_index,
+                        translation=offset.translation,
+                    )
+                )
+            elif isinstance(offset, _PmxStructuralMorphBoneOffset):
+                offsets.append(
+                    _PmxBoneMorphInsertionOffsetPayload(
+                        bone_index=offset.bone_index,
+                        translation=offset.translation,
+                        rotation=offset.rotation,
+                    )
+                )
+            elif isinstance(offset, _PmxStructuralMorphUvOffset):
+                offsets.append(
+                    _PmxUvMorphInsertionOffsetPayload(
+                        vertex_index=offset.vertex_index,
+                        uv_offset=offset.uv_offset,
+                    )
+                )
+            elif isinstance(offset, _PmxStructuralMorphMaterialOffset):
+                offsets.append(
+                    _PmxMaterialMorphInsertionOffsetPayload(
+                        material_index=offset.material_index,
+                        operation=offset.operation,
+                        diffuse=offset.diffuse,
+                        specular=offset.specular,
+                        specular_strength=offset.specular_strength,
+                        ambient=offset.ambient,
+                        edge_color=offset.edge_color,
+                        edge_scale=offset.edge_scale,
+                        texture_tint=offset.texture_tint,
+                        sphere_tint=offset.sphere_tint,
+                        toon_tint=offset.toon_tint,
+                    )
+                )
+            elif isinstance(offset, _PmxStructuralMorphFlipOffset):
+                offsets.append(
+                    _PmxFlipMorphInsertionOffsetPayload(
+                        morph_index=offset.morph_index,
+                        weight=offset.weight,
+                    )
+                )
+            else:
+                raise AssertionError(
+                    "validated morph insertion exposed an unsupported offset type."
+                )
+
+        payloads.append(
+            _PmxMorphInsertionPayload(
+                local_name=insertion.local_name,
+                universal_name=insertion.universal_name,
+                panel=panel_codes[insertion.panel],
+                morph_type=morph_type_codes[insertion.morph_type],
+                offsets=tuple(offsets),
+                position=position,
+            )
+        )
+    return tuple(payloads)
+
+
 def _build_structural_preview_intent(
     document: PmxDocument,
     request: PmxStructuralPreviewRequest,
@@ -635,6 +789,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.morph_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_morph_insertions(
+                    document,
+                    _build_morph_insertion_payloads(request),
+                )
+            )
         if request.bone_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_bone_insertions(
@@ -691,6 +852,11 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        morph_payloads = (
+            _build_morph_insertion_payloads(request)
+            if request.morph_insertions
+            else ()
+        )
         bone_payloads = (
             _build_bone_insertion_payloads(request)
             if request.bone_insertions
@@ -712,12 +878,21 @@ def apply_structural_edit(
         from mmd_registry.pmx.structural_output import (
             _write_pmx_bone_insertion_transaction,
             _write_pmx_material_insertion_transaction,
+            _write_pmx_morph_insertion_transaction,
             _write_pmx_structural_transaction,
             _write_pmx_texture_insertion_transaction,
         )
 
         failure_stage = "path_resolution"
-        if bone_payloads:
+        if morph_payloads:
+            result = _write_pmx_morph_insertion_transaction(
+                input_path,
+                output_path,
+                morph_payloads,
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        elif bone_payloads:
             result = _write_pmx_bone_insertion_transaction(
                 input_path,
                 output_path,

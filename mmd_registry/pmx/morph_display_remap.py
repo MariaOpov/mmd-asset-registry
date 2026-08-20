@@ -657,3 +657,148 @@ def remap_display_frame_bone_references_for_insertion(
     if not changed:
         return display_frames
     return tuple(rewritten_frames)
+
+def remap_morph_references_for_insertion(
+    morphs: tuple[PmxMorph, ...],
+    morph_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+    additional_uv_count: int,
+) -> tuple[PmxMorph, ...]:
+    """Rewrite existing group/flip morph targets through additive morph insertion."""
+
+    if type(morphs) is not tuple:
+        raise TypeError("morphs must be a tuple.")
+    if not all(isinstance(morph, PmxMorph) for morph in morphs):
+        raise TypeError("morphs must contain only PmxMorph records.")
+    shift = _require_reference_shift(
+        morph_shift,
+        PmxReferenceTargetKind.MORPH,
+        "morph_shift",
+    )
+    if shift.current_count != len(morphs):
+        raise ValueError("morph_shift current_count must match the morph collection.")
+    version = _require_pmx_version(pmx_version)
+    uv_count = _require_additional_uv_count(additional_uv_count)
+
+    rewritten_morphs: list[PmxMorph] = []
+    changed = False
+    for morph_index, morph in enumerate(morphs):
+        if not 0 <= morph.morph_type < len(_EXPECTED_OFFSET_TYPES):
+            raise ValueError(
+                f"morphs[{morph_index}].morph_type must be a value from 0 through 10."
+            )
+        if morph.morph_type in (9, 10) and version != 2.1:
+            raise ValueError(
+                f"morphs[{morph_index}] type {morph.morph_type} requires PMX 2.1."
+            )
+        if 4 <= morph.morph_type <= 7:
+            required_layer = morph.morph_type - 3
+            if uv_count < required_layer:
+                raise ValueError(
+                    f"morphs[{morph_index}] type {morph.morph_type} requires "
+                    f"additional UV layer {required_layer}."
+                )
+
+        expected_type = _EXPECTED_OFFSET_TYPES[morph.morph_type]
+        rewritten_offsets: list[object] = []
+        morph_changed = False
+        for offset_index, offset in enumerate(morph.offsets):
+            if not isinstance(offset, expected_type):
+                raise ValueError(
+                    f"morphs[{morph_index}].offsets[{offset_index}] type "
+                    f"{morph.morph_type} requires {expected_type.__name__}."
+                )
+            if not isinstance(offset, (PmxGroupMorphOffset, PmxFlipMorphOffset)):
+                rewritten_offsets.append(offset)
+                continue
+
+            field_name = (
+                f"morphs[{morph_index}].offsets[{offset_index}].morph_index"
+            )
+            morph_target = _shift_required_source_index(
+                offset.morph_index,
+                field_name=field_name,
+                shift=shift,
+            )
+            if morph_target == offset.morph_index:
+                rewritten_offsets.append(offset)
+                continue
+            rewritten_offsets.append(replace(offset, morph_index=morph_target))
+            morph_changed = True
+
+        if morph_changed:
+            rewritten_morphs.append(
+                replace(morph, offsets=tuple(rewritten_offsets))
+            )
+            changed = True
+        else:
+            rewritten_morphs.append(morph)
+
+    if not changed:
+        return morphs
+    return tuple(rewritten_morphs)
+
+
+def remap_display_frame_morph_references_for_insertion(
+    display_frames: tuple[PmxDisplayFrame, ...],
+    morph_shift: PmxCollectionReferenceShiftPlan,
+) -> tuple[PmxDisplayFrame, ...]:
+    """Rewrite only existing display-frame morph targets through insertion evidence."""
+
+    if type(display_frames) is not tuple:
+        raise TypeError("display_frames must be a tuple.")
+    if not all(isinstance(frame, PmxDisplayFrame) for frame in display_frames):
+        raise TypeError("display_frames must contain only PmxDisplayFrame records.")
+    shift = _require_reference_shift(
+        morph_shift,
+        PmxReferenceTargetKind.MORPH,
+        "morph_shift",
+    )
+
+    rewritten_frames: list[PmxDisplayFrame] = []
+    changed = False
+    for frame_index, frame in enumerate(display_frames):
+        rewritten_elements: list[PmxDisplayFrameElement] = []
+        frame_changed = False
+        for element_index, element in enumerate(frame.elements):
+            if not isinstance(element, PmxDisplayFrameElement):
+                raise TypeError(
+                    f"display_frames[{frame_index}].elements[{element_index}] "
+                    "must be a PmxDisplayFrameElement record."
+                )
+            if element.target_type == "bone":
+                rewritten_elements.append(element)
+                continue
+            if element.target_type != "morph":
+                raise ValueError(
+                    f"display_frames[{frame_index}].elements[{element_index}]."
+                    "target_type must be either 'bone' or 'morph'."
+                )
+
+            field_name = (
+                f"display_frames[{frame_index}].elements[{element_index}]."
+                "target_index"
+            )
+            target_index = _shift_required_source_index(
+                element.target_index,
+                field_name=field_name,
+                shift=shift,
+            )
+            if target_index == element.target_index:
+                rewritten_elements.append(element)
+                continue
+            rewritten_elements.append(replace(element, target_index=target_index))
+            frame_changed = True
+
+        if frame_changed:
+            rewritten_frames.append(
+                replace(frame, elements=tuple(rewritten_elements))
+            )
+            changed = True
+        else:
+            rewritten_frames.append(frame)
+
+    if not changed:
+        return display_frames
+    return tuple(rewritten_frames)

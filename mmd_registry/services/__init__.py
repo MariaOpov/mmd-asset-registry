@@ -26,10 +26,14 @@ from mmd_registry.services.structural_morph import (
     PmxStructuralMorphBoneOffset as _PmxStructuralMorphBoneOffset,
     PmxStructuralMorphFlipOffset as _PmxStructuralMorphFlipOffset,
     PmxStructuralMorphGroupOffset as _PmxStructuralMorphGroupOffset,
+    PmxStructuralMorphImpulseOffset as _PmxStructuralMorphImpulseOffset,
     PmxStructuralMorphInsertion as _PmxStructuralMorphInsertion,
     PmxStructuralMorphMaterialOffset as _PmxStructuralMorphMaterialOffset,
     PmxStructuralMorphUvOffset as _PmxStructuralMorphUvOffset,
     PmxStructuralMorphVertexOffset as _PmxStructuralMorphVertexOffset,
+)
+from mmd_registry.services.structural_rigid_body import (
+    PmxStructuralRigidBodyInsertion as _PmxStructuralRigidBodyInsertion,
 )
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion as _PmxStructuralTextureInsertion,
@@ -81,12 +85,18 @@ from mmd_registry.pmx.structural_morph_insertion import (
     PmxBoneMorphInsertionOffsetPayload as _PmxBoneMorphInsertionOffsetPayload,
     PmxFlipMorphInsertionOffsetPayload as _PmxFlipMorphInsertionOffsetPayload,
     PmxGroupMorphInsertionOffsetPayload as _PmxGroupMorphInsertionOffsetPayload,
+    PmxImpulseMorphInsertionOffsetPayload as _PmxImpulseMorphInsertionOffsetPayload,
     PmxMaterialMorphInsertionOffsetPayload as _PmxMaterialMorphInsertionOffsetPayload,
     PmxMorphInsertionPayload as _PmxMorphInsertionPayload,
     PmxMorphInsertionPreview as _PmxMorphInsertionPreview,
     PmxUvMorphInsertionOffsetPayload as _PmxUvMorphInsertionOffsetPayload,
     PmxVertexMorphInsertionOffsetPayload as _PmxVertexMorphInsertionOffsetPayload,
     preview_pmx_morph_insertions as _preview_pmx_morph_insertions,
+)
+from mmd_registry.pmx.structural_rigid_body_insertion import (
+    PmxRigidBodyInsertionPayload as _PmxRigidBodyInsertionPayload,
+    PmxRigidBodyInsertionPreview as _PmxRigidBodyInsertionPreview,
+    preview_pmx_rigid_body_insertions as _preview_pmx_rigid_body_insertions,
 )
 from mmd_registry.pmx.structural_preview import (
     PmxStructuralPreview as _PmxStructuralPreview,
@@ -248,6 +258,7 @@ class PmxStructuralPreviewRequest:
     material_insertions: tuple[_PmxStructuralMaterialInsertion, ...] = ()
     bone_insertions: tuple[_PmxStructuralBoneInsertion, ...] = ()
     morph_insertions: tuple[_PmxStructuralMorphInsertion, ...] = ()
+    rigid_body_insertions: tuple[_PmxStructuralRigidBodyInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -344,6 +355,29 @@ class PmxStructuralPreviewRequest:
                 "or another insertion target in the structural insertion gate."
             )
 
+        if type(self.rigid_body_insertions) is not tuple:
+            raise TypeError("rigid_body_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralRigidBodyInsertion)
+            for insertion in self.rigid_body_insertions
+        ):
+            raise TypeError(
+                "rigid_body_insertions must contain only "
+                "PmxStructuralRigidBodyInsertion values."
+            )
+        if self.rigid_body_insertions and (
+            self.collection_edits
+            or self.texture_insertions
+            or self.material_insertions
+            or self.bone_insertions
+            or self.morph_insertions
+        ):
+            raise ValueError(
+                "rigid-body insertions cannot be combined with legacy collection "
+                "edits or another insertion target; coordinated multi-target "
+                "insertion remains CP17-owned."
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
@@ -355,6 +389,7 @@ class PmxStructuralPreviewResult:
         | _PmxMaterialInsertionPreview
         | _PmxBoneInsertionPreview
         | _PmxMorphInsertionPreview
+        | _PmxRigidBodyInsertionPreview
     ) = field(repr=False)
 
     def __post_init__(self) -> None:
@@ -366,6 +401,7 @@ class PmxStructuralPreviewResult:
                 _PmxMaterialInsertionPreview,
                 _PmxBoneInsertionPreview,
                 _PmxMorphInsertionPreview,
+                _PmxRigidBodyInsertionPreview,
             ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
@@ -658,6 +694,7 @@ def _build_morph_insertion_payloads(
         "additional_uv_4": 7,
         "material": 8,
         "flip": 9,
+        "impulse": 10,
     }
 
     payloads: list[_PmxMorphInsertionPayload] = []
@@ -725,6 +762,15 @@ def _build_morph_insertion_payloads(
                         weight=offset.weight,
                     )
                 )
+            elif isinstance(offset, _PmxStructuralMorphImpulseOffset):
+                offsets.append(
+                    _PmxImpulseMorphInsertionOffsetPayload(
+                        rigid_body_index=offset.rigid_body_index,
+                        local=offset.local,
+                        velocity=offset.velocity,
+                        angular_torque=offset.angular_torque,
+                    )
+                )
             else:
                 raise AssertionError(
                     "validated morph insertion exposed an unsupported offset type."
@@ -737,6 +783,48 @@ def _build_morph_insertion_payloads(
                 panel=panel_codes[insertion.panel],
                 morph_type=morph_type_codes[insertion.morph_type],
                 offsets=tuple(offsets),
+                position=position,
+            )
+        )
+    return tuple(payloads)
+
+
+def _build_rigid_body_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxRigidBodyInsertionPayload, ...]:
+    shape_codes = {"sphere": 0, "box": 1, "capsule": 2}
+    physics_mode_codes = {
+        "bone_follow": 0,
+        "physics": 1,
+        "physics_with_bone_alignment": 2,
+    }
+    payloads: list[_PmxRigidBodyInsertionPayload] = []
+    for insertion in request.rigid_body_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+        payloads.append(
+            _PmxRigidBodyInsertionPayload(
+                local_name=insertion.local_name,
+                universal_name=insertion.universal_name,
+                bone_index=insertion.bone_index,
+                collision_group=insertion.collision_group,
+                collision_mask=insertion.collision_mask,
+                shape=shape_codes[insertion.shape],
+                size=insertion.size,
+                body_position=insertion.body_position,
+                rotation=insertion.rotation,
+                mass=insertion.mass,
+                linear_damping=insertion.linear_damping,
+                angular_damping=insertion.angular_damping,
+                restitution=insertion.restitution,
+                friction=insertion.friction,
+                physics_mode=physics_mode_codes[insertion.physics_mode],
                 position=position,
             )
         )
@@ -789,6 +877,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.rigid_body_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_rigid_body_insertions(
+                    document,
+                    _build_rigid_body_insertion_payloads(request),
+                )
+            )
         if request.morph_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_morph_insertions(
@@ -852,6 +947,11 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        rigid_body_payloads = (
+            _build_rigid_body_insertion_payloads(request)
+            if request.rigid_body_insertions
+            else ()
+        )
         morph_payloads = (
             _build_morph_insertion_payloads(request)
             if request.morph_insertions
@@ -879,12 +979,21 @@ def apply_structural_edit(
             _write_pmx_bone_insertion_transaction,
             _write_pmx_material_insertion_transaction,
             _write_pmx_morph_insertion_transaction,
+            _write_pmx_rigid_body_insertion_transaction,
             _write_pmx_structural_transaction,
             _write_pmx_texture_insertion_transaction,
         )
 
         failure_stage = "path_resolution"
-        if morph_payloads:
+        if rigid_body_payloads:
+            result = _write_pmx_rigid_body_insertion_transaction(
+                input_path,
+                output_path,
+                rigid_body_payloads,
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        elif morph_payloads:
             result = _write_pmx_morph_insertion_transaction(
                 input_path,
                 output_path,

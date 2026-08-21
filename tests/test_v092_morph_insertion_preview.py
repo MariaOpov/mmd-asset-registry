@@ -23,6 +23,7 @@ from mmd_registry.services.structural_morph import (
     PmxStructuralMorphBoneOffset,
     PmxStructuralMorphFlipOffset,
     PmxStructuralMorphGroupOffset,
+    PmxStructuralMorphImpulseOffset,
     PmxStructuralMorphInsertion,
     PmxStructuralMorphMaterialOffset,
     PmxStructuralMorphUvOffset,
@@ -112,11 +113,19 @@ class MorphInsertionPreviewTests(unittest.TestCase):
         self.assertFalse(hasattr(pmx_public, "PmxStructuralMorphInsertion"))
         self.assertNotIn("structural_insert", services.get_capabilities().to_dict())
 
-        with self.assertRaisesRegex(ValueError, "semantic morph types"):
-            PmxStructuralMorphInsertion(
-                local_name="impulse-is-cp14",
-                morph_type="impulse",  # type: ignore[arg-type]
-            )
+        impulse = PmxStructuralMorphInsertion(
+            local_name="impulse-is-cp14",
+            morph_type="impulse",
+            offsets=(
+                PmxStructuralMorphImpulseOffset(
+                    rigid_body_index=0,
+                    local=False,
+                    velocity=(0.0, 0.0, 0.0),
+                    angular_torque=(0.0, 0.0, 0.0),
+                ),
+            ),
+        )
+        self.assertEqual(impulse.morph_type, "impulse")
 
     def test_append_preview_is_certified_private_and_source_is_immutable(self) -> None:
         source = _clean_document()

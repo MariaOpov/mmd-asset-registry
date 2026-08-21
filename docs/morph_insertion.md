@@ -29,10 +29,10 @@ CP13 owns insertion of semantic morph types 0 through 9:
 | 8 | `material` | source material or `-1` |
 | 9 | `flip` | source morph |
 
-Type 10 `impulse` insertion is deliberately not part of CP13. The repository
-reference taxonomy assigns `impulse morph -> rigid body` to CP14.
-
-Existing impulse morph records in the source document are preserved by CP13.
+CP14 extends this same bounded morph insertion surface with PMX 2.1 type 10
+`impulse`. Its offsets may reference only rigid bodies from the captured source
+document. New impulse morph -> newly inserted rigid-body references remain
+refused until CP17 coordinated insertion.
 
 ## Public semantic DTOs
 
@@ -268,7 +268,6 @@ CP13 must preserve:
 
 CP13 does not authorize:
 
-- impulse morph insertion;
 - new-morph -> new-morph references;
 - mixed texture/material/bone/morph insertion;
 - legacy reorder/delete plus morph insertion in one request;
@@ -322,3 +321,22 @@ CP13 validation must cover at least:
 - Ruff;
 - compileall;
 - full repository suite.
+
+
+## CP14 impulse extension
+
+CP14 adds semantic type `impulse` without changing the root mutation authority.
+
+Each impulse offset carries:
+
+- an existing source `rigid_body_index`;
+- `local: bool`;
+- `velocity` vec3;
+- `angular_torque` vec3.
+
+Impulse insertion requires PMX 2.1. Both vectors are canonicalized to exact
+finite PMX binary32 before certification.
+
+An impulse insertion may target an existing source rigid body. A request that
+also inserts rigid bodies is refused because new-to-new and coordinated
+cross-section insertion remain CP17-owned.

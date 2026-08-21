@@ -556,3 +556,213 @@ def remap_rigid_body_bone_references_for_insertion(
     if not changed:
         return rigid_bodies
     return tuple(rewritten)
+def _require_rigid_body_insertion_shift(
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+) -> PmxCollectionReferenceShiftPlan:
+    if not isinstance(rigid_body_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "rigid_body_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if rigid_body_shift.target_kind is not PmxReferenceTargetKind.RIGID_BODY:
+        raise ValueError("rigid_body_shift target_kind must be rigid_body.")
+    return rigid_body_shift
+
+
+def _map_required_rigid_body_insertion_reference(
+    value: object,
+    *,
+    field_name: str,
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+) -> int:
+    shift = _require_rigid_body_insertion_shift(rigid_body_shift)
+    index = _require_plain_index(value, field_name)
+    if index < 0:
+        raise ValueError(f"{field_name} cannot be negative.")
+    if index >= shift.current_count:
+        raise ValueError(
+            f"{field_name}={index} is outside rigid_body old_size "
+            f"{shift.current_count}."
+        )
+    mapped = shift.remap.target_for(index)
+    if mapped is None:
+        raise PmxPhysicsReferenceRemapError(
+            f"{field_name} references removed rigid_body index {index}; "
+            "insertion shifts cannot remove source rigid bodies."
+        )
+    return mapped
+
+
+def _map_optional_rigid_body_insertion_reference(
+    value: object,
+    *,
+    field_name: str,
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+) -> int:
+    index = _require_plain_index(value, field_name)
+    if index == -1:
+        return -1
+    if index < -1:
+        raise ValueError(f"{field_name} cannot be smaller than -1.")
+    return _map_required_rigid_body_insertion_reference(
+        index,
+        field_name=field_name,
+        rigid_body_shift=rigid_body_shift,
+    )
+
+
+def remap_impulse_morph_rigid_body_references_for_insertion(
+    morphs: tuple[PmxMorph, ...],
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+) -> tuple[PmxMorph, ...]:
+    """Shift existing impulse-morph references through additive rigid insertion."""
+
+    if type(morphs) is not tuple:
+        raise TypeError("morphs must be a tuple.")
+    if not all(isinstance(morph, PmxMorph) for morph in morphs):
+        raise TypeError("morphs must contain only PmxMorph records.")
+    _require_rigid_body_insertion_shift(rigid_body_shift)
+    version = _require_pmx_version(pmx_version)
+
+    rewritten: list[PmxMorph] = []
+    changed = False
+    for morph_index, morph in enumerate(morphs):
+        if morph.morph_type != 10:
+            rewritten.append(morph)
+            continue
+        if version != 2.1:
+            raise ValueError(f"morphs[{morph_index}] type 10 requires PMX 2.1.")
+
+        offsets: list[object] = []
+        morph_changed = False
+        for offset_index, offset in enumerate(morph.offsets):
+            if not isinstance(offset, PmxImpulseMorphOffset):
+                raise ValueError(
+                    f"morphs[{morph_index}].offsets[{offset_index}] type 10 "
+                    "requires PmxImpulseMorphOffset."
+                )
+            field_name = (
+                f"morphs[{morph_index}].offsets[{offset_index}].rigid_body_index"
+            )
+            rigid_body_index = _map_required_rigid_body_insertion_reference(
+                offset.rigid_body_index,
+                field_name=field_name,
+                rigid_body_shift=rigid_body_shift,
+            )
+            if rigid_body_index == offset.rigid_body_index:
+                offsets.append(offset)
+            else:
+                offsets.append(replace(offset, rigid_body_index=rigid_body_index))
+                morph_changed = True
+
+        if morph_changed:
+            rewritten.append(replace(morph, offsets=tuple(offsets)))
+            changed = True
+        else:
+            rewritten.append(morph)
+
+    return tuple(rewritten) if changed else morphs
+
+
+def remap_joint_rigid_body_references_for_insertion(
+    joints: tuple[PmxJoint, ...],
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+) -> tuple[PmxJoint, ...]:
+    """Shift optional joint rigid-body references through additive insertion."""
+
+    if type(joints) is not tuple:
+        raise TypeError("joints must be a tuple.")
+    if not all(isinstance(joint, PmxJoint) for joint in joints):
+        raise TypeError("joints must contain only PmxJoint records.")
+    _require_rigid_body_insertion_shift(rigid_body_shift)
+    version = _require_pmx_version(pmx_version)
+
+    rewritten: list[PmxJoint] = []
+    changed = False
+    for joint_index, joint in enumerate(joints):
+        joint_type = _require_plain_index(
+            joint.joint_type,
+            f"joints[{joint_index}].joint_type",
+        )
+        if not 0 <= joint_type <= 5:
+            raise ValueError(
+                f"joints[{joint_index}].joint_type must be a value from 0 through 5."
+            )
+        if version == 2.0 and joint_type != 0:
+            raise ValueError(f"joints[{joint_index}] type {joint_type} requires PMX 2.1.")
+
+        a = _map_optional_rigid_body_insertion_reference(
+            joint.rigid_body_a_index,
+            field_name=f"joints[{joint_index}].rigid_body_a_index",
+            rigid_body_shift=rigid_body_shift,
+        )
+        b = _map_optional_rigid_body_insertion_reference(
+            joint.rigid_body_b_index,
+            field_name=f"joints[{joint_index}].rigid_body_b_index",
+            rigid_body_shift=rigid_body_shift,
+        )
+        if a == joint.rigid_body_a_index and b == joint.rigid_body_b_index:
+            rewritten.append(joint)
+        else:
+            rewritten.append(
+                replace(joint, rigid_body_a_index=a, rigid_body_b_index=b)
+            )
+            changed = True
+
+    return tuple(rewritten) if changed else joints
+
+
+def remap_soft_body_rigid_body_references_for_insertion(
+    soft_bodies: tuple[PmxSoftBody, ...],
+    rigid_body_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+) -> tuple[PmxSoftBody, ...]:
+    """Shift required soft-body anchor rigid-body refs through insertion."""
+
+    if type(soft_bodies) is not tuple:
+        raise TypeError("soft_bodies must be a tuple.")
+    if not all(isinstance(body, PmxSoftBody) for body in soft_bodies):
+        raise TypeError("soft_bodies must contain only PmxSoftBody records.")
+    _require_rigid_body_insertion_shift(rigid_body_shift)
+    version = _require_pmx_version(pmx_version)
+    if version == 2.0:
+        if soft_bodies:
+            raise ValueError("PMX 2.0 cannot contain a soft-body section.")
+        return soft_bodies
+
+    rewritten_bodies: list[PmxSoftBody] = []
+    changed = False
+    for body_index, body in enumerate(soft_bodies):
+        anchors: list[PmxSoftBodyAnchor] = []
+        anchors_changed = False
+        for anchor_index, anchor in enumerate(body.anchors):
+            if not isinstance(anchor, PmxSoftBodyAnchor):
+                raise TypeError(
+                    f"soft_bodies[{body_index}].anchors[{anchor_index}] "
+                    "must be a PmxSoftBodyAnchor record."
+                )
+            field_name = (
+                f"soft_bodies[{body_index}].anchors[{anchor_index}].rigid_body_index"
+            )
+            mapped = _map_required_rigid_body_insertion_reference(
+                anchor.rigid_body_index,
+                field_name=field_name,
+                rigid_body_shift=rigid_body_shift,
+            )
+            if mapped == anchor.rigid_body_index:
+                anchors.append(anchor)
+            else:
+                anchors.append(replace(anchor, rigid_body_index=mapped))
+                anchors_changed = True
+
+        if anchors_changed:
+            rewritten_bodies.append(replace(body, anchors=tuple(anchors)))
+            changed = True
+        else:
+            rewritten_bodies.append(body)
+
+    return tuple(rewritten_bodies) if changed else soft_bodies

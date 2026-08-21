@@ -1,4 +1,4 @@
-"""Public bounded semantic DTOs for CP13 morph insertion requests."""
+"""Public bounded semantic DTOs for CP13/CP14 morph insertion requests."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ PmxStructuralMorphType: TypeAlias = Literal[
     "additional_uv_4",
     "material",
     "flip",
+    "impulse",
 ]
 PmxStructuralMaterialMorphOperation: TypeAlias = Literal["multiply", "add"]
 
@@ -184,6 +185,27 @@ class PmxStructuralMorphFlipOffset:
         _require_finite_float(self.weight, "weight")
 
 
+@dataclass(frozen=True, slots=True)
+class PmxStructuralMorphImpulseOffset:
+    """One PMX 2.1 impulse against an existing source rigid body."""
+
+    rigid_body_index: int
+    local: bool
+    velocity: tuple[float, float, float]
+    angular_torque: tuple[float, float, float]
+
+    def __post_init__(self) -> None:
+        _require_nonnegative_index(self.rigid_body_index, "rigid_body_index")
+        if not isinstance(self.local, bool):
+            raise TypeError("local must be a boolean.")
+        _require_float_tuple(self.velocity, field_name="velocity", length=3)
+        _require_float_tuple(
+            self.angular_torque,
+            field_name="angular_torque",
+            length=3,
+        )
+
+
 PmxStructuralMorphOffset: TypeAlias = (
     PmxStructuralMorphGroupOffset
     | PmxStructuralMorphVertexOffset
@@ -191,6 +213,7 @@ PmxStructuralMorphOffset: TypeAlias = (
     | PmxStructuralMorphUvOffset
     | PmxStructuralMorphMaterialOffset
     | PmxStructuralMorphFlipOffset
+    | PmxStructuralMorphImpulseOffset
 )
 
 
@@ -205,6 +228,7 @@ _MORPH_TYPES: tuple[str, ...] = (
     "additional_uv_4",
     "material",
     "flip",
+    "impulse",
 )
 _EXPECTED_OFFSET_TYPES: tuple[type[object], ...] = (
     PmxStructuralMorphGroupOffset,
@@ -217,6 +241,7 @@ _EXPECTED_OFFSET_TYPES: tuple[type[object], ...] = (
     PmxStructuralMorphUvOffset,
     PmxStructuralMorphMaterialOffset,
     PmxStructuralMorphFlipOffset,
+    PmxStructuralMorphImpulseOffset,
 )
 
 
@@ -243,7 +268,7 @@ class PmxStructuralMorphInsertion:
             )
         if self.morph_type not in _MORPH_TYPES:
             raise ValueError(
-                "morph_type must be one of the CP13 semantic morph types."
+                "morph_type must be one of the CP13/CP14 semantic morph types."
             )
 
         if type(self.offsets) is not tuple:
@@ -278,5 +303,6 @@ __all__ = (
     "PmxStructuralMorphUvOffset",
     "PmxStructuralMorphMaterialOffset",
     "PmxStructuralMorphFlipOffset",
+    "PmxStructuralMorphImpulseOffset",
     "PmxStructuralMorphInsertion",
 )

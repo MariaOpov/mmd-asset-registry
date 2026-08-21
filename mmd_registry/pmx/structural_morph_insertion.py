@@ -25,6 +25,7 @@ from mmd_registry.pmx.document import (
     PmxDocument,
     PmxFlipMorphOffset,
     PmxGroupMorphOffset,
+    PmxImpulseMorphOffset,
     PmxMaterialMorphOffset,
     PmxMorph,
     PmxUvMorphOffset,
@@ -85,11 +86,12 @@ _MORPH_TYPE_NAMES: Final[tuple[str, ...]] = (
     "additional_uv_4",
     "material",
     "flip",
+    "impulse",
 )
 
 
 class PmxStructuralMorphInsertionError(ValueError):
-    """Raised when a CP13 morph insertion cannot be safely certified."""
+    """Raised when a CP13/CP14 morph insertion cannot be safely certified."""
 
 
 def _is_plain_int(value: object) -> bool:
@@ -305,6 +307,35 @@ class PmxFlipMorphInsertionOffsetPayload:
         return {"morph_index": self.morph_index, "weight": self.weight}
 
 
+@dataclass(frozen=True, slots=True)
+class PmxImpulseMorphInsertionOffsetPayload:
+    rigid_body_index: int
+    local: bool
+    velocity: tuple[float, float, float]
+    angular_torque: tuple[float, float, float]
+
+    def __post_init__(self) -> None:
+        index = _require_plain_int(self.rigid_body_index, "rigid_body_index")
+        if index < 0:
+            raise ValueError("rigid_body_index cannot be negative.")
+        if not isinstance(self.local, bool):
+            raise TypeError("local must be a boolean.")
+        _require_float_tuple(self.velocity, field_name="velocity", length=3)
+        _require_float_tuple(
+            self.angular_torque,
+            field_name="angular_torque",
+            length=3,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "rigid_body_index": self.rigid_body_index,
+            "local": self.local,
+            "velocity": list(self.velocity),
+            "angular_torque": list(self.angular_torque),
+        }
+
+
 PmxMorphInsertionOffsetPayload: TypeAlias = (
     PmxGroupMorphInsertionOffsetPayload
     | PmxVertexMorphInsertionOffsetPayload
@@ -312,6 +343,7 @@ PmxMorphInsertionOffsetPayload: TypeAlias = (
     | PmxUvMorphInsertionOffsetPayload
     | PmxMaterialMorphInsertionOffsetPayload
     | PmxFlipMorphInsertionOffsetPayload
+    | PmxImpulseMorphInsertionOffsetPayload
 )
 
 _EXPECTED_PAYLOAD_TYPES: Final[tuple[type[object], ...]] = (
@@ -325,6 +357,7 @@ _EXPECTED_PAYLOAD_TYPES: Final[tuple[type[object], ...]] = (
     PmxUvMorphInsertionOffsetPayload,
     PmxMaterialMorphInsertionOffsetPayload,
     PmxFlipMorphInsertionOffsetPayload,
+    PmxImpulseMorphInsertionOffsetPayload,
 )
 
 
@@ -351,8 +384,7 @@ class PmxMorphInsertionPayload:
         morph_type = _require_plain_int(self.morph_type, "morph_type")
         if not 0 <= morph_type < len(_MORPH_TYPE_NAMES):
             raise PmxStructuralMorphInsertionError(
-                "CP13 morph insertion supports only morph types 0 through 9; "
-                "impulse morph insertion remains CP14-owned."
+                "morph insertion supports only PMX morph types 0 through 10."
             )
 
         if type(self.offsets) is not tuple:
@@ -491,8 +523,23 @@ class PmxMorphInsertionPayload:
                         ),
                     )
                 )
+            elif isinstance(offset, PmxImpulseMorphInsertionOffsetPayload):
+                materialized.append(
+                    PmxImpulseMorphOffset(
+                        rigid_body_index=offset.rigid_body_index,
+                        local=offset.local,
+                        velocity=_canonical_pmx_float_tuple(
+                            offset.velocity,
+                            field_name=f"{field_prefix}.velocity",
+                        ),
+                        angular_torque=_canonical_pmx_float_tuple(
+                            offset.angular_torque,
+                            field_name=f"{field_prefix}.angular_torque",
+                        ),
+                    )
+                )
             else:
-                raise AssertionError("unsupported CP13 morph insertion offset payload.")
+                raise AssertionError("unsupported morph insertion offset payload.")
 
         return PmxMorph(
             local_name=self.local_name,
@@ -629,7 +676,17 @@ def _validate_float32_offset(
         )
         _canonical_pmx_float32(offset.edge_scale, f"{prefix}.edge_scale")
         return
-    raise AssertionError("unsupported CP13 morph insertion offset payload.")
+    if isinstance(offset, PmxImpulseMorphInsertionOffsetPayload):
+        _canonical_pmx_float_tuple(
+            offset.velocity,
+            field_name=f"{prefix}.velocity",
+        )
+        _canonical_pmx_float_tuple(
+            offset.angular_torque,
+            field_name=f"{prefix}.angular_torque",
+        )
+        return
+    raise AssertionError("unsupported morph insertion offset payload.")
 
 
 def _validate_payload_for_source(
@@ -647,9 +704,10 @@ def _validate_payload_for_source(
         label="universal_name",
     )
 
-    if insertion.morph_type == 9 and document.header.version != 2.1:
+    if insertion.morph_type in (9, 10) and document.header.version != 2.1:
+        morph_name = _MORPH_TYPE_NAMES[insertion.morph_type]
         raise PmxStructuralMorphInsertionError(
-            "flip morph insertion requires PMX 2.1."
+            f"{morph_name} morph insertion requires PMX 2.1."
         )
     if 4 <= insertion.morph_type <= 7:
         required_layer = insertion.morph_type - 3
@@ -703,8 +761,15 @@ def _validate_payload_for_source(
                 material_count=len(document.materials),
                 field_name=f"{prefix}.material_index",
             )
+        elif isinstance(offset, PmxImpulseMorphInsertionOffsetPayload):
+            _validate_required_source_reference(
+                offset.rigid_body_index,
+                count=len(document.rigid_bodies),
+                field_name=f"{prefix}.rigid_body_index",
+                target_label="rigid body",
+            )
         else:
-            raise AssertionError("unsupported CP13 morph insertion offset payload.")
+            raise AssertionError("unsupported morph insertion offset payload.")
         _validate_float32_offset(offset, offset_index=offset_index)
 
 
@@ -1019,6 +1084,7 @@ __all__ = (
     "PmxUvMorphInsertionOffsetPayload",
     "PmxMaterialMorphInsertionOffsetPayload",
     "PmxFlipMorphInsertionOffsetPayload",
+    "PmxImpulseMorphInsertionOffsetPayload",
     "PmxMorphInsertionPayload",
     "PmxMorphInsertionPreview",
     "preview_pmx_morph_insertions",

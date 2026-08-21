@@ -40,8 +40,9 @@ CP08 extends only the certified-preview/serialization adapter so texture inserti
 reuse this exact transaction authority. CP10 reuses the same adapter and transaction
 authority for zero-surface material insertion. CP12 reuses the same verified path for
 semantic bone insertion. CP13 reuses the same verified path for bounded semantic morph
-insertion. The legacy transform classes and public raw structural-output surface remain
-unchanged; insertion-specific helpers stay private.
+insertion. CP14 reuses it for bounded semantic rigid-body insertion. The legacy
+transform classes and public raw structural-output surface remain unchanged;
+insertion-specific helpers stay private.
 """
 
 from __future__ import annotations
@@ -78,6 +79,11 @@ from mmd_registry.pmx.structural_morph_insertion import (
     PmxMorphInsertionPayload,
     PmxMorphInsertionPreview,
     preview_pmx_morph_insertions,
+)
+from mmd_registry.pmx.structural_rigid_body_insertion import (
+    PmxRigidBodyInsertionPayload,
+    PmxRigidBodyInsertionPreview,
+    preview_pmx_rigid_body_insertions,
 )
 from mmd_registry.pmx.structural_preview import (
     PMX_STRUCTURAL_PREVIEW_SCHEMA_VERSION,
@@ -132,6 +138,7 @@ _StructuralPreview = (
     | PmxMaterialInsertionPreview
     | PmxBoneInsertionPreview
     | PmxMorphInsertionPreview
+    | PmxRigidBodyInsertionPreview
 )
 
 
@@ -161,6 +168,7 @@ def _derive_verified_structural_serialization(
             PmxMaterialInsertionPreview,
             PmxBoneInsertionPreview,
             PmxMorphInsertionPreview,
+            PmxRigidBodyInsertionPreview,
         ),
     ):
         raise TypeError(
@@ -649,6 +657,90 @@ class _PmxMorphInsertionSerializationResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _PmxRigidBodyInsertionSerializationResult:
+    """Verified serialization evidence for the CP14 rigid-body insertion path."""
+
+    source_document: PmxDocument
+    insertions: tuple[PmxRigidBodyInsertionPayload, ...]
+    preview: PmxRigidBodyInsertionPreview = field(init=False)
+    serialized_bytes: bytes = field(init=False, repr=False)
+    reparsed_certificate: PmxStructuralInvariantCertificate = field(init=False)
+    output_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._derive_verified_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        source_document: PmxDocument,
+        insertions: tuple[PmxRigidBodyInsertionPayload, ...],
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxRigidBodyInsertionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "source_document", source_document)
+        object.__setattr__(result, "insertions", insertions)
+        result._derive_verified_evidence(stage_callback)
+        return result
+
+    def _derive_verified_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
+        if not isinstance(self.source_document, PmxDocument):
+            raise TypeError("source_document must be a PmxDocument instance.")
+        if type(self.insertions) is not tuple:
+            raise TypeError("insertions must be a tuple.")
+        if not self.insertions:
+            raise ValueError(
+                "rigid-body insertion execution requires at least one insertion."
+            )
+        if not all(
+            isinstance(insertion, PmxRigidBodyInsertionPayload)
+            for insertion in self.insertions
+        ):
+            raise TypeError(
+                "insertions must contain only PmxRigidBodyInsertionPayload values."
+            )
+        if stage_callback is not None and not callable(stage_callback):
+            raise TypeError("stage_callback must be callable or None.")
+
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_verified_structural_serialization(
+                lambda: preview_pmx_rigid_body_insertions(
+                    self.source_document,
+                    self.insertions,
+                ),
+                stage_callback,
+            )
+        )
+        if not isinstance(preview, PmxRigidBodyInsertionPreview):
+            raise AssertionError(
+                "rigid-body insertion serialization returned wrong preview."
+            )
+
+        object.__setattr__(self, "preview", preview)
+        object.__setattr__(self, "serialized_bytes", serialized)
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
+        object.__setattr__(self, "output_sha256", output_sha256)
+
+    @property
+    def output_size_bytes(self) -> int:
+        return len(self.serialized_bytes)
+
+    @property
+    def status(self) -> str:
+        return self.preview.status
+
+    def to_dict(self) -> dict[str, object]:
+        return _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
+
+
 def verify_pmx_structural_serialization(
     document: PmxDocument,
     intent: PmxStructuralTransformIntent,
@@ -759,6 +851,28 @@ def _verify_pmx_morph_insertion_serialization(
     )
 
 
+def _verify_pmx_rigid_body_insertion_serialization(
+    document: PmxDocument,
+    insertions: tuple[PmxRigidBodyInsertionPayload, ...],
+    *,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> _PmxRigidBodyInsertionSerializationResult:
+    """Return verified rigid-body insertion bytes through the shared kernel."""
+
+    if _stage_callback is None:
+        return _PmxRigidBodyInsertionSerializationResult(
+            source_document=document,
+            insertions=insertions,
+        )
+    if not callable(_stage_callback):
+        raise TypeError("_stage_callback must be callable or None.")
+    return _PmxRigidBodyInsertionSerializationResult._with_stage_callback(
+        document,
+        insertions,
+        _stage_callback,
+    )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class PmxStructuralWriteResult:
     """Report whose supported creation path follows successful atomic commit."""
@@ -773,6 +887,7 @@ class PmxStructuralWriteResult:
         | _PmxMaterialInsertionSerializationResult
         | _PmxBoneInsertionSerializationResult
         | _PmxMorphInsertionSerializationResult
+        | _PmxRigidBodyInsertionSerializationResult
     )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -796,6 +911,7 @@ class PmxStructuralWriteResult:
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
             | _PmxMorphInsertionSerializationResult
+            | _PmxRigidBodyInsertionSerializationResult
         ),
     ) -> "PmxStructuralWriteResult":
         if not isinstance(input_path, Path):
@@ -815,6 +931,7 @@ class PmxStructuralWriteResult:
                 _PmxMaterialInsertionSerializationResult,
                 _PmxBoneInsertionSerializationResult,
                 _PmxMorphInsertionSerializationResult,
+                _PmxRigidBodyInsertionSerializationResult,
             ),
         ):
             raise TypeError(
@@ -897,6 +1014,7 @@ def _write_verified_structural_transaction(
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
             | _PmxMorphInsertionSerializationResult
+            | _PmxRigidBodyInsertionSerializationResult
         ),
     ],
     *,
@@ -941,6 +1059,7 @@ def _write_verified_structural_transaction(
             _PmxMaterialInsertionSerializationResult,
             _PmxBoneInsertionSerializationResult,
             _PmxMorphInsertionSerializationResult,
+            _PmxRigidBodyInsertionSerializationResult,
         ),
     ):
         raise TypeError(
@@ -1157,6 +1276,49 @@ def _write_pmx_morph_insertion_transaction(
         stage_callback: _StructuralStageCallback | None,
     ) -> _PmxMorphInsertionSerializationResult:
         return _verify_pmx_morph_insertion_serialization(
+            source_document,
+            insertions,
+            _stage_callback=stage_callback,
+        )
+
+    return _write_verified_structural_transaction(
+        input_path,
+        output_path,
+        serialize_insertions,
+        overwrite=overwrite,
+        _stage_callback=_stage_callback,
+    )
+
+
+def _write_pmx_rigid_body_insertion_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    insertions: tuple[PmxRigidBodyInsertionPayload, ...],
+    *,
+    overwrite: bool = False,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> PmxStructuralWriteResult:
+    """Execute CP14 rigid-body insertion through the shared transaction."""
+
+    if type(insertions) is not tuple:
+        raise TypeError("insertions must be a tuple.")
+    if not insertions:
+        raise ValueError(
+            "rigid-body insertion execution requires at least one insertion."
+        )
+    if not all(
+        isinstance(insertion, PmxRigidBodyInsertionPayload)
+        for insertion in insertions
+    ):
+        raise TypeError(
+            "insertions must contain only PmxRigidBodyInsertionPayload values."
+        )
+
+    def serialize_insertions(
+        source_document: PmxDocument,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> _PmxRigidBodyInsertionSerializationResult:
+        return _verify_pmx_rigid_body_insertion_serialization(
             source_document,
             insertions,
             _stage_callback=stage_callback,

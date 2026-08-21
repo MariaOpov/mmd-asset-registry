@@ -1060,11 +1060,11 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
-        if request.vertex_insertions:
-            raise ValueError(
-                "vertex insertion execution is not authorized until CP16; "
-                "use preview_structural_edit for the CP15 planning gate."
-            )
+        vertex_payloads = (
+            _build_vertex_insertion_payloads(request)
+            if request.vertex_insertions
+            else ()
+        )
         rigid_body_payloads = (
             _build_rigid_body_insertion_payloads(request)
             if request.rigid_body_insertions
@@ -1100,10 +1100,19 @@ def apply_structural_edit(
             _write_pmx_rigid_body_insertion_transaction,
             _write_pmx_structural_transaction,
             _write_pmx_texture_insertion_transaction,
+            _write_pmx_vertex_insertion_transaction,
         )
 
         failure_stage = "path_resolution"
-        if rigid_body_payloads:
+        if vertex_payloads:
+            result = _write_pmx_vertex_insertion_transaction(
+                input_path,
+                output_path,
+                vertex_payloads,
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        elif rigid_body_payloads:
             result = _write_pmx_rigid_body_insertion_transaction(
                 input_path,
                 output_path,

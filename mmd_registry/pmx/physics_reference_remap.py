@@ -508,6 +508,106 @@ def remap_soft_body_references(
     return tuple(rewritten_bodies)
 
 
+def remap_soft_body_vertex_references_for_insertion(
+    soft_bodies: tuple[PmxSoftBody, ...],
+    vertex_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+) -> tuple[PmxSoftBody, ...]:
+    """Rewrite soft-body anchor/pin vertex refs through vertex insertion."""
+
+    if type(soft_bodies) is not tuple:
+        raise TypeError("soft_bodies must be a tuple.")
+    if not all(isinstance(body, PmxSoftBody) for body in soft_bodies):
+        raise TypeError("soft_bodies must contain only PmxSoftBody records.")
+    if not isinstance(vertex_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "vertex_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if vertex_shift.target_kind is not PmxReferenceTargetKind.VERTEX:
+        raise ValueError("vertex_shift target_kind must be vertex.")
+
+    version = _require_pmx_version(pmx_version)
+    if version == 2.0:
+        if soft_bodies:
+            raise ValueError("PMX 2.0 cannot contain a soft-body section.")
+        return soft_bodies
+
+    def shift_required(value: object, field_name: str) -> int:
+        index = _require_plain_index(value, field_name)
+        if index < 0:
+            raise ValueError(f"{field_name} cannot be negative.")
+        if index >= vertex_shift.current_count:
+            raise ValueError(
+                f"{field_name}={index} is outside vertex old_size "
+                f"{vertex_shift.current_count}."
+            )
+        mapped = vertex_shift.remap.target_for(index)
+        if mapped is None:
+            raise PmxPhysicsReferenceRemapError(
+                f"{field_name} references removed vertex index {index}; "
+                "insertion shifts cannot remove source records."
+            )
+        return mapped
+
+    rewritten_bodies: list[PmxSoftBody] = []
+    changed = False
+    for body_index, body in enumerate(soft_bodies):
+        rewritten_anchors: list[PmxSoftBodyAnchor] = []
+        anchors_changed = False
+        for anchor_index, anchor in enumerate(body.anchors):
+            if not isinstance(anchor, PmxSoftBodyAnchor):
+                raise TypeError(
+                    f"soft_bodies[{body_index}].anchors[{anchor_index}] "
+                    "must be a PmxSoftBodyAnchor record."
+                )
+            field_name = (
+                f"soft_bodies[{body_index}].anchors[{anchor_index}].vertex_index"
+            )
+            vertex_index = shift_required(anchor.vertex_index, field_name)
+            if vertex_index == anchor.vertex_index:
+                rewritten_anchors.append(anchor)
+                continue
+            rewritten_anchors.append(replace(anchor, vertex_index=vertex_index))
+            anchors_changed = True
+
+        pinned_vertex_indices = tuple(
+            shift_required(
+                vertex_index,
+                (
+                    f"soft_bodies[{body_index}]."
+                    f"pinned_vertex_indices[{pin_index}]"
+                ),
+            )
+            for pin_index, vertex_index in enumerate(body.pinned_vertex_indices)
+        )
+        pins_changed = pinned_vertex_indices != body.pinned_vertex_indices
+
+        if not anchors_changed and not pins_changed:
+            rewritten_bodies.append(body)
+            continue
+        rewritten_bodies.append(
+            replace(
+                body,
+                anchors=(
+                    tuple(rewritten_anchors)
+                    if anchors_changed
+                    else body.anchors
+                ),
+                pinned_vertex_indices=(
+                    pinned_vertex_indices
+                    if pins_changed
+                    else body.pinned_vertex_indices
+                ),
+            )
+        )
+        changed = True
+
+    if not changed:
+        return soft_bodies
+    return tuple(rewritten_bodies)
+
+
 def remap_rigid_body_bone_references_for_insertion(
     rigid_bodies: tuple[PmxRigidBody, ...],
     bone_shift: PmxCollectionReferenceShiftPlan,

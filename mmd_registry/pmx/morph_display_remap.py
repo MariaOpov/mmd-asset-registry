@@ -515,6 +515,86 @@ def _shift_required_source_index(
     return mapped
 
 
+def remap_vertex_morph_references_for_insertion(
+    morphs: tuple[PmxMorph, ...],
+    vertex_shift: PmxCollectionReferenceShiftPlan,
+    *,
+    pmx_version: float,
+    additional_uv_count: int,
+) -> tuple[PmxMorph, ...]:
+    """Rewrite existing vertex/UV morph targets through vertex insertion."""
+
+    if type(morphs) is not tuple:
+        raise TypeError("morphs must be a tuple.")
+    if not all(isinstance(morph, PmxMorph) for morph in morphs):
+        raise TypeError("morphs must contain only PmxMorph records.")
+    shift = _require_reference_shift(
+        vertex_shift,
+        PmxReferenceTargetKind.VERTEX,
+        "vertex_shift",
+    )
+    version = _require_pmx_version(pmx_version)
+    uv_count = _require_additional_uv_count(additional_uv_count)
+
+    rewritten_morphs: list[PmxMorph] = []
+    changed = False
+    for morph_index, morph in enumerate(morphs):
+        if not 0 <= morph.morph_type < len(_EXPECTED_OFFSET_TYPES):
+            raise ValueError(
+                f"morphs[{morph_index}].morph_type must be a value from 0 through 10."
+            )
+        if morph.morph_type in (9, 10) and version != 2.1:
+            raise ValueError(
+                f"morphs[{morph_index}] type {morph.morph_type} requires PMX 2.1."
+            )
+        if 4 <= morph.morph_type <= 7:
+            required_layer = morph.morph_type - 3
+            if uv_count < required_layer:
+                raise ValueError(
+                    f"morphs[{morph_index}] type {morph.morph_type} requires "
+                    f"additional UV layer {required_layer}."
+                )
+
+        expected_type = _EXPECTED_OFFSET_TYPES[morph.morph_type]
+        rewritten_offsets: list[object] = []
+        morph_changed = False
+        for offset_index, offset in enumerate(morph.offsets):
+            if not isinstance(offset, expected_type):
+                raise ValueError(
+                    f"morphs[{morph_index}].offsets[{offset_index}] type "
+                    f"{morph.morph_type} requires {expected_type.__name__}."
+                )
+            if not isinstance(offset, (PmxVertexMorphOffset, PmxUvMorphOffset)):
+                rewritten_offsets.append(offset)
+                continue
+
+            field_name = (
+                f"morphs[{morph_index}].offsets[{offset_index}].vertex_index"
+            )
+            vertex_index = _shift_required_source_index(
+                offset.vertex_index,
+                field_name=field_name,
+                shift=shift,
+            )
+            if vertex_index == offset.vertex_index:
+                rewritten_offsets.append(offset)
+                continue
+            rewritten_offsets.append(replace(offset, vertex_index=vertex_index))
+            morph_changed = True
+
+        if morph_changed:
+            rewritten_morphs.append(
+                replace(morph, offsets=tuple(rewritten_offsets))
+            )
+            changed = True
+        else:
+            rewritten_morphs.append(morph)
+
+    if not changed:
+        return morphs
+    return tuple(rewritten_morphs)
+
+
 def remap_bone_morph_references_for_insertion(
     morphs: tuple[PmxMorph, ...],
     bone_shift: PmxCollectionReferenceShiftPlan,

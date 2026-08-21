@@ -38,6 +38,14 @@ from mmd_registry.services.structural_rigid_body import (
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion as _PmxStructuralTextureInsertion,
 )
+from mmd_registry.services.structural_vertex import (
+    PmxStructuralVertexBdef1 as _PmxStructuralVertexBdef1,
+    PmxStructuralVertexBdef2 as _PmxStructuralVertexBdef2,
+    PmxStructuralVertexBdef4 as _PmxStructuralVertexBdef4,
+    PmxStructuralVertexInsertion as _PmxStructuralVertexInsertion,
+    PmxStructuralVertexQdef as _PmxStructuralVertexQdef,
+    PmxStructuralVertexSdef as _PmxStructuralVertexSdef,
+)
 from mmd_registry.pmx.collection_transform import (
     PmxCollectionTransform,
     PmxStructuralTransformIntent,
@@ -106,6 +114,16 @@ from mmd_registry.pmx.structural_texture_insertion import (
     PmxTextureInsertionPayload as _PmxTextureInsertionPayload,
     PmxTextureInsertionPreview as _PmxTextureInsertionPreview,
     preview_pmx_texture_insertions as _preview_pmx_texture_insertions,
+)
+from mmd_registry.pmx.structural_vertex_insertion import (
+    PmxVertexBdef1InsertionPayload as _PmxVertexBdef1InsertionPayload,
+    PmxVertexBdef2InsertionPayload as _PmxVertexBdef2InsertionPayload,
+    PmxVertexBdef4InsertionPayload as _PmxVertexBdef4InsertionPayload,
+    PmxVertexInsertionPayload as _PmxVertexInsertionPayload,
+    PmxVertexInsertionPreview as _PmxVertexInsertionPreview,
+    PmxVertexQdefInsertionPayload as _PmxVertexQdefInsertionPayload,
+    PmxVertexSdefInsertionPayload as _PmxVertexSdefInsertionPayload,
+    preview_pmx_vertex_insertions as _preview_pmx_vertex_insertions,
 )
 from mmd_registry.pmx.validation import validate_pmx_document
 
@@ -259,6 +277,7 @@ class PmxStructuralPreviewRequest:
     bone_insertions: tuple[_PmxStructuralBoneInsertion, ...] = ()
     morph_insertions: tuple[_PmxStructuralMorphInsertion, ...] = ()
     rigid_body_insertions: tuple[_PmxStructuralRigidBodyInsertion, ...] = ()
+    vertex_insertions: tuple[_PmxStructuralVertexInsertion, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.collection_edits) is not tuple:
@@ -379,6 +398,30 @@ class PmxStructuralPreviewRequest:
             )
 
 
+        if type(self.vertex_insertions) is not tuple:
+            raise TypeError("vertex_insertions must be a tuple.")
+        if not all(
+            isinstance(insertion, _PmxStructuralVertexInsertion)
+            for insertion in self.vertex_insertions
+        ):
+            raise TypeError(
+                "vertex_insertions must contain only "
+                "PmxStructuralVertexInsertion values."
+            )
+        if self.vertex_insertions and (
+            self.collection_edits
+            or self.texture_insertions
+            or self.material_insertions
+            or self.bone_insertions
+            or self.morph_insertions
+            or self.rigid_body_insertions
+        ):
+            raise ValueError(
+                "vertex insertions cannot be combined with legacy collection edits "
+                "or another insertion target; coordinated multi-target insertion "
+                "remains CP17-owned."
+            )
+
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
     """Service-facing structural preview without exporting implementation types."""
@@ -390,6 +433,7 @@ class PmxStructuralPreviewResult:
         | _PmxBoneInsertionPreview
         | _PmxMorphInsertionPreview
         | _PmxRigidBodyInsertionPreview
+        | _PmxVertexInsertionPreview
     ) = field(repr=False)
 
     def __post_init__(self) -> None:
@@ -402,6 +446,7 @@ class PmxStructuralPreviewResult:
                 _PmxBoneInsertionPreview,
                 _PmxMorphInsertionPreview,
                 _PmxRigidBodyInsertionPreview,
+                _PmxVertexInsertionPreview,
             ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
@@ -552,6 +597,67 @@ def _structural_target_size(
     if target_kind is PmxReferenceTargetKind.RIGID_BODY:
         return len(document.rigid_bodies)
     raise AssertionError(f"unsupported structural target kind: {target_kind!r}")
+
+
+def _build_vertex_insertion_payloads(
+    request: PmxStructuralPreviewRequest,
+) -> tuple[_PmxVertexInsertionPayload, ...]:
+    payloads: list[_PmxVertexInsertionPayload] = []
+    for insertion in request.vertex_insertions:
+        if insertion.position == "append":
+            position = _PmxStructuralInsertPosition.append()
+        else:
+            assert insertion.position == "insert_before"
+            assert insertion.source_index is not None
+            position = _PmxStructuralInsertPosition.insert_before(
+                insertion.source_index
+            )
+
+        deform = insertion.deform
+        if isinstance(deform, _PmxStructuralVertexBdef1):
+            deform_payload = _PmxVertexBdef1InsertionPayload(
+                bone_index=deform.bone_index,
+            )
+        elif isinstance(deform, _PmxStructuralVertexBdef2):
+            deform_payload = _PmxVertexBdef2InsertionPayload(
+                bone_indices=deform.bone_indices,
+                bone_1_weight=deform.bone_1_weight,
+            )
+        elif isinstance(deform, _PmxStructuralVertexBdef4):
+            deform_payload = _PmxVertexBdef4InsertionPayload(
+                bone_indices=deform.bone_indices,
+                weights=deform.weights,
+            )
+        elif isinstance(deform, _PmxStructuralVertexSdef):
+            deform_payload = _PmxVertexSdefInsertionPayload(
+                bone_indices=deform.bone_indices,
+                bone_1_weight=deform.bone_1_weight,
+                c=deform.c,
+                r0=deform.r0,
+                r1=deform.r1,
+            )
+        elif isinstance(deform, _PmxStructuralVertexQdef):
+            deform_payload = _PmxVertexQdefInsertionPayload(
+                bone_indices=deform.bone_indices,
+                weights=deform.weights,
+            )
+        else:
+            raise AssertionError(
+                "validated vertex insertion exposed an unsupported deform type."
+            )
+
+        payloads.append(
+            _PmxVertexInsertionPayload(
+                vertex_position=insertion.vertex_position,
+                normal=insertion.normal,
+                uv=insertion.uv,
+                additional_uvs=insertion.additional_uvs,
+                deform=deform_payload,
+                edge_scale=insertion.edge_scale,
+                position=position,
+            )
+        )
+    return tuple(payloads)
 
 
 def _build_texture_insertion_payloads(
@@ -877,6 +983,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if request.vertex_insertions:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_vertex_insertions(
+                    document,
+                    _build_vertex_insertion_payloads(request),
+                )
+            )
         if request.rigid_body_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_rigid_body_insertions(
@@ -947,6 +1060,11 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
+        if request.vertex_insertions:
+            raise ValueError(
+                "vertex insertion execution is not authorized until CP16; "
+                "use preview_structural_edit for the CP15 planning gate."
+            )
         rigid_body_payloads = (
             _build_rigid_body_insertion_payloads(request)
             if request.rigid_body_insertions

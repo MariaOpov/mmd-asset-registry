@@ -136,6 +136,51 @@ def remap_surface_vertex_references(
     return tuple(rewritten)
 
 
+def remap_surface_vertex_references_for_insertion(
+    surface_indices: tuple[int, ...],
+    vertex_shift: PmxCollectionReferenceShiftPlan,
+) -> tuple[int, ...]:
+    """Rewrite surface vertex refs through additive vertex insertion evidence."""
+
+    if type(surface_indices) is not tuple:
+        raise TypeError("surface_indices must be a tuple.")
+    if not isinstance(vertex_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "vertex_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if vertex_shift.target_kind is not PmxReferenceTargetKind.VERTEX:
+        raise ValueError("vertex_shift target_kind must be vertex.")
+    if len(surface_indices) % 3 != 0:
+        raise ValueError("surface index count must be divisible by 3.")
+
+    rewritten: list[int] = []
+    changed = False
+    for position, vertex_index in enumerate(surface_indices):
+        index = _require_plain_index(
+            vertex_index,
+            f"surface_indices[{position}]",
+        )
+        if index < 0:
+            raise ValueError(f"surface_indices[{position}] cannot be negative.")
+        if index >= vertex_shift.current_count:
+            raise ValueError(
+                f"surface_indices[{position}]={index} is outside vertex old_size "
+                f"{vertex_shift.current_count}."
+            )
+        mapped = vertex_shift.remap.target_for(index)
+        if mapped is None:
+            raise PmxReferenceRemapError(
+                f"surface_indices[{position}] references removed vertex index "
+                f"{index}; insertion shifts cannot remove source records."
+            )
+        rewritten.append(mapped)
+        changed = changed or mapped != index
+
+    if not changed:
+        return surface_indices
+    return tuple(rewritten)
+
+
 def _remap_material_texture_references_from_remap(
     materials: tuple[PmxMaterial, ...],
     texture_remap: PmxIndexRemap,

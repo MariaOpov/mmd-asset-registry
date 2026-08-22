@@ -452,7 +452,7 @@ class BoneInsertionPublicContractTests(unittest.TestCase):
         payload = services.get_capabilities().to_dict()
         self.assertTrue(payload["structural_preview"])
         self.assertTrue(payload["structural_write"])
-        self.assertNotIn("structural_insert", payload)
+        self.assertIs((payload)["structural_insert"], True)
         self.assertNotIn("PmxStructuralBoneInsertion", json.dumps(payload))
 
 

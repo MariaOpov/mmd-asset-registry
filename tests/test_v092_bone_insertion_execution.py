@@ -513,7 +513,7 @@ class BoneInsertionExecutionTests(unittest.TestCase):
         self,
     ) -> None:
         manifest = services.get_capabilities().to_dict()
-        self.assertNotIn("structural_insert", manifest)
+        self.assertIs((manifest)["structural_insert"], True)
         self.assertFalse(
             hasattr(services, "_write_pmx_bone_insertion_transaction")
         )

@@ -78,7 +78,7 @@ class RigidBodyInsertionPreviewTests(unittest.TestCase):
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,
         )
-        self.assertNotIn("structural_insert", services.get_capabilities().to_dict())
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
 
     def test_semantic_dto_is_frozen_and_uses_bounded_vocabulary(self) -> None:
         insertion = _rigid(

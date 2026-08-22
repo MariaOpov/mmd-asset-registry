@@ -199,7 +199,7 @@ class VertexInsertionPublicContractTests(unittest.TestCase):
 
     def test_capability_manifest_is_not_promoted(self) -> None:
         payload = services.get_capabilities().to_dict()
-        self.assertNotIn("structural_insert", payload)
+        self.assertIs((payload)["structural_insert"], True)
         self.assertNotIn("PmxStructuralVertexInsertion", json.dumps(payload))
 
 

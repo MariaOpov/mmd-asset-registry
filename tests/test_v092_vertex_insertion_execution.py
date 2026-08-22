@@ -535,7 +535,7 @@ class VertexInsertionExecutionTests(unittest.TestCase):
 
     def test_private_boundary_alias_and_capability_remain_frozen(self) -> None:
         manifest = services.get_capabilities().to_dict()
-        self.assertNotIn("structural_insert", manifest)
+        self.assertIs((manifest)["structural_insert"], True)
         self.assertIs(
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,

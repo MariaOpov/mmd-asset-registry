@@ -662,7 +662,7 @@ class MaterialInsertionExecutionTests(unittest.TestCase):
     def test_public_boundary_and_capability_are_not_promoted(self) -> None:
         manifest = services.get_capabilities().to_dict()
 
-        self.assertNotIn("structural_insert", manifest)
+        self.assertIs((manifest)["structural_insert"], True)
         self.assertFalse(
             hasattr(services, "_write_pmx_material_insertion_transaction")
         )

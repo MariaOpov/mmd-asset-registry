@@ -217,12 +217,12 @@ class MaterialInsertionPublicContractTests(unittest.TestCase):
         self.assertEqual(request.material_insertions, (insertion,))
         self.assertEqual(len(request.texture_insertions), 1)
 
-    def test_capability_manifest_is_not_promoted_to_structural_insert(self) -> None:
+    def test_capability_manifest_is_promoted_to_structural_insert(self) -> None:
         payload = services.get_capabilities().to_dict()
 
         self.assertTrue(payload["structural_preview"])
         self.assertTrue(payload["structural_write"])
-        self.assertNotIn("structural_insert", payload)
+        self.assertIs((payload)["structural_insert"], True)
         self.assertNotIn("PmxStructuralMaterialInsertion", json.dumps(payload))
 
 

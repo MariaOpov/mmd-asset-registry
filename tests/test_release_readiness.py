@@ -1,4 +1,4 @@
-"""Release-readiness checks for v0.9.1."""
+"""Release-readiness checks for v0.9.2."""
 
 from __future__ import annotations
 
@@ -25,24 +25,26 @@ PACKAGING_PATH = PROJECT_ROOT / "docs" / "packaging.md"
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_9_1(self) -> None:
-        self.assertEqual(__version__, "0.9.1")
+    def test_package_version_is_0_9_2(self) -> None:
+        self.assertEqual(__version__, "0.9.2")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.9.1", readme)
-        self.assertIn("Release label: v0.9.1", readme)
+        self.assertIn("Tool version: 0.9.2", readme)
+        self.assertIn("Release label: v0.9.2", readme)
         self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
+        self.assertIn("## Version 0.9.2 safe structural insertion and capacity foundation", readme)
         self.assertIn("## Version 0.9.1 safe structural execution", readme)
+        self.assertIn("`structural_insert=True`", readme)
         self.assertIn("`structural_write=True`", readme)
         self.assertIn('`structural_contract="reference_safe_execution"`', readme)
         self.assertIn("`apply_structural_edit()`", readme)
         packaging = PACKAGING_PATH.read_text(encoding="utf-8")
-        self.assertIn("`v0.9.1` maps", packaging)
-        self.assertIn("distribution version `0.9.1`", packaging)
+        self.assertIn("`v0.9.2` maps", packaging)
+        self.assertIn("distribution version `0.9.2`", packaging)
         self.assertIn("structural preview/execution services", packaging)
         self.assertIn("85 regular", packaging)
         self.assertIn("235 regular", packaging)
@@ -142,6 +144,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("structural_write=True", public_api)
         self.assertIn("reference_safe_execution", public_api)
         self.assertIn("### Structural execution service (v0.9.1)", public_api)
+        self.assertIn("### Structural insertion promotion (v0.9.2)", public_api)
+        self.assertIn("structural_insert=True", public_api)
         self.assertIn("--dry-run", readme)
         self.assertIn("atomic", readme)
         self.assertIn("symlink and hardlink", readme)
@@ -195,6 +199,9 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_changelog_documents_v091_and_prior_release_history(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("## 0.9.2 - 2026-08-22", changelog)
+        self.assertIn("`structural_insert=True`", changelog)
+        self.assertIn("coordinated six-target insertion", changelog)
         self.assertIn("## 0.9.1 - 2026-08-19", changelog)
         self.assertIn("`PmxStructuralExecutionResult`", changelog)
         self.assertIn("`apply_structural_edit()`", changelog)
@@ -232,7 +239,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.9.1'", workflow)
+        self.assertIn("assert __version__ == '0.9.2'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -277,6 +284,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_stable_validation_service", workflow)
         self.assertIn("tests.test_stable_edit_service", workflow)
         self.assertIn("tests.test_cross_platform_build_install_gate", workflow)
+        self.assertIn("tests.test_v092_capability_promotion", workflow)
+        self.assertIn("tests.test_v092_backward_compatibility", workflow)
         self.assertIn("tests.test_pmx_cross_feature_state_isolation", workflow)
         self.assertIn("tests.test_v08_backward_compatibility", workflow)
         for module in (
@@ -310,8 +319,8 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.9.1", checklist)
-        self.assertIn("distribution version is `0.9.1`", checklist)
+        self.assertIn("MMD Asset Registry v0.9.2", checklist)
+        self.assertIn("distribution version is `0.9.2`", checklist)
         self.assertIn("python -m coverage run -m unittest discover -s tests -q", checklist)
         self.assertIn("git --no-pager diff --check", checklist)
         self.assertIn("python -m ruff check", checklist)
@@ -322,11 +331,12 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("MMD_REGISTRY_PRIVATE_PMX", checklist)
         self.assertIn("Optional private runtime validation is read-only", checklist)
         self.assertIn("tests.test_stable_edit_service", checklist)
-        self.assertIn("1666 tests, skipped=1, coverage=88.57%", checklist)
-        self.assertIn("wheel file members=85, sdist file members=235", checklist)
+        self.assertIn("Record the observed v0.9.2 full-suite count", checklist)
+        self.assertIn("Record the observed v0.9.2 wheel/sdist member counts", checklist)
         self.assertIn("Recompute artifact SHA-256", checklist)
         self.assertIn("pre-commit digests are not final release digests", checklist)
         self.assertIn("structural_write=True", checklist)
+        self.assertIn("structural_insert=True", checklist)
         self.assertIn("reference_safe_execution", checklist)
         self.assertIn("apply_structural_edit()", checklist)
         self.assertIn("both `ubuntu-latest` and `windows-latest` jobs pass", checklist)
@@ -335,8 +345,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_structural_resource_state_isolation", checklist)
         self.assertIn("Verify merged main", checklist)
         self.assertIn("Never tag the feature", checklist)
-        self.assertIn("git tag -a v0.9.1", checklist)
-        self.assertIn("gh release create v0.9.1", checklist)
+        self.assertIn("git tag -a v0.9.2", checklist)
+        self.assertIn("gh release create v0.9.2", checklist)
         self.assertIn("isPrerelease` is `false", checklist)
         self.assertNotIn("--prerelease", checklist)
         self.assertIn("Do not publish the wheel or sdist to PyPI", checklist)

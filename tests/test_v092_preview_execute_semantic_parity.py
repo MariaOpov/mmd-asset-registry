@@ -328,7 +328,7 @@ class PreviewExecuteSemanticParityTests(unittest.TestCase):
         self._assert_public_parity(request)
 
     def test_public_authority_and_capability_freeze_survives_cp18(self) -> None:
-        self.assertEqual(mmd_registry.__version__, "0.9.1")
+        self.assertEqual(mmd_registry.__version__, "0.9.2")
         self.assertIs(
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,
@@ -343,10 +343,7 @@ class PreviewExecuteSemanticParityTests(unittest.TestCase):
                 for name in structural_output_module.__all__
             )
         )
-        self.assertNotIn(
-            "structural_insert",
-            services.get_capabilities().to_dict(),
-        )
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
 
 
 if __name__ == "__main__":

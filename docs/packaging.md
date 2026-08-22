@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.1` maps
-to the PEP 440 Python distribution version `0.9.1`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.2` maps
+to the PEP 440 Python distribution version `0.9.2`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -73,8 +73,9 @@ both `ubuntu-latest` and `windows-latest` with Python 3.12. Each matrix job
 builds a fresh wheel and sdist, inspects both archives, installs the wheel with
 its declared dependencies in a disposable environment outside the checkout,
 and exercises installed metadata, imports, capabilities, diagnostics,
-document/validation/edit services, structural preview/execution services, and
-console entry points.
+document/validation/edit services, structural preview/execution services,
+the v0.9.2 public insertion DTO vocabulary, one coordinated six-target
+installed insertion, and console entry points.
 
 The standard `build` frontend is pinned to `1.5.0` in
 `requirements-dev.txt`. It is CI/development tooling only and is not a runtime
@@ -122,6 +123,13 @@ mode, checks dependency consistency with `pip check`, and proves that both
 `mmd_registry` and `PyYAML` were imported from the disposable environment rather
 than the source checkout. It also validates installed metadata, public imports,
 the console entry point, and both console and module `--version` execution.
+
+For v0.9.2 the installed probe must also verify
+`structural_insert=True`, import the seven reviewed insertion-vocabulary
+namespaces, execute one coordinated insertion covering vertex, texture,
+material, bone, morph, and rigid-body targets with request-local new references,
+reparse the written output, and prove the installed source bytes remain
+unchanged. This does not expose a new root service authority.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

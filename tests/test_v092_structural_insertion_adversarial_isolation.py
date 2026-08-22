@@ -688,10 +688,7 @@ class StructuralInsertionAdversarialIsolationTests(unittest.TestCase):
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,
         )
-        self.assertNotIn(
-            "structural_insert",
-            services.get_capabilities().to_dict(),
-        )
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
 
 
 if __name__ == "__main__":

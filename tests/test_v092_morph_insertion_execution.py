@@ -553,7 +553,7 @@ class MorphInsertionExecutionTests(unittest.TestCase):
         self,
     ) -> None:
         manifest = services.get_capabilities().to_dict()
-        self.assertNotIn("structural_insert", manifest)
+        self.assertIs((manifest)["structural_insert"], True)
         self.assertFalse(
             hasattr(services, "_write_pmx_morph_insertion_transaction")
         )

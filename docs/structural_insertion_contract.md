@@ -1,14 +1,16 @@
 # v0.9.2 Structural Insertion Threat Model & Architecture Contract
 
-Status: **CP02 contract freeze** for v0.9.2.
+Status: **CP02 contract freeze + CP24 capability promotion** for v0.9.2.
 
 This document freezes the safety and compatibility rules for bounded PMX structural
 insertion before production insertion code is introduced. CP02 does **not** promote
-structural insertion as a supported public capability.
+structural insertion as a supported public capability. After CP03-CP23 implemented
+and validated that frozen contract, CP24 promotes the reviewed capability without
+rewriting the historical CP02 statement.
 
 ## 1. Compatibility boundary
 
-The released v0.9.1 public authority remains authoritative:
+The released v0.9.1 public authority remains the compatibility baseline; v0.9.2 reuses the same two authorities:
 
 - `mmd_registry.services.preview_structural_edit(document, request)`
 - `mmd_registry.services.apply_structural_edit(input_path, output_path, request, *, overwrite=False)`
@@ -253,6 +255,19 @@ CP02 does not add or imply `structural_insert=True`.
 Until the later capability promotion gate, the canonical released claim remains the
 v0.9.1 structural preview/write contract. Individual insertion targets must be
 described narrowly as they pass their own preview/execution gates.
+
+CP24 is that later promotion gate. After the insertion preview/execution,
+atomicity, provenance, adversarial/state-isolation, installed/private runtime,
+and backward-compatibility gates passed, the canonical v0.9.2 manifest may
+report `structural_insert=True`. This promotion:
+
+- keeps `preview_structural_edit()` and `apply_structural_edit()` as the only
+  public structural authorities;
+- keeps `PmxStructuralEditRequest is PmxStructuralPreviewRequest`;
+- treats the seven `mmd_registry.services.structural_*` modules as public DTO
+  vocabulary rather than new mutation entry points;
+- keeps `reference_safe_execution` as the structural contract;
+- does not authorize automatic index-width widening or any CP02 non-goal.
 
 ## 12. CP02 exit contract
 

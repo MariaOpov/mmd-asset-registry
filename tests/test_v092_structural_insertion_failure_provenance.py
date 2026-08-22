@@ -667,7 +667,7 @@ class StructuralInsertionFailureProvenanceTests(unittest.TestCase):
         )
 
     def test_release_freezes_remain_unpromoted(self) -> None:
-        self.assertNotIn("structural_insert", services.get_capabilities().to_dict())
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
         self.assertIs(
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,

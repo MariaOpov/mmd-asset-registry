@@ -111,7 +111,7 @@ class MorphInsertionPreviewTests(unittest.TestCase):
     ) -> None:
         self.assertFalse(hasattr(services, "PmxStructuralMorphInsertion"))
         self.assertFalse(hasattr(pmx_public, "PmxStructuralMorphInsertion"))
-        self.assertNotIn("structural_insert", services.get_capabilities().to_dict())
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
 
         impulse = PmxStructuralMorphInsertion(
             local_name="impulse-is-cp14",

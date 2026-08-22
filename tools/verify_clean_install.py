@@ -66,6 +66,19 @@ import mmd_registry.diagnostics as public_diagnostics
 import mmd_registry.pmx
 import mmd_registry.pmx.editing
 import mmd_registry.services as public_services
+from mmd_registry.services.structural_bone import PmxStructuralBoneInsertion
+from mmd_registry.services.structural_material import PmxStructuralMaterialInsertion
+from mmd_registry.services.structural_morph import (
+    PmxStructuralMorphInsertion,
+    PmxStructuralMorphVertexOffset,
+)
+from mmd_registry.services.structural_reference import PmxStructuralNewReference
+from mmd_registry.services.structural_rigid_body import PmxStructuralRigidBodyInsertion
+from mmd_registry.services.structural_texture import PmxStructuralTextureInsertion
+from mmd_registry.services.structural_vertex import (
+    PmxStructuralVertexBdef1,
+    PmxStructuralVertexInsertion,
+)
 import yaml
 
 assert "mmd_registry.cli" not in sys.modules, "public imports loaded CLI"
@@ -84,6 +97,7 @@ assert capability_manifest.edit_operation_types == (
 assert (
     capability_manifest.structural_preview is True
     and capability_manifest.structural_write is True
+    and capability_manifest.structural_insert is True
     and capability_manifest.structural_target_kinds
     == ("vertex", "texture", "material", "bone", "morph", "rigid_body")
     and capability_manifest.structural_contract == "reference_safe_execution"
@@ -265,6 +279,109 @@ assert structural_execution_payload["verification"]["reference_model"] == "passe
 assert structural_execution_payload["verification"]["serialization"] == "passed"
 assert structural_execution_payload["verification"]["semantic"] == "passed"
 assert structural_execution_payload["verification"]["input_unchanged"] is True
+
+insertion_request = public_services.PmxStructuralEditRequest(
+    texture_insertions=(
+        PmxStructuralTextureInsertion(
+            "textures/installed-insertion.png",
+            new_id="texture",
+        ),
+    ),
+    material_insertions=(
+        PmxStructuralMaterialInsertion(
+            local_name="Installed insertion material",
+            texture_index=PmxStructuralNewReference("texture", "texture"),
+            new_id="material",
+        ),
+    ),
+    bone_insertions=(
+        PmxStructuralBoneInsertion(
+            local_name="Installed insertion bone",
+            new_id="bone",
+        ),
+    ),
+    morph_insertions=(
+        PmxStructuralMorphInsertion(
+            local_name="Installed insertion morph",
+            morph_type="vertex",
+            offsets=(
+                PmxStructuralMorphVertexOffset(
+                    PmxStructuralNewReference("vertex", "vertex"),
+                    (0.0, 0.0, 0.0),
+                ),
+            ),
+            new_id="morph",
+        ),
+    ),
+    rigid_body_insertions=(
+        PmxStructuralRigidBodyInsertion(
+            local_name="Installed insertion rigid body",
+            bone_index=PmxStructuralNewReference("bone", "bone"),
+            new_id="rigid",
+        ),
+    ),
+    vertex_insertions=(
+        PmxStructuralVertexInsertion(
+            vertex_position=(0.0, 0.0, 0.0),
+            normal=(0.0, 1.0, 0.0),
+            uv=(0.0, 0.0),
+            additional_uvs=(),
+            deform=PmxStructuralVertexBdef1(
+                PmxStructuralNewReference("bone", "bone")
+            ),
+            edge_scale=1.0,
+            new_id="vertex",
+        ),
+    ),
+)
+insertion_preview = public_services.preview_structural_edit(
+    installed_document,
+    insertion_request,
+)
+expected_inserted_counts = {
+    "vertex": 1,
+    "texture": 1,
+    "material": 1,
+    "bone": 1,
+    "morph": 1,
+    "rigid_body": 1,
+}
+assert insertion_preview.status == "changes_pending", (
+    "installed structural insertion preview status mismatch"
+)
+assert insertion_preview.to_dict()["output"]["target_counts"] == expected_inserted_counts, (
+    "installed structural insertion preview mismatch"
+)
+
+insertion_source_path = working_directory / "installed-insertion-source.pmx"
+insertion_output_path = working_directory / "installed-insertion-output.pmx"
+insertion_source_path.write_bytes(document_source)
+insertion_execution = public_services.apply_structural_edit(
+    insertion_source_path,
+    insertion_output_path,
+    insertion_request,
+)
+assert insertion_execution.status == "written", (
+    "installed structural insertion execution status mismatch"
+)
+assert insertion_execution.document == insertion_preview.document, (
+    "installed structural insertion execution mismatch"
+)
+assert insertion_source_path.read_bytes() == document_source, (
+    "installed structural insertion changed source"
+)
+assert insertion_output_path.is_file(), (
+    "installed structural insertion created no output"
+)
+reparsed_insertion = public_services.load_document(insertion_output_path)
+assert reparsed_insertion == insertion_preview.document, (
+    "installed structural insertion reparse mismatch"
+)
+assert insertion_execution.to_dict()["output"]["target_counts"] == expected_inserted_counts, (
+    "installed structural insertion output-count mismatch"
+)
+assert insertion_execution.to_dict()["verification"]["semantic"] == "passed"
+assert insertion_execution.to_dict()["verification"]["input_unchanged"] is True
 
 edit_plan = mmd_registry.pmx.editing.PmxEditPlan(
     operations=(

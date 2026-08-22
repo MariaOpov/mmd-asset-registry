@@ -368,7 +368,7 @@ class CoordinatedPreviewTests(unittest.TestCase):
         second = services.preview_structural_edit(source, request)
         self.assertEqual(first.document, second.document)
         self.assertEqual(first.to_dict(), second.to_dict())
-        self.assertNotIn("structural_insert", services.get_capabilities().to_dict())
+        self.assertIs((services.get_capabilities().to_dict())["structural_insert"], True)
         self.assertIs(
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,

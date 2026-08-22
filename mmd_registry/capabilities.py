@@ -65,6 +65,7 @@ class PmxCapabilityManifest:
     structural_write: bool = False
     structural_target_kinds: tuple[str, ...] = _STRUCTURAL_TARGET_KINDS
     structural_contract: _PmxStructuralContract = "reference_safe_preview"
+    structural_insert: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """Return a deterministic JSON-ready capability representation."""
@@ -84,6 +85,7 @@ class PmxCapabilityManifest:
             "structural_write": self.structural_write,
             "structural_target_kinds": list(self.structural_target_kinds),
             "structural_contract": self.structural_contract,
+            "structural_insert": self.structural_insert,
         }
 
 
@@ -108,6 +110,7 @@ def get_capabilities() -> PmxCapabilityManifest:
         structural_write=True,
         structural_target_kinds=_STRUCTURAL_TARGET_KINDS,
         structural_contract="reference_safe_execution",
+        structural_insert=True,
     )
 
 

@@ -2,6 +2,52 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.2 - 2026-08-22
+
+### Added
+
+- Bounded structural insertion for vertex, texture, material, bone, morph, and
+  rigid-body collections through the existing structural preview/execution
+  request and authority.
+- Typed public insertion vocabulary in seven explicit
+  `mmd_registry.services.structural_*` namespaces, including request-local
+  `PmxStructuralNewReference` values for coordinated new-to-new references.
+- Capacity, atomicity, failure-provenance, adversarial/state-isolation,
+  preview/execute parity, backward-compatibility, and capability-promotion
+  regression gates for the insertion path.
+- Clean installed-package verification that executes, reparses, and certifies a
+  real coordinated six-target insertion from the built wheel.
+
+### Changed
+
+- Runtime/distribution version and release-facing contracts are promoted from
+  `0.9.1` / `v0.9.1` to `0.9.2` / `v0.9.2`.
+- The canonical capability manifest additively reports
+  `structural_insert=True`; the existing `structural_preview=True`,
+  `structural_write=True`, six target kinds, and
+  `reference_safe_execution` contract remain unchanged.
+- Legacy `PmxCapabilityManifest` construction keeps
+  `structural_insert=False` as a trailing default, preserving older constructor
+  call shapes.
+- Root `mmd_registry.services.__all__` and the exact
+  `PmxStructuralEditRequest is PmxStructuralPreviewRequest` alias remain
+  unchanged; no parallel insertion mutation entry point is introduced.
+
+### Safety and compatibility
+
+- Insertion never authorizes in-place source mutation, automatic index-width
+  expansion, silent repair, raw writer/remap access, arbitrary structural CRUD,
+  model creation, GUI/Smart Tools/plugins, or AI editing.
+- Execution retains preview -> serialize -> reparse -> independent certification
+  -> semantic equality -> source re-verification -> atomic publication.
+- Registry schema remains `0.3`, supported registry schemas remain `0.2` and
+  `0.3`, edit-plan schema remains `1`, and v0.8/v0.9.0/v0.9.1 caller contracts
+  remain additively compatible.
+- Fresh v0.9.2 artifact member counts and SHA-256 digests are captured from the
+  final reviewed build rather than copied from historical v0.9.1 evidence.
+- No PyPI publication is authorized without separate explicit Maintainer
+  approval.
+
 ## 0.9.1 - 2026-08-19
 
 ### Added

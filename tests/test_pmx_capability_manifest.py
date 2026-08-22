@@ -112,6 +112,7 @@ class PmxCapabilityManifestTests(unittest.TestCase):
                     "rigid_body",
                 ],
                 "structural_contract": "reference_safe_execution",
+                "structural_insert": True,
             },
         )
 

@@ -20,7 +20,11 @@ from dataclasses import dataclass, replace
 
 from mmd_registry.pmx.collection_transform import PmxCollectionTransform
 from mmd_registry.pmx.document import PmxMaterial
+from mmd_registry.pmx.index_remap import PmxIndexRemap
 from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
+from mmd_registry.pmx.structural_reference_shift import (
+    PmxCollectionReferenceShiftPlan,
+)
 
 
 class PmxReferenceRemapError(ValueError):
@@ -69,27 +73,33 @@ def _remap_required_index(
     return mapped
 
 
-def _remap_optional_index(
+def _remap_optional_index_from_remap(
     value: object,
     *,
     field_name: str,
-    transform: PmxCollectionTransform,
+    remap: PmxIndexRemap,
+    target_kind: PmxReferenceTargetKind,
 ) -> int:
+    if not isinstance(remap, PmxIndexRemap):
+        raise TypeError("remap must be a PmxIndexRemap value.")
+    if not isinstance(target_kind, PmxReferenceTargetKind):
+        raise TypeError("target_kind must be a PmxReferenceTargetKind value.")
+
     index = _require_plain_index(value, field_name)
     if index == -1:
         return -1
     if index < -1:
         raise ValueError(f"{field_name} cannot be smaller than -1.")
-    if index >= transform.old_size:
+    if index >= remap.old_size:
         raise ValueError(
-            f"{field_name}={index} is outside {transform.kind.value} "
-            f"old_size {transform.old_size}."
+            f"{field_name}={index} is outside {target_kind.value} "
+            f"old_size {remap.old_size}."
         )
 
-    mapped = transform.remap.target_for(index)
+    mapped = remap.target_for(index)
     if mapped is None:
         raise PmxReferenceRemapError(
-            f"{field_name} references removed {transform.kind.value} index {index}; "
+            f"{field_name} references removed {target_kind.value} index {index}; "
             "removed targets are not converted to the -1 sentinel."
         )
     return mapped
@@ -126,42 +136,88 @@ def remap_surface_vertex_references(
     return tuple(rewritten)
 
 
-def remap_material_texture_references(
+def remap_surface_vertex_references_for_insertion(
+    surface_indices: tuple[int, ...],
+    vertex_shift: PmxCollectionReferenceShiftPlan,
+) -> tuple[int, ...]:
+    """Rewrite surface vertex refs through additive vertex insertion evidence."""
+
+    if type(surface_indices) is not tuple:
+        raise TypeError("surface_indices must be a tuple.")
+    if not isinstance(vertex_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "vertex_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if vertex_shift.target_kind is not PmxReferenceTargetKind.VERTEX:
+        raise ValueError("vertex_shift target_kind must be vertex.")
+    if len(surface_indices) % 3 != 0:
+        raise ValueError("surface index count must be divisible by 3.")
+
+    rewritten: list[int] = []
+    changed = False
+    for position, vertex_index in enumerate(surface_indices):
+        index = _require_plain_index(
+            vertex_index,
+            f"surface_indices[{position}]",
+        )
+        if index < 0:
+            raise ValueError(f"surface_indices[{position}] cannot be negative.")
+        if index >= vertex_shift.current_count:
+            raise ValueError(
+                f"surface_indices[{position}]={index} is outside vertex old_size "
+                f"{vertex_shift.current_count}."
+            )
+        mapped = vertex_shift.remap.target_for(index)
+        if mapped is None:
+            raise PmxReferenceRemapError(
+                f"surface_indices[{position}] references removed vertex index "
+                f"{index}; insertion shifts cannot remove source records."
+            )
+        rewritten.append(mapped)
+        changed = changed or mapped != index
+
+    if not changed:
+        return surface_indices
+    return tuple(rewritten)
+
+
+def _remap_material_texture_references_from_remap(
     materials: tuple[PmxMaterial, ...],
-    texture_transform: PmxCollectionTransform,
+    texture_remap: PmxIndexRemap,
 ) -> tuple[PmxMaterial, ...]:
-    """Rewrite CP11-owned material texture references through a texture remap."""
+    """Rewrite material texture references through one validated texture remap."""
 
     if type(materials) is not tuple:
         raise TypeError("materials must be a tuple.")
     if not all(isinstance(material, PmxMaterial) for material in materials):
         raise TypeError("materials must contain only PmxMaterial records.")
-    _require_collection_transform(
-        texture_transform,
-        PmxReferenceTargetKind.TEXTURE,
-    )
+    if not isinstance(texture_remap, PmxIndexRemap):
+        raise TypeError("texture_remap must be a PmxIndexRemap value.")
 
     rewritten: list[PmxMaterial] = []
     changed = False
 
     for material_index, material in enumerate(materials):
-        texture_index = _remap_optional_index(
+        texture_index = _remap_optional_index_from_remap(
             material.texture_index,
             field_name=f"materials[{material_index}].texture_index",
-            transform=texture_transform,
+            remap=texture_remap,
+            target_kind=PmxReferenceTargetKind.TEXTURE,
         )
-        sphere_texture_index = _remap_optional_index(
+        sphere_texture_index = _remap_optional_index_from_remap(
             material.sphere_texture_index,
             field_name=f"materials[{material_index}].sphere_texture_index",
-            transform=texture_transform,
+            remap=texture_remap,
+            target_kind=PmxReferenceTargetKind.TEXTURE,
         )
 
         toon_reference_index = material.toon_reference_index
         if material.toon_reference_mode == "texture":
-            toon_reference_index = _remap_optional_index(
+            toon_reference_index = _remap_optional_index_from_remap(
                 material.toon_reference_index,
                 field_name=f"materials[{material_index}].toon_reference_index",
-                transform=texture_transform,
+                remap=texture_remap,
+                target_kind=PmxReferenceTargetKind.TEXTURE,
             )
         elif material.toon_reference_mode != "shared":
             raise ValueError(
@@ -190,6 +246,41 @@ def remap_material_texture_references(
     if not changed:
         return materials
     return tuple(rewritten)
+
+
+def remap_material_texture_references(
+    materials: tuple[PmxMaterial, ...],
+    texture_transform: PmxCollectionTransform,
+) -> tuple[PmxMaterial, ...]:
+    """Rewrite CP11-owned material texture references through a legacy transform."""
+
+    _require_collection_transform(
+        texture_transform,
+        PmxReferenceTargetKind.TEXTURE,
+    )
+    return _remap_material_texture_references_from_remap(
+        materials,
+        texture_transform.remap,
+    )
+
+
+def remap_material_texture_references_for_insertion(
+    materials: tuple[PmxMaterial, ...],
+    texture_shift: PmxCollectionReferenceShiftPlan,
+) -> tuple[PmxMaterial, ...]:
+    """Rewrite material texture references through insertion shift evidence."""
+
+    if not isinstance(texture_shift, PmxCollectionReferenceShiftPlan):
+        raise TypeError(
+            "texture_shift must be a PmxCollectionReferenceShiftPlan value."
+        )
+    if texture_shift.target_kind is not PmxReferenceTargetKind.TEXTURE:
+        raise ValueError("texture_shift target_kind must be texture.")
+
+    return _remap_material_texture_references_from_remap(
+        materials,
+        texture_shift.remap,
+    )
 
 
 @dataclass(frozen=True, slots=True)

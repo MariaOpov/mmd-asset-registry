@@ -1,10 +1,11 @@
 # Public API policy
 
-This document defines the public package boundary carried from v0.9.0 into
-v0.9.1. The release retains read-only reference analysis and certified
-structural preview while additively exposing a bounded structural execution
-service over the already-verified safe-output kernel. Raw structural writer
-internals remain non-public.
+This document defines the public package boundary carried from v0.9.0 through
+v0.9.2. The release retains read-only reference analysis and the v0.9.1
+certified structural execution boundary while additively promoting bounded
+structural insertion through the same preview/apply authority. Raw structural
+writer, remap, serialization, and filesystem-publication internals remain
+non-public.
 
 ## Public surface
 
@@ -26,7 +27,12 @@ The current public namespaces are:
   listed in its `__all__`;
 - `mmd_registry.services`, for typed CLI-independent document, validation,
   reference-analysis, bounded editing, structural preview/execution, and
-  capability use cases listed in its `__all__`.
+  capability use cases listed in its `__all__`;
+- `mmd_registry.services.structural_reference`, `structural_texture`,
+  `structural_material`, `structural_bone`, `structural_morph`,
+  `structural_rigid_body`, and `structural_vertex`, whose explicit `__all__`
+  values define the v0.9.2 public insertion DTO vocabulary without adding root
+  mutation authorities.
 
 Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
@@ -41,10 +47,12 @@ slotted, deterministic, independent from private runtime configuration, and
 contains only the PMX versions, encodings, index widths, deform and morph
 types, round-trip contract, texture portability, soft-body support, the three
 edit operations already implemented by v0.8.5, and the reviewed structural
-contract. The canonical v0.9.1 manifest reports preview and bounded structural
-write support, the six supported target kinds, and `reference_safe_execution`.
-The dataclass constructor keeps its v0.9.0 preview-only defaults so callers that
-construct the manifest with the old argument shape remain compatible.
+contract. The canonical v0.9.2 manifest reports preview, bounded structural
+write, and `structural_insert=True` support for the six target kinds under
+`reference_safe_execution`. The dataclass constructor keeps its legacy
+preview-only defaults and adds `structural_insert=False` as a trailing default,
+so callers that construct the manifest with the old argument shape remain
+compatible.
 
 Absence from the manifest means unsupported; the API does not imply model
 creation, VMD editing, plugin loading, unrestricted physics editing, or any
@@ -154,8 +162,9 @@ certification and fresh reference-integrity analysis.
 
 The released v0.9.0 capability vocabulary for this preview-only boundary was
 `structural_write=False` and `structural_contract="reference_safe_preview"`.
-Those literals remain documented as compatibility history; the authoritative
-current capability is the v0.9.1 execution contract below.
+Those literals remain documented as compatibility history; v0.9.1 execution
+remains the safety baseline and the authoritative current v0.9.2 insertion
+promotion is documented below.
 
 ### Structural execution service (v0.9.1)
 
@@ -197,9 +206,34 @@ restricted to `service_boundary`, `source_input`, `structural_pipeline`, or
 `safe_output`. These labels describe reviewed semantic phases rather than private
 function names, and they do not expand structural editing authority.
 
-The capability manifest is authoritative for the current release:
+For the historical v0.9.1 release, the capability manifest reported
 `structural_preview=True`, `structural_write=True`, and
 `structural_contract="reference_safe_execution"`.
+
+### Structural insertion promotion (v0.9.2)
+
+v0.9.2 keeps `preview_structural_edit()` and `apply_structural_edit()` as the
+only public structural authorities. `PmxStructuralEditRequest` remains exactly
+the same type as `PmxStructuralPreviewRequest`; insertion is additive through
+default-empty request fields rather than a parallel command or writer.
+
+The public insertion vocabulary is owned by the seven
+`mmd_registry.services.structural_*` namespaces listed above. It covers bounded
+texture, zero-surface material, semantic bone, morph, rigid-body, and vertex
+insertion DTOs plus request-local new references. These DTO namespaces are
+public vocabulary; their lower-level PMX payloads, remap plans, coordinated
+insertion kernels, writer results, and filesystem commit hooks remain private.
+
+The canonical v0.9.2 manifest reports `structural_preview=True`,
+`structural_write=True`, `structural_insert=True`, the same six target kinds,
+and `structural_contract="reference_safe_execution"`. Legacy manifest
+construction defaults `structural_insert` to `False`.
+
+Insertion supports append and source-domain `insert_before` positions, including
+coordinated new-to-new references within one request. Capacity checks fail
+closed when existing PMX index widths cannot represent the requested result;
+automatic index-width widening is not authorized. Execution reuses the v0.9.1
+source-immutable, distinct-destination, certified and atomic publication chain.
 
 ## Edit service
 

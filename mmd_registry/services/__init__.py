@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
@@ -31,6 +31,9 @@ from mmd_registry.services.structural_morph import (
     PmxStructuralMorphMaterialOffset as _PmxStructuralMorphMaterialOffset,
     PmxStructuralMorphUvOffset as _PmxStructuralMorphUvOffset,
     PmxStructuralMorphVertexOffset as _PmxStructuralMorphVertexOffset,
+)
+from mmd_registry.services.structural_reference import (
+    PmxStructuralNewReference as _PmxStructuralNewReference,
 )
 from mmd_registry.services.structural_rigid_body import (
     PmxStructuralRigidBodyInsertion as _PmxStructuralRigidBodyInsertion,
@@ -73,6 +76,14 @@ from mmd_registry.pmx.reference_model import (
 from mmd_registry.pmx.reference_queries import (
     PmxReferenceImpact,
     analyze_reference_impact,
+)
+from mmd_registry.pmx.structural_coordinated_insertion import (
+    PmxCoordinatedInsertionCollectionSpec as _PmxCoordinatedInsertionCollectionSpec,
+    PmxCoordinatedInsertionPayloads as _PmxCoordinatedInsertionPayloads,
+    PmxCoordinatedInsertionPreview as _PmxCoordinatedInsertionPreview,
+    PmxCoordinatedReferencePlan as _PmxCoordinatedReferencePlan,
+    plan_pmx_coordinated_insertion_references as _plan_pmx_coordinated_insertion_references,
+    preview_pmx_coordinated_insertions as _preview_pmx_coordinated_insertions,
 )
 from mmd_registry.pmx.structural_insert_intent import (
     PmxStructuralInsertPosition as _PmxStructuralInsertPosition,
@@ -321,15 +332,9 @@ class PmxStructuralPreviewRequest:
                 "PmxStructuralMaterialInsertion values."
             )
 
-        if self.material_insertions and (
-            self.collection_edits
-            or self.texture_insertions
-            or self.bone_insertions
-            or self.morph_insertions
-        ):
+        if self.material_insertions and self.collection_edits:
             raise ValueError(
-                "material insertions cannot be combined with legacy collection edits "
-                "or another insertion target in the structural insertion gate."
+                "material insertions cannot be combined with legacy collection edits."
             )
 
         if type(self.bone_insertions) is not tuple:
@@ -342,15 +347,9 @@ class PmxStructuralPreviewRequest:
                 "bone_insertions must contain only PmxStructuralBoneInsertion values."
             )
 
-        if self.bone_insertions and (
-            self.collection_edits
-            or self.texture_insertions
-            or self.material_insertions
-            or self.morph_insertions
-        ):
+        if self.bone_insertions and self.collection_edits:
             raise ValueError(
-                "bone insertions cannot be combined with legacy collection edits "
-                "or another insertion target in the structural insertion gate."
+                "bone insertions cannot be combined with legacy collection edits."
             )
 
         if type(self.morph_insertions) is not tuple:
@@ -363,15 +362,9 @@ class PmxStructuralPreviewRequest:
                 "morph_insertions must contain only PmxStructuralMorphInsertion values."
             )
 
-        if self.morph_insertions and (
-            self.collection_edits
-            or self.texture_insertions
-            or self.material_insertions
-            or self.bone_insertions
-        ):
+        if self.morph_insertions and self.collection_edits:
             raise ValueError(
-                "morph insertions cannot be combined with legacy collection edits "
-                "or another insertion target in the structural insertion gate."
+                "morph insertions cannot be combined with legacy collection edits."
             )
 
         if type(self.rigid_body_insertions) is not tuple:
@@ -384,17 +377,9 @@ class PmxStructuralPreviewRequest:
                 "rigid_body_insertions must contain only "
                 "PmxStructuralRigidBodyInsertion values."
             )
-        if self.rigid_body_insertions and (
-            self.collection_edits
-            or self.texture_insertions
-            or self.material_insertions
-            or self.bone_insertions
-            or self.morph_insertions
-        ):
+        if self.rigid_body_insertions and self.collection_edits:
             raise ValueError(
-                "rigid-body insertions cannot be combined with legacy collection "
-                "edits or another insertion target; coordinated multi-target "
-                "insertion remains CP17-owned."
+                "rigid-body insertions cannot be combined with legacy collection edits."
             )
 
 
@@ -408,19 +393,30 @@ class PmxStructuralPreviewRequest:
                 "vertex_insertions must contain only "
                 "PmxStructuralVertexInsertion values."
             )
-        if self.vertex_insertions and (
-            self.collection_edits
-            or self.texture_insertions
-            or self.material_insertions
-            or self.bone_insertions
-            or self.morph_insertions
-            or self.rigid_body_insertions
-        ):
+        if self.vertex_insertions and self.collection_edits:
             raise ValueError(
-                "vertex insertions cannot be combined with legacy collection edits "
-                "or another insertion target; coordinated multi-target insertion "
-                "remains CP17-owned."
+                "vertex insertions cannot be combined with legacy collection edits."
             )
+
+        seen_new_ids: set[str] = set()
+        for insertions in (
+            self.vertex_insertions,
+            self.texture_insertions,
+            self.material_insertions,
+            self.bone_insertions,
+            self.morph_insertions,
+            self.rigid_body_insertions,
+        ):
+            for insertion in insertions:
+                new_id = insertion.new_id
+                if new_id is None:
+                    continue
+                if new_id in seen_new_ids:
+                    raise ValueError(
+                        f"request-local new_id {new_id!r} must be globally unique."
+                    )
+                seen_new_ids.add(new_id)
+
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralPreviewResult:
@@ -434,6 +430,7 @@ class PmxStructuralPreviewResult:
         | _PmxMorphInsertionPreview
         | _PmxRigidBodyInsertionPreview
         | _PmxVertexInsertionPreview
+        | _PmxCoordinatedInsertionPreview
     ) = field(repr=False)
 
     def __post_init__(self) -> None:
@@ -447,6 +444,7 @@ class PmxStructuralPreviewResult:
                 _PmxMorphInsertionPreview,
                 _PmxRigidBodyInsertionPreview,
                 _PmxVertexInsertionPreview,
+                _PmxCoordinatedInsertionPreview,
             ),
         ):
             raise TypeError("_preview must be an internal structural preview value.")
@@ -597,6 +595,307 @@ def _structural_target_size(
     if target_kind is PmxReferenceTargetKind.RIGID_BODY:
         return len(document.rigid_bodies)
     raise AssertionError(f"unsupported structural target kind: {target_kind!r}")
+
+
+def _structural_insertion_target_count(
+    request: PmxStructuralPreviewRequest,
+) -> int:
+    return sum(
+        bool(values)
+        for values in (
+            request.vertex_insertions,
+            request.texture_insertions,
+            request.material_insertions,
+            request.bone_insertions,
+            request.morph_insertions,
+            request.rigid_body_insertions,
+        )
+    )
+
+
+def _coordinated_position(insertion: object) -> _PmxStructuralInsertPosition:
+    position = getattr(insertion, "position")
+    source_index = getattr(insertion, "source_index")
+    if position == "append":
+        return _PmxStructuralInsertPosition.append()
+    if position == "insert_before":
+        assert source_index is not None
+        return _PmxStructuralInsertPosition.insert_before(source_index)
+    raise AssertionError("validated insertion exposed unsupported position.")
+
+
+def _build_coordinated_reference_plan(
+    document: PmxDocument,
+    request: PmxStructuralPreviewRequest,
+) -> _PmxCoordinatedReferencePlan:
+    families = (
+        (PmxReferenceTargetKind.VERTEX, request.vertex_insertions),
+        (PmxReferenceTargetKind.TEXTURE, request.texture_insertions),
+        (PmxReferenceTargetKind.MATERIAL, request.material_insertions),
+        (PmxReferenceTargetKind.BONE, request.bone_insertions),
+        (PmxReferenceTargetKind.MORPH, request.morph_insertions),
+        (PmxReferenceTargetKind.RIGID_BODY, request.rigid_body_insertions),
+    )
+    specs = tuple(
+        _PmxCoordinatedInsertionCollectionSpec(
+            target_kind=target_kind,
+            positions=tuple(_coordinated_position(value) for value in values),
+            new_ids=tuple(value.new_id for value in values),
+        )
+        for target_kind, values in families
+        if values
+    )
+    return _plan_pmx_coordinated_insertion_references(document, specs)
+
+
+def _resolve_coordinated_reference(
+    plan: _PmxCoordinatedReferencePlan,
+    value: object,
+    target_kind: PmxReferenceTargetKind,
+    *,
+    allow_sentinel: bool,
+    field_name: str,
+) -> int:
+    if isinstance(value, _PmxStructuralNewReference):
+        if value.target_kind != target_kind.value:
+            raise ValueError(
+                f"{field_name} new reference must target {target_kind.value}."
+            )
+        return plan.resolve_new_reference(
+            target_kind,
+            value.new_id,
+            field_name=field_name,
+        )
+    return plan.resolve_source_reference(
+        target_kind,
+        value,
+        allow_sentinel=allow_sentinel,
+        field_name=field_name,
+    )
+
+
+def _resolve_vertex_deform(
+    plan: _PmxCoordinatedReferencePlan,
+    deform: object,
+) -> object:
+    if isinstance(deform, _PmxStructuralVertexBdef1):
+        return replace(
+            deform,
+            bone_index=_resolve_coordinated_reference(
+                plan,
+                deform.bone_index,
+                PmxReferenceTargetKind.BONE,
+                allow_sentinel=True,
+                field_name="vertex.deform.bone_index",
+            ),
+        )
+    if isinstance(
+        deform,
+        (
+            _PmxStructuralVertexBdef2,
+            _PmxStructuralVertexBdef4,
+            _PmxStructuralVertexSdef,
+            _PmxStructuralVertexQdef,
+        ),
+    ):
+        return replace(
+            deform,
+            bone_indices=tuple(
+                _resolve_coordinated_reference(
+                    plan,
+                    value,
+                    PmxReferenceTargetKind.BONE,
+                    allow_sentinel=True,
+                    field_name=f"vertex.deform.bone_indices[{index}]",
+                )
+                for index, value in enumerate(deform.bone_indices)
+            ),
+        )
+    raise AssertionError("validated vertex insertion exposed unsupported deform.")
+
+
+def _resolve_material_insertion(
+    plan: _PmxCoordinatedReferencePlan,
+    insertion: _PmxStructuralMaterialInsertion,
+) -> _PmxStructuralMaterialInsertion:
+    toon_reference_index = insertion.toon_reference_index
+    if insertion.toon_reference_mode == "texture":
+        toon_reference_index = _resolve_coordinated_reference(
+            plan,
+            toon_reference_index,
+            PmxReferenceTargetKind.TEXTURE,
+            allow_sentinel=True,
+            field_name="material.toon_reference_index",
+        )
+    return replace(
+        insertion,
+        texture_index=_resolve_coordinated_reference(
+            plan,
+            insertion.texture_index,
+            PmxReferenceTargetKind.TEXTURE,
+            allow_sentinel=True,
+            field_name="material.texture_index",
+        ),
+        sphere_texture_index=_resolve_coordinated_reference(
+            plan,
+            insertion.sphere_texture_index,
+            PmxReferenceTargetKind.TEXTURE,
+            allow_sentinel=True,
+            field_name="material.sphere_texture_index",
+        ),
+        toon_reference_index=toon_reference_index,
+    )
+
+
+def _resolve_rigid_body_insertion(
+    plan: _PmxCoordinatedReferencePlan,
+    insertion: _PmxStructuralRigidBodyInsertion,
+) -> _PmxStructuralRigidBodyInsertion:
+    return replace(
+        insertion,
+        bone_index=_resolve_coordinated_reference(
+            plan,
+            insertion.bone_index,
+            PmxReferenceTargetKind.BONE,
+            allow_sentinel=True,
+            field_name="rigid_body.bone_index",
+        ),
+    )
+
+
+def _resolve_morph_offset(
+    plan: _PmxCoordinatedReferencePlan,
+    offset: object,
+) -> object:
+    if isinstance(
+        offset,
+        (_PmxStructuralMorphGroupOffset, _PmxStructuralMorphFlipOffset),
+    ):
+        return offset
+    if isinstance(offset, _PmxStructuralMorphVertexOffset):
+        return replace(
+            offset,
+            vertex_index=_resolve_coordinated_reference(
+                plan,
+                offset.vertex_index,
+                PmxReferenceTargetKind.VERTEX,
+                allow_sentinel=False,
+                field_name="morph.vertex_index",
+            ),
+        )
+    if isinstance(offset, _PmxStructuralMorphBoneOffset):
+        return replace(
+            offset,
+            bone_index=_resolve_coordinated_reference(
+                plan,
+                offset.bone_index,
+                PmxReferenceTargetKind.BONE,
+                allow_sentinel=False,
+                field_name="morph.bone_index",
+            ),
+        )
+    if isinstance(offset, _PmxStructuralMorphUvOffset):
+        return replace(
+            offset,
+            vertex_index=_resolve_coordinated_reference(
+                plan,
+                offset.vertex_index,
+                PmxReferenceTargetKind.VERTEX,
+                allow_sentinel=False,
+                field_name="morph.uv.vertex_index",
+            ),
+        )
+    if isinstance(offset, _PmxStructuralMorphMaterialOffset):
+        return replace(
+            offset,
+            material_index=_resolve_coordinated_reference(
+                plan,
+                offset.material_index,
+                PmxReferenceTargetKind.MATERIAL,
+                allow_sentinel=True,
+                field_name="morph.material_index",
+            ),
+        )
+    if isinstance(offset, _PmxStructuralMorphImpulseOffset):
+        return replace(
+            offset,
+            rigid_body_index=_resolve_coordinated_reference(
+                plan,
+                offset.rigid_body_index,
+                PmxReferenceTargetKind.RIGID_BODY,
+                allow_sentinel=False,
+                field_name="morph.rigid_body_index",
+            ),
+        )
+    raise AssertionError("validated morph insertion exposed unsupported offset.")
+
+
+def _build_coordinated_insertion_payloads(
+    document: PmxDocument,
+    request: PmxStructuralPreviewRequest,
+) -> _PmxCoordinatedInsertionPayloads:
+    plan = _build_coordinated_reference_plan(document, request)
+    resolved_request = replace(
+        request,
+        material_insertions=tuple(
+            _resolve_material_insertion(plan, insertion)
+            for insertion in request.material_insertions
+        ),
+        vertex_insertions=tuple(
+            replace(
+                insertion,
+                deform=_resolve_vertex_deform(plan, insertion.deform),
+            )
+            for insertion in request.vertex_insertions
+        ),
+        rigid_body_insertions=tuple(
+            _resolve_rigid_body_insertion(plan, insertion)
+            for insertion in request.rigid_body_insertions
+        ),
+        morph_insertions=tuple(
+            replace(
+                insertion,
+                offsets=tuple(
+                    _resolve_morph_offset(plan, offset)
+                    for offset in insertion.offsets
+                ),
+            )
+            for insertion in request.morph_insertions
+        ),
+    )
+    return _PmxCoordinatedInsertionPayloads(
+        reference_plan=plan,
+        texture_insertions=(
+            _build_texture_insertion_payloads(resolved_request)
+            if resolved_request.texture_insertions
+            else ()
+        ),
+        material_insertions=(
+            _build_material_insertion_payloads(resolved_request)
+            if resolved_request.material_insertions
+            else ()
+        ),
+        bone_insertions=(
+            _build_bone_insertion_payloads(resolved_request)
+            if resolved_request.bone_insertions
+            else ()
+        ),
+        vertex_insertions=(
+            _build_vertex_insertion_payloads(resolved_request)
+            if resolved_request.vertex_insertions
+            else ()
+        ),
+        rigid_body_insertions=(
+            _build_rigid_body_insertion_payloads(resolved_request)
+            if resolved_request.rigid_body_insertions
+            else ()
+        ),
+        morph_insertions=(
+            _build_morph_insertion_payloads(resolved_request)
+            if resolved_request.morph_insertions
+            else ()
+        ),
+    )
 
 
 def _build_vertex_insertion_payloads(
@@ -983,6 +1282,13 @@ def preview_structural_edit(
             raise TypeError("document must be a PmxDocument instance.")
         if not isinstance(request, PmxStructuralPreviewRequest):
             raise TypeError("request must be a PmxStructuralPreviewRequest instance.")
+        if _structural_insertion_target_count(request) > 1:
+            return PmxStructuralPreviewResult(
+                _preview_pmx_coordinated_insertions(
+                    document,
+                    _build_coordinated_insertion_payloads(document, request),
+                )
+            )
         if request.vertex_insertions:
             return PmxStructuralPreviewResult(
                 _preview_pmx_vertex_insertions(
@@ -1060,41 +1366,51 @@ def apply_structural_edit(
             raise TypeError("request must be a PmxStructuralEditRequest instance.")
         if not isinstance(overwrite, bool):
             raise TypeError("overwrite must be a boolean.")
-        vertex_payloads = (
-            _build_vertex_insertion_payloads(request)
-            if request.vertex_insertions
-            else ()
-        )
-        rigid_body_payloads = (
-            _build_rigid_body_insertion_payloads(request)
-            if request.rigid_body_insertions
-            else ()
-        )
-        morph_payloads = (
-            _build_morph_insertion_payloads(request)
-            if request.morph_insertions
-            else ()
-        )
-        bone_payloads = (
-            _build_bone_insertion_payloads(request)
-            if request.bone_insertions
-            else ()
-        )
-        material_payloads = (
-            _build_material_insertion_payloads(request)
-            if request.material_insertions
-            else ()
-        )
-        texture_payloads = (
-            _build_texture_insertion_payloads(request)
-            if request.texture_insertions
-            else ()
-        )
+        coordinated_insertions = _structural_insertion_target_count(request) > 1
+        if coordinated_insertions:
+            vertex_payloads = ()
+            rigid_body_payloads = ()
+            morph_payloads = ()
+            bone_payloads = ()
+            material_payloads = ()
+            texture_payloads = ()
+        else:
+            vertex_payloads = (
+                _build_vertex_insertion_payloads(request)
+                if request.vertex_insertions
+                else ()
+            )
+            rigid_body_payloads = (
+                _build_rigid_body_insertion_payloads(request)
+                if request.rigid_body_insertions
+                else ()
+            )
+            morph_payloads = (
+                _build_morph_insertion_payloads(request)
+                if request.morph_insertions
+                else ()
+            )
+            bone_payloads = (
+                _build_bone_insertion_payloads(request)
+                if request.bone_insertions
+                else ()
+            )
+            material_payloads = (
+                _build_material_insertion_payloads(request)
+                if request.material_insertions
+                else ()
+            )
+            texture_payloads = (
+                _build_texture_insertion_payloads(request)
+                if request.texture_insertions
+                else ()
+            )
 
         # Import the internal output kernel only when execution is requested.
         # Merely importing mmd_registry.services therefore remains side-effect-light.
         from mmd_registry.pmx.structural_output import (
             _write_pmx_bone_insertion_transaction,
+            _write_pmx_coordinated_insertion_transaction,
             _write_pmx_material_insertion_transaction,
             _write_pmx_morph_insertion_transaction,
             _write_pmx_rigid_body_insertion_transaction,
@@ -1104,7 +1420,18 @@ def apply_structural_edit(
         )
 
         failure_stage = "path_resolution"
-        if vertex_payloads:
+        if coordinated_insertions:
+            result = _write_pmx_coordinated_insertion_transaction(
+                input_path,
+                output_path,
+                lambda document: _build_coordinated_insertion_payloads(
+                    document,
+                    request,
+                ),
+                overwrite=overwrite,
+                _stage_callback=record_stage,
+            )
+        elif vertex_payloads:
             result = _write_pmx_vertex_insertion_transaction(
                 input_path,
                 output_path,

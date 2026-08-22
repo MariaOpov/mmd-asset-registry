@@ -62,6 +62,11 @@ from mmd_registry.pmx.editing.errors import (
     PmxEditVerificationError,
 )
 from mmd_registry.pmx.reader import load_pmx
+from mmd_registry.pmx.structural_coordinated_insertion import (
+    PmxCoordinatedInsertionPayloads,
+    PmxCoordinatedInsertionPreview,
+    preview_pmx_coordinated_insertions,
+)
 from mmd_registry.pmx.structural_invariants import (
     PmxStructuralInvariantCertificate,
 )
@@ -145,6 +150,7 @@ _StructuralPreview = (
     | PmxMorphInsertionPreview
     | PmxRigidBodyInsertionPreview
     | PmxVertexInsertionPreview
+    | PmxCoordinatedInsertionPreview
 )
 
 
@@ -176,6 +182,7 @@ def _derive_verified_structural_serialization(
             PmxMorphInsertionPreview,
             PmxRigidBodyInsertionPreview,
             PmxVertexInsertionPreview,
+            PmxCoordinatedInsertionPreview,
         ),
     ):
         raise TypeError(
@@ -830,6 +837,101 @@ class _PmxVertexInsertionSerializationResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class _PmxCoordinatedInsertionSerializationResult:
+    """Verified serialization evidence for the CP17 coordinated insertion path."""
+
+    source_document: PmxDocument
+    payloads: PmxCoordinatedInsertionPayloads
+    preview: PmxCoordinatedInsertionPreview = field(init=False)
+    serialized_bytes: bytes = field(init=False, repr=False)
+    reparsed_certificate: PmxStructuralInvariantCertificate = field(init=False)
+    output_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._derive_verified_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        source_document: PmxDocument,
+        payloads: PmxCoordinatedInsertionPayloads,
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxCoordinatedInsertionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "source_document", source_document)
+        object.__setattr__(result, "payloads", payloads)
+        result._derive_verified_evidence(stage_callback)
+        return result
+
+    def _derive_verified_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
+        if not isinstance(self.source_document, PmxDocument):
+            raise TypeError("source_document must be a PmxDocument instance.")
+        if not isinstance(self.payloads, PmxCoordinatedInsertionPayloads):
+            raise TypeError(
+                "payloads must be a PmxCoordinatedInsertionPayloads value."
+            )
+        if stage_callback is not None and not callable(stage_callback):
+            raise TypeError("stage_callback must be callable or None.")
+
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_verified_structural_serialization(
+                lambda: preview_pmx_coordinated_insertions(
+                    self.source_document,
+                    self.payloads,
+                ),
+                stage_callback,
+            )
+        )
+        if not isinstance(preview, PmxCoordinatedInsertionPreview):
+            raise AssertionError(
+                "coordinated insertion serialization returned wrong preview."
+            )
+
+        object.__setattr__(self, "preview", preview)
+        object.__setattr__(self, "serialized_bytes", serialized)
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
+        object.__setattr__(self, "output_sha256", output_sha256)
+
+    @property
+    def output_size_bytes(self) -> int:
+        return len(self.serialized_bytes)
+
+    @property
+    def status(self) -> str:
+        return self.preview.status
+
+    def to_dict(self) -> dict[str, object]:
+        return _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
+
+
+def _verify_pmx_coordinated_insertion_serialization(
+    document: PmxDocument,
+    payloads: PmxCoordinatedInsertionPayloads,
+    *,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> _PmxCoordinatedInsertionSerializationResult:
+    if _stage_callback is None:
+        return _PmxCoordinatedInsertionSerializationResult(
+            source_document=document,
+            payloads=payloads,
+        )
+    if not callable(_stage_callback):
+        raise TypeError("_stage_callback must be callable or None.")
+    return _PmxCoordinatedInsertionSerializationResult._with_stage_callback(
+        document,
+        payloads,
+        _stage_callback,
+    )
+
+
 def verify_pmx_structural_serialization(
     document: PmxDocument,
     intent: PmxStructuralTransformIntent,
@@ -1000,6 +1102,7 @@ class PmxStructuralWriteResult:
         | _PmxMorphInsertionSerializationResult
         | _PmxRigidBodyInsertionSerializationResult
         | _PmxVertexInsertionSerializationResult
+        | _PmxCoordinatedInsertionSerializationResult
     )
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -1025,6 +1128,7 @@ class PmxStructuralWriteResult:
             | _PmxMorphInsertionSerializationResult
             | _PmxRigidBodyInsertionSerializationResult
             | _PmxVertexInsertionSerializationResult
+            | _PmxCoordinatedInsertionSerializationResult
         ),
     ) -> "PmxStructuralWriteResult":
         if not isinstance(input_path, Path):
@@ -1046,6 +1150,7 @@ class PmxStructuralWriteResult:
                 _PmxMorphInsertionSerializationResult,
                 _PmxRigidBodyInsertionSerializationResult,
                 _PmxVertexInsertionSerializationResult,
+                _PmxCoordinatedInsertionSerializationResult,
             ),
         ):
             raise TypeError(
@@ -1130,6 +1235,7 @@ def _write_verified_structural_transaction(
             | _PmxMorphInsertionSerializationResult
             | _PmxRigidBodyInsertionSerializationResult
             | _PmxVertexInsertionSerializationResult
+            | _PmxCoordinatedInsertionSerializationResult
         ),
     ],
     *,
@@ -1176,6 +1282,7 @@ def _write_verified_structural_transaction(
             _PmxMorphInsertionSerializationResult,
             _PmxRigidBodyInsertionSerializationResult,
             _PmxVertexInsertionSerializationResult,
+            _PmxCoordinatedInsertionSerializationResult,
         ),
     ):
         raise TypeError(
@@ -1478,6 +1585,43 @@ def _write_pmx_vertex_insertion_transaction(
         return _verify_pmx_vertex_insertion_serialization(
             source_document,
             insertions,
+            _stage_callback=stage_callback,
+        )
+
+    return _write_verified_structural_transaction(
+        input_path,
+        output_path,
+        serialize_insertions,
+        overwrite=overwrite,
+        _stage_callback=_stage_callback,
+    )
+
+
+def _write_pmx_coordinated_insertion_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    payload_factory: Callable[[PmxDocument], PmxCoordinatedInsertionPayloads],
+    *,
+    overwrite: bool = False,
+    _stage_callback: _StructuralStageCallback | None = None,
+) -> PmxStructuralWriteResult:
+    """Execute CP17 multi-target insertion through the shared transaction kernel."""
+
+    if not callable(payload_factory):
+        raise TypeError("payload_factory must be callable.")
+
+    def serialize_insertions(
+        source_document: PmxDocument,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> _PmxCoordinatedInsertionSerializationResult:
+        payloads = payload_factory(source_document)
+        if not isinstance(payloads, PmxCoordinatedInsertionPayloads):
+            raise TypeError(
+                "payload_factory must return PmxCoordinatedInsertionPayloads."
+            )
+        return _verify_pmx_coordinated_insertion_serialization(
+            source_document,
+            payloads,
             _stage_callback=stage_callback,
         )
 

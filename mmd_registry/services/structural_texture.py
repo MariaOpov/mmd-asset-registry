@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from mmd_registry.services.structural_reference import _require_optional_new_id
+
 
 @dataclass(frozen=True, slots=True)
 class PmxStructuralTextureInsertion:
@@ -13,8 +15,10 @@ class PmxStructuralTextureInsertion:
     path: str
     position: Literal["append", "insert_before"] = "append"
     source_index: int | None = None
+    new_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_optional_new_id(self.new_id)
         if not isinstance(self.path, str):
             raise TypeError("path must be a string.")
         if not isinstance(self.position, str):

@@ -687,15 +687,16 @@ class MorphInsertionPreviewTests(unittest.TestCase):
                             source.header,
                         )
 
-    def test_morph_insertion_cannot_mix_with_other_structural_targets(self) -> None:
+    def test_morph_insertion_can_mix_with_other_structural_targets(self) -> None:
         insertion = _vertex_insertion()
-        with self.assertRaises(ValueError):
-            services.PmxStructuralPreviewRequest(
-                morph_insertions=(insertion,),
-                bone_insertions=(
-                    PmxStructuralBoneInsertion(local_name="mixed"),
-                ),
-            )
+        request = services.PmxStructuralPreviewRequest(
+            morph_insertions=(insertion,),
+            bone_insertions=(
+                PmxStructuralBoneInsertion(local_name="mixed"),
+            ),
+        )
+        self.assertEqual(request.morph_insertions, (insertion,))
+        self.assertEqual(len(request.bone_insertions), 1)
 
     def test_preview_is_deterministic(self) -> None:
         source = _clean_document()

@@ -6,6 +6,14 @@ import math
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+from mmd_registry.services.structural_reference import (
+    PmxStructuralNewReference,
+    _require_optional_new_id,
+)
+
+
+_PmxStructuralCrossReference: TypeAlias = int | PmxStructuralNewReference
+
 
 PmxStructuralMorphPanel: TypeAlias = Literal[
     "system",
@@ -48,6 +56,25 @@ def _require_optional_index(value: object, field_name: str) -> None:
         raise ValueError(f"{field_name} cannot be smaller than -1.")
 
 
+
+def _require_cross_reference(
+    value: object,
+    field_name: str,
+    *,
+    target_kind: str,
+    allow_sentinel: bool = False,
+) -> None:
+    if isinstance(value, PmxStructuralNewReference):
+        if value.target_kind != target_kind:
+            raise ValueError(
+                f"{field_name} new reference must target {target_kind}."
+            )
+        return
+    if allow_sentinel:
+        _require_optional_index(value, field_name)
+    else:
+        _require_nonnegative_index(value, field_name)
+
 def _require_finite_float(value: object, field_name: str) -> None:
     if not isinstance(value, float):
         raise TypeError(f"{field_name} must be a float.")
@@ -85,11 +112,15 @@ class PmxStructuralMorphGroupOffset:
 class PmxStructuralMorphVertexOffset:
     """One existing vertex target and displacement."""
 
-    vertex_index: int
+    vertex_index: _PmxStructuralCrossReference
     translation: tuple[float, float, float]
 
     def __post_init__(self) -> None:
-        _require_nonnegative_index(self.vertex_index, "vertex_index")
+        _require_cross_reference(
+            self.vertex_index,
+            "vertex_index",
+            target_kind="vertex",
+        )
         _require_float_tuple(
             self.translation,
             field_name="translation",
@@ -101,12 +132,16 @@ class PmxStructuralMorphVertexOffset:
 class PmxStructuralMorphBoneOffset:
     """One existing bone target and translation/quaternion payload."""
 
-    bone_index: int
+    bone_index: _PmxStructuralCrossReference
     translation: tuple[float, float, float]
     rotation: tuple[float, float, float, float]
 
     def __post_init__(self) -> None:
-        _require_nonnegative_index(self.bone_index, "bone_index")
+        _require_cross_reference(
+            self.bone_index,
+            "bone_index",
+            target_kind="bone",
+        )
         _require_float_tuple(
             self.translation,
             field_name="translation",
@@ -123,11 +158,15 @@ class PmxStructuralMorphBoneOffset:
 class PmxStructuralMorphUvOffset:
     """One existing vertex target and base/additional-UV displacement."""
 
-    vertex_index: int
+    vertex_index: _PmxStructuralCrossReference
     uv_offset: tuple[float, float, float, float]
 
     def __post_init__(self) -> None:
-        _require_nonnegative_index(self.vertex_index, "vertex_index")
+        _require_cross_reference(
+            self.vertex_index,
+            "vertex_index",
+            target_kind="vertex",
+        )
         _require_float_tuple(
             self.uv_offset,
             field_name="uv_offset",
@@ -139,7 +178,7 @@ class PmxStructuralMorphUvOffset:
 class PmxStructuralMorphMaterialOffset:
     """One material-morph operation against one source material or all materials."""
 
-    material_index: int
+    material_index: _PmxStructuralCrossReference
     operation: PmxStructuralMaterialMorphOperation
     diffuse: tuple[float, float, float, float]
     specular: tuple[float, float, float]
@@ -152,7 +191,12 @@ class PmxStructuralMorphMaterialOffset:
     toon_tint: tuple[float, float, float, float]
 
     def __post_init__(self) -> None:
-        _require_optional_index(self.material_index, "material_index")
+        _require_cross_reference(
+            self.material_index,
+            "material_index",
+            target_kind="material",
+            allow_sentinel=True,
+        )
         if self.operation not in ("multiply", "add"):
             raise ValueError("operation must be either 'multiply' or 'add'.")
         for field_name, length in (
@@ -189,13 +233,17 @@ class PmxStructuralMorphFlipOffset:
 class PmxStructuralMorphImpulseOffset:
     """One PMX 2.1 impulse against an existing source rigid body."""
 
-    rigid_body_index: int
+    rigid_body_index: _PmxStructuralCrossReference
     local: bool
     velocity: tuple[float, float, float]
     angular_torque: tuple[float, float, float]
 
     def __post_init__(self) -> None:
-        _require_nonnegative_index(self.rigid_body_index, "rigid_body_index")
+        _require_cross_reference(
+            self.rigid_body_index,
+            "rigid_body_index",
+            target_kind="rigid_body",
+        )
         if not isinstance(self.local, bool):
             raise TypeError("local must be a boolean.")
         _require_float_tuple(self.velocity, field_name="velocity", length=3)
@@ -256,8 +304,10 @@ class PmxStructuralMorphInsertion:
     offsets: tuple[PmxStructuralMorphOffset, ...] = ()
     position: Literal["append", "insert_before"] = "append"
     source_index: int | None = None
+    new_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_optional_new_id(self.new_id)
         for field_name in ("local_name", "universal_name"):
             if not isinstance(getattr(self, field_name), str):
                 raise TypeError(f"{field_name} must be a string.")

@@ -404,24 +404,26 @@ class RigidBodyInsertionPreviewTests(unittest.TestCase):
                 services.PmxStructuralPreviewRequest(morph_insertions=(insertion,)),
             )
 
-    def test_morph_and_rigid_body_insertions_cannot_mix_before_cp17(self) -> None:
-        with self.assertRaisesRegex(ValueError, "CP17"):
-            services.PmxStructuralPreviewRequest(
-                morph_insertions=(
-                    PmxStructuralMorphInsertion(
-                        local_name="Impulse",
-                        morph_type="impulse",
-                    ),
+    def test_morph_and_rigid_body_insertions_can_mix_in_cp17(self) -> None:
+        request = services.PmxStructuralPreviewRequest(
+            morph_insertions=(
+                PmxStructuralMorphInsertion(
+                    local_name="Impulse",
+                    morph_type="impulse",
                 ),
-                rigid_body_insertions=(_rigid(),),
-            )
+            ),
+            rigid_body_insertions=(_rigid(),),
+        )
+        self.assertEqual(len(request.morph_insertions), 1)
+        self.assertEqual(len(request.rigid_body_insertions), 1)
 
-    def test_rigid_body_insertion_cannot_mix_with_prior_targets(self) -> None:
-        with self.assertRaises(ValueError):
-            services.PmxStructuralPreviewRequest(
-                bone_insertions=(PmxStructuralBoneInsertion(local_name="mixed"),),
-                rigid_body_insertions=(_rigid(),),
-            )
+    def test_rigid_body_insertion_can_mix_with_prior_targets(self) -> None:
+        request = services.PmxStructuralPreviewRequest(
+            bone_insertions=(PmxStructuralBoneInsertion(local_name="mixed"),),
+            rigid_body_insertions=(_rigid(),),
+        )
+        self.assertEqual(len(request.bone_insertions), 1)
+        self.assertEqual(len(request.rigid_body_insertions), 1)
 
     def test_preview_is_deterministic_and_report_is_privacy_bounded(self) -> None:
         source = _clean_document()

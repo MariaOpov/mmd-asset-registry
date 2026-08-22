@@ -208,13 +208,14 @@ class MaterialInsertionPublicContractTests(unittest.TestCase):
             PmxStructuralTextureInsertion,
         )
 
-        with self.assertRaisesRegex(ValueError, "cannot be combined"):
-            services.PmxStructuralPreviewRequest(
-                texture_insertions=(
-                    PmxStructuralTextureInsertion("textures/a.png"),
-                ),
-                material_insertions=(insertion,),
-            )
+        request = services.PmxStructuralPreviewRequest(
+            texture_insertions=(
+                PmxStructuralTextureInsertion("textures/a.png"),
+            ),
+            material_insertions=(insertion,),
+        )
+        self.assertEqual(request.material_insertions, (insertion,))
+        self.assertEqual(len(request.texture_insertions), 1)
 
     def test_capability_manifest_is_not_promoted_to_structural_insert(self) -> None:
         payload = services.get_capabilities().to_dict()

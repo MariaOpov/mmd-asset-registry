@@ -6,6 +6,11 @@ import math
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+from mmd_registry.services.structural_reference import (
+    PmxStructuralNewReference,
+    _require_optional_new_id,
+)
+
 
 PmxStructuralRigidBodyShape: TypeAlias = Literal["sphere", "box", "capsule"]
 PmxStructuralRigidBodyPhysicsMode: TypeAlias = Literal[
@@ -51,7 +56,7 @@ class PmxStructuralRigidBodyInsertion:
 
     local_name: str
     universal_name: str = ""
-    bone_index: int = -1
+    bone_index: int | PmxStructuralNewReference = -1
     collision_group: int = 0
     collision_mask: int = 0xFFFF
     shape: PmxStructuralRigidBodyShape = "sphere"
@@ -66,15 +71,21 @@ class PmxStructuralRigidBodyInsertion:
     physics_mode: PmxStructuralRigidBodyPhysicsMode = "bone_follow"
     position: Literal["append", "insert_before"] = "append"
     source_index: int | None = None
+    new_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_optional_new_id(self.new_id)
         for field_name in ("local_name", "universal_name"):
             if not isinstance(getattr(self, field_name), str):
                 raise TypeError(f"{field_name} must be a string.")
 
-        bone_index = _require_plain_int(self.bone_index, "bone_index")
-        if bone_index < -1:
-            raise ValueError("bone_index cannot be smaller than -1.")
+        if isinstance(self.bone_index, PmxStructuralNewReference):
+            if self.bone_index.target_kind != "bone":
+                raise ValueError("bone_index new reference must target bone.")
+        else:
+            bone_index = _require_plain_int(self.bone_index, "bone_index")
+            if bone_index < -1:
+                raise ValueError("bone_index cannot be smaller than -1.")
 
         collision_group = _require_plain_int(
             self.collision_group,

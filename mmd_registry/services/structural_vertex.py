@@ -6,6 +6,14 @@ import math
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
+from mmd_registry.services.structural_reference import (
+    PmxStructuralNewReference,
+    _require_optional_new_id,
+)
+
+
+_PmxStructuralBoneReference: TypeAlias = int | PmxStructuralNewReference
+
 
 def _is_plain_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
@@ -17,7 +25,14 @@ def _require_plain_int(value: object, field_name: str) -> int:
     return value
 
 
-def _require_source_bone_index(value: object, field_name: str) -> int:
+def _require_source_bone_index(
+    value: object,
+    field_name: str,
+) -> _PmxStructuralBoneReference:
+    if isinstance(value, PmxStructuralNewReference):
+        if value.target_kind != "bone":
+            raise ValueError(f"{field_name} new reference must target bone.")
+        return value
     index = _require_plain_int(value, field_name)
     if index < -1:
         raise ValueError(f"{field_name} cannot be smaller than -1.")
@@ -63,7 +78,7 @@ def _require_bone_index_tuple(
 class PmxStructuralVertexBdef1:
     """One source-domain BDEF1 payload for an inserted vertex."""
 
-    bone_index: int
+    bone_index: _PmxStructuralBoneReference
 
     def __post_init__(self) -> None:
         _require_source_bone_index(self.bone_index, "bone_index")
@@ -73,7 +88,7 @@ class PmxStructuralVertexBdef1:
 class PmxStructuralVertexBdef2:
     """One source-domain BDEF2 payload for an inserted vertex."""
 
-    bone_indices: tuple[int, int]
+    bone_indices: tuple[_PmxStructuralBoneReference, _PmxStructuralBoneReference]
     bone_1_weight: float
 
     def __post_init__(self) -> None:
@@ -89,7 +104,12 @@ class PmxStructuralVertexBdef2:
 class PmxStructuralVertexBdef4:
     """One source-domain BDEF4 payload for an inserted vertex."""
 
-    bone_indices: tuple[int, int, int, int]
+    bone_indices: tuple[
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+    ]
     weights: tuple[float, float, float, float]
 
     def __post_init__(self) -> None:
@@ -105,7 +125,7 @@ class PmxStructuralVertexBdef4:
 class PmxStructuralVertexSdef:
     """One source-domain SDEF payload for an inserted vertex."""
 
-    bone_indices: tuple[int, int]
+    bone_indices: tuple[_PmxStructuralBoneReference, _PmxStructuralBoneReference]
     bone_1_weight: float
     c: tuple[float, float, float]
     r0: tuple[float, float, float]
@@ -130,7 +150,12 @@ class PmxStructuralVertexSdef:
 class PmxStructuralVertexQdef:
     """One source-domain QDEF payload; PMX 2.1 is enforced by preview."""
 
-    bone_indices: tuple[int, int, int, int]
+    bone_indices: tuple[
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+        _PmxStructuralBoneReference,
+    ]
     weights: tuple[float, float, float, float]
 
     def __post_init__(self) -> None:
@@ -163,8 +188,10 @@ class PmxStructuralVertexInsertion:
     edge_scale: float
     position: Literal["append", "insert_before"] = "append"
     source_index: int | None = None
+    new_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_optional_new_id(self.new_id)
         _require_float_tuple(
             self.vertex_position,
             field_name="vertex_position",

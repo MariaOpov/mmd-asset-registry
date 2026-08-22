@@ -6,6 +6,8 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from mmd_registry.services.structural_reference import _require_optional_new_id
+
 
 _INT32_MIN = -(1 << 31)
 _INT32_MAX = (1 << 31) - 1
@@ -150,8 +152,10 @@ class PmxStructuralBoneInsertion:
 
     position: Literal["append", "insert_before"] = "append"
     source_index: int | None = None
+    new_id: str | None = None
 
     def __post_init__(self) -> None:
+        _require_optional_new_id(self.new_id)
         for field_name in ("local_name", "universal_name"):
             if not isinstance(getattr(self, field_name), str):
                 raise TypeError(f"{field_name} must be a string.")

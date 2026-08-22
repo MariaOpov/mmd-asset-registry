@@ -177,14 +177,15 @@ class VertexInsertionPublicContractTests(unittest.TestCase):
         self.assertEqual(deform.weights, weights)
         self.assertNotEqual(sum(deform.weights), 1.0)
 
-    def test_request_refuses_mixed_target_and_legacy_vocabularies(self) -> None:
+    def test_request_accepts_mixed_targets_but_rejects_legacy_vocabularies(self) -> None:
         vertex = _insertion()
         bone = PmxStructuralBoneInsertion(local_name="B")
-        with self.assertRaisesRegex(ValueError, "cannot be combined"):
-            services.PmxStructuralPreviewRequest(
-                vertex_insertions=(vertex,),
-                bone_insertions=(bone,),
-            )
+        request = services.PmxStructuralPreviewRequest(
+            vertex_insertions=(vertex,),
+            bone_insertions=(bone,),
+        )
+        self.assertEqual(request.vertex_insertions, (vertex,))
+        self.assertEqual(request.bone_insertions, (bone,))
 
         edit = services.PmxStructuralCollectionEdit(
             services.PmxReferenceTargetKind.VERTEX,

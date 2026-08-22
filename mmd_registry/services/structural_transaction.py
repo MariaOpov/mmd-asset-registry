@@ -62,15 +62,25 @@ class PmxStructuralTransactionRequest:
             )
 
         seen_collection_kinds: set[PmxReferenceTargetKind] = set()
+        seen_new_ids: set[str] = set()
         for operation in self.operations:
-            if not isinstance(operation, PmxStructuralCollectionEdit):
+            if isinstance(operation, PmxStructuralCollectionEdit):
+                if operation.target_kind in seen_collection_kinds:
+                    raise ValueError(
+                        "operations cannot repeat one "
+                        "PmxStructuralCollectionEdit target_kind."
+                    )
+                seen_collection_kinds.add(operation.target_kind)
                 continue
-            if operation.target_kind in seen_collection_kinds:
+
+            new_id = operation.new_id
+            if new_id is None:
+                continue
+            if new_id in seen_new_ids:
                 raise ValueError(
-                    "operations cannot repeat one "
-                    "PmxStructuralCollectionEdit target_kind."
+                    f"request-local new_id {new_id!r} must be globally unique."
                 )
-            seen_collection_kinds.add(operation.target_kind)
+            seen_new_ids.add(new_id)
 
 
 __all__ = (

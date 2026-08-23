@@ -2,14 +2,17 @@
 
 CP16 joins the source-bound composition, resolved payloads, dependency order,
 and existing certified target kernels.  Planning and payload preparation finish
-before this module materializes any target.  It performs no serialization,
-filesystem access, publication, or canonical plan hashing; CP17 owns the stable
-report schema and plan digest.
+before this module materializes any target.  CP17 adds deterministic in-memory
+source binding, bounded semantic plan evidence, and canonical plan hashing.  It
+still performs no filesystem access or publication.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
+from typing import Final
 
 from mmd_registry.pmx.document import PmxDocument
 from mmd_registry.pmx.collection_transform import PmxStructuralTransformIntent
@@ -59,7 +62,17 @@ from mmd_registry.pmx.structural_vertex_insertion import (
     _build_vertex_shift_plan,
     preview_pmx_vertex_insertions,
 )
+from mmd_registry.pmx.writer import serialize_pmx
+
+
+_PLAN_SCHEMA: Final[str] = "mmd_registry.structural_transaction.plan.v1"
 _TARGET_KIND_ORDER = tuple(PmxReferenceTargetKind)
+_TARGET_KIND_RANK = {
+    target_kind: rank for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
+}
+_SOURCE_SECTION_RANK = {
+    section: rank for rank, section in enumerate(PmxReferenceSourceSection)
+}
 _OWNER_TARGETS = {
     PmxReferenceSourceSection.VERTICES: PmxReferenceTargetKind.VERTEX,
     PmxReferenceSourceSection.MATERIALS: PmxReferenceTargetKind.MATERIAL,
@@ -77,6 +90,34 @@ _STAGE_PROVENANCE = {
     "transform": "structural_pipeline",
     "structural_certification": "structural_pipeline",
 }
+
+
+def _canonical_json_bytes(value: object) -> bytes:
+    """Return the contract-fixed UTF-8 canonical JSON representation."""
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _canonical_sha256(value: object) -> str:
+    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def _semantic_payload_sha256(payload: object) -> str:
+    """Hash one validated typed payload without exposing its private data."""
+
+    to_dict = getattr(payload, "to_dict", None)
+    if not callable(to_dict):
+        raise AssertionError("transaction payload has no semantic evidence encoder")
+    evidence = to_dict()
+    if not isinstance(evidence, dict):
+        raise AssertionError("transaction payload evidence must be an object")
+    return _canonical_sha256(evidence)
 
 
 class PmxStructuralTransactionPreviewError(ValueError):
@@ -420,6 +461,30 @@ def _environment_dict(
     return {target_kind.value: value for target_kind, value in entries}
 
 
+def _validate_source_binding(
+    document: PmxDocument,
+    composition: PmxStructuralTransactionComposition,
+) -> None:
+    captured_counts = _environment_dict(composition.source_counts)
+    actual_counts = {
+        target_kind.value: len(
+            getattr(document, _TARGET_COLLECTION_ATTRIBUTES[target_kind])
+        )
+        for target_kind in _TARGET_KIND_ORDER
+    }
+    if captured_counts != actual_counts:
+        raise ValueError(
+            "transaction source counts must match the captured document"
+        )
+    if (
+        _environment_dict(composition.index_widths)
+        != document.header.index_sizes.to_dict()
+    ):
+        raise ValueError(
+            "transaction index widths must match the captured document"
+        )
+
+
 def _owner_survives(
     composition: PmxStructuralTransactionComposition,
     section: PmxReferenceSourceSection,
@@ -575,6 +640,8 @@ class PmxStructuralTransactionPreview:
         PmxStructuralTransactionExistingReferenceEvidence,
         ...,
     ] = field(init=False)
+    source_sha256: str = field(init=False)
+    plan_sha256: str = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_document, PmxDocument):
@@ -594,6 +661,7 @@ class PmxStructuralTransactionPreview:
             self.payloads,
             self.local_references,
         )
+        _validate_source_binding(self.source_document, self.composition)
 
         try:
             source_certificate = PmxStructuralInvariantCertificate(
@@ -663,6 +731,16 @@ class PmxStructuralTransactionPreview:
 
         object.__setattr__(self, "certificate", certificate)
         object.__setattr__(self, "remapped_existing_references", remapped)
+        object.__setattr__(
+            self,
+            "source_sha256",
+            hashlib.sha256(serialize_pmx(self.source_document)).hexdigest(),
+        )
+        object.__setattr__(
+            self,
+            "plan_sha256",
+            _canonical_sha256(self._plan_evidence()),
+        )
 
     @property
     def status(self) -> str:
@@ -703,6 +781,158 @@ class PmxStructuralTransactionPreview:
             )
         return tuple(normalized)
 
+    def _payloads_by_request_ordinal(self) -> dict[int, object]:
+        payloads_by_ordinal: dict[int, object] = {}
+        for target_kind in _TARGET_KIND_ORDER:
+            descriptors = tuple(
+                descriptor
+                for descriptor in self.operation_descriptors
+                if descriptor.category == "insertion"
+                and descriptor.target_kind is target_kind
+            )
+            payloads = self.payloads.for_target(target_kind)
+            if len(descriptors) != len(payloads):
+                raise AssertionError(
+                    f"{target_kind.value} descriptor/payload counts disagree"
+                )
+            for descriptor, payload in zip(descriptors, payloads, strict=True):
+                payloads_by_ordinal[descriptor.request_ordinal] = payload
+        return payloads_by_ordinal
+
+    def _normalized_operation_evidence(self) -> list[dict[str, object]]:
+        payloads_by_ordinal = self._payloads_by_request_ordinal()
+        evidence: list[dict[str, object]] = []
+        for descriptor in self.normalized_operations:
+            item = descriptor.to_dict()
+            if descriptor.category == "insertion":
+                item["payload_sha256"] = _semantic_payload_sha256(
+                    payloads_by_ordinal[descriptor.request_ordinal]
+                )
+            evidence.append(item)
+        return evidence
+
+    def _plan_collection_evidence(self) -> list[dict[str, object]]:
+        descriptors_by_ordinal = {
+            descriptor.request_ordinal: descriptor
+            for descriptor in self.operation_descriptors
+            if descriptor.category == "insertion"
+        }
+        collections: list[dict[str, object]] = []
+        for placement in self.composition.placements:
+            transform = placement.transform
+            insertions: list[dict[str, object]] = []
+            for binding in sorted(
+                placement.bindings,
+                key=lambda item: (item.final_index, item.request_ordinal),
+            ):
+                descriptor = descriptors_by_ordinal[binding.request_ordinal]
+                insertions.append(
+                    {
+                        "request_ordinal": binding.request_ordinal,
+                        "position": descriptor.position,
+                        "source_index": descriptor.source_index,
+                        "final_index": binding.final_index,
+                        "new_id": descriptor.new_id,
+                    }
+                )
+            collections.append(
+                {
+                    "target_kind": placement.target_kind.value,
+                    "survivor_old_indices": list(
+                        transform.old_indices_in_new_order
+                    ),
+                    "combined_remap": list(placement.remap.targets),
+                    "new_only_positions": list(
+                        placement.remap.new_indices_without_old_source
+                    ),
+                    "insertions": insertions,
+                }
+            )
+        return collections
+
+    def _plan_reference_evidence(self) -> dict[str, object]:
+        local_references = sorted(
+            self.local_references,
+            key=lambda item: (
+                item.request_ordinal,
+                item.field_name,
+                item.relationship_id,
+                _TARGET_KIND_RANK[item.target_kind],
+                item.new_id,
+                item.final_index,
+            ),
+        )
+        existing_references = sorted(
+            self.remapped_existing_references,
+            key=lambda item: (
+                _SOURCE_SECTION_RANK[item.source_section],
+                item.source_record_index,
+                item.relationship_id,
+                _TARGET_KIND_RANK[item.target_kind],
+                item.old_target_index,
+                item.final_target_index,
+            ),
+        )
+        return {
+            "resolved_local": [item.to_dict() for item in local_references],
+            "remapped_existing": [
+                item.to_dict() for item in existing_references
+            ],
+        }
+
+    def _plan_evidence(self) -> dict[str, object]:
+        dependency = self.composition.dependency
+        preflight = self.composition.preflight
+        return {
+            "schema": _PLAN_SCHEMA,
+            "source": {
+                "semantic_sha256": self.source_sha256,
+                "pmx_version": self.source_document.header.version,
+                "declared_index_widths": _environment_dict(
+                    self.composition.index_widths
+                ),
+                "captured_counts": _environment_dict(
+                    self.composition.source_counts
+                ),
+            },
+            "operations": {
+                "original_count": len(self.operation_descriptors),
+                "normalized": self._normalized_operation_evidence(),
+            },
+            "collections": self._plan_collection_evidence(),
+            "identities": [
+                {
+                    "target_kind": item.target_kind.value,
+                    "new_id": item.new_id,
+                    "request_ordinal": item.operation_index,
+                    "final_index": item.final_index,
+                }
+                for item in self.composition.identities
+            ],
+            "references": self._plan_reference_evidence(),
+            "dependencies": {
+                "nodes": [item.value for item in dependency.nodes],
+                "edges": [
+                    {
+                        "provider": edge.provider_target.value,
+                        "consumer": edge.consumer_target.value,
+                    }
+                    for edge in dependency.edges
+                ],
+                "materialization_order": [
+                    item.value for item in dependency.materialization_order
+                ],
+            },
+            "counts": {
+                "final": _environment_dict(preflight.final_counts),
+            },
+            "preflight": {
+                "status": "passed",
+                "all_representable": preflight.all_representable,
+                "targets": [item.to_dict() for item in preflight.analyses],
+            },
+        }
+
     def _collection_effects(self) -> list[dict[str, object]]:
         effects: list[dict[str, object]] = []
         explicit_targets = {
@@ -739,7 +969,10 @@ class PmxStructuralTransactionPreview:
     def to_dict(self) -> dict[str, object]:
         dependency = self.composition.dependency
         preflight = self.composition.preflight
+        plan = self._plan_evidence()
+        plan["sha256"] = self.plan_sha256
         return {
+            "plan": plan,
             "status": self.status,
             "dry_run": True,
             "operations": {

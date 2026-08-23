@@ -7,7 +7,6 @@ from dataclasses import FrozenInstanceError, fields, is_dataclass, replace
 import importlib
 import inspect
 import io
-import json
 import unittest
 from unittest.mock import patch
 
@@ -132,8 +131,9 @@ class V093StructuralTransactionPreviewTests(unittest.TestCase):
         self.assertFalse(hasattr(internal, "__dict__"))
         self.assertIn("preview_pmx_structural_transaction", preview_module.__all__)
         source = inspect.getsource(preview_module)
-        for forbidden in ("open(", "pathlib", "serialize", "plan_sha256"):
+        for forbidden in ("open(", "pathlib", "write_pmx("):
             self.assertNotIn(forbidden, source)
+        self.assertIn("serialize_pmx", source)
 
     def test_empty_request_is_an_unchanged_complete_certified_noop(self) -> None:
         document = _clean_document()
@@ -174,7 +174,11 @@ class V093StructuralTransactionPreviewTests(unittest.TestCase):
                 "destination_touched": False,
             },
         )
-        self.assertNotIn("plan_sha256", json.dumps(report, sort_keys=True))
+        self.assertEqual(
+            report["plan"]["schema"],
+            "mmd_registry.structural_transaction.plan.v1",
+        )
+        self.assertEqual(report["plan"]["sha256"], result.plan_sha256)
 
     def test_identity_transform_stays_visible_without_false_changes(self) -> None:
         document = _clean_document()
@@ -702,7 +706,7 @@ class V093StructuralTransactionPreviewTests(unittest.TestCase):
 
         self.assertTrue(all(report == reports[0] for report in reports))
         self.assertEqual((document, request), original)
-        self.assertNotIn("plan_sha256", json.dumps(reports[0], sort_keys=True))
+        self.assertRegex(reports[0]["plan"]["sha256"], r"\A[0-9a-f]{64}\Z")
 
 
 if __name__ == "__main__":

@@ -175,8 +175,14 @@ class PmxStructuralTransactionPreviewResult:
     def document(self) -> PmxDocument:
         return self._preview.certificate.document
 
+    @property
+    def plan_sha256(self) -> str:
+        """Return the canonical source-bound structural transaction digest."""
+
+        return self._preview.plan_sha256
+
     def to_dict(self) -> dict[str, object]:
-        """Return deterministic CP16 evidence; CP17 freezes its exact schema."""
+        """Return deterministic source-bound CP17 preview evidence."""
 
         return self._preview.to_dict()
 

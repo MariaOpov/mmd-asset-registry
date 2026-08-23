@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Callable, TypeAlias
 
 from mmd_registry.diagnostics import (
     PmxServiceDiagnostic,
     PmxServiceDiagnosticCode,
     PmxServiceError,
     PmxServiceOperation,
+    diagnostic_from_service_error,
 )
 from mmd_registry.pmx.collection_transform import PmxCollectionTransform
 from mmd_registry.pmx.document import PmxDocument
@@ -46,6 +47,7 @@ from mmd_registry.pmx.structural_transaction_preview import (
 from mmd_registry.services import (
     PmxReferenceTargetKind,
     PmxStructuralCollectionEdit,
+    PmxStructuralExecutionResult,
     PmxStructuralPreviewRequest,
     _build_bone_insertion_payloads,
     _build_material_insertion_payloads,
@@ -874,6 +876,45 @@ def _build_payloads(
     )
 
 
+_TransactionStageCallback: TypeAlias = Callable[[str], None]
+_TRANSACTION_FAILURE_PROVENANCE: tuple[tuple[str, str], ...] = (
+    ("service_validation", "service_boundary"),
+    ("path_resolution", "safe_output"),
+    ("source_snapshot", "source_input"),
+    ("source_parse", "source_input"),
+    ("transaction_normalization", "transaction_plan"),
+    ("reference_resolution", "transaction_plan"),
+    ("dependency_resolution", "transaction_plan"),
+    ("capacity_preflight", "transaction_plan"),
+    ("transform", "structural_pipeline"),
+    ("structural_certification", "structural_pipeline"),
+    ("serialization", "structural_pipeline"),
+    ("reparse", "structural_pipeline"),
+    ("reparse_certification", "structural_pipeline"),
+    ("semantic_compare", "structural_pipeline"),
+    ("source_reverify", "safe_output"),
+    ("output_commit", "safe_output"),
+)
+
+
+def _transaction_failure_provenance(stage: str) -> str:
+    """Resolve one frozen transaction stage without mutable global state."""
+
+    for candidate_stage, provenance in _TRANSACTION_FAILURE_PROVENANCE:
+        if stage == candidate_stage:
+            return provenance
+    raise AssertionError(f"unsupported structural transaction stage: {stage!r}")
+
+
+def _notify_transaction_stage(
+    stage_callback: _TransactionStageCallback | None,
+    stage: str,
+) -> None:
+    _transaction_failure_provenance(stage)
+    if stage_callback is not None:
+        stage_callback(stage)
+
+
 def _service_error(error: Exception) -> PmxServiceError:
     if isinstance(error, PmxStructuralTransactionPreviewError):
         details: list[tuple[str, str | int | bool | None]] = [
@@ -929,12 +970,95 @@ def _service_error(error: Exception) -> PmxServiceError:
     return PmxServiceError(diagnostic)
 
 
+def _execution_service_error(
+    error: Exception,
+    stage: str,
+    *,
+    source_bytes_read: bool,
+) -> PmxServiceError:
+    """Attach exact bounded transaction provenance to one execution failure."""
+
+    if not isinstance(source_bytes_read, bool):
+        raise TypeError("source_bytes_read must be a boolean.")
+    authoritative_stage = stage
+    if isinstance(error, PmxStructuralTransactionPreviewError):
+        # Source certification is part of execution's captured-source parse
+        # stage.  Later preview blockers retain their more specific authority.
+        if not (
+            stage == "source_parse"
+            and error.stage == "structural_certification"
+        ):
+            authoritative_stage = error.stage
+    provenance = _transaction_failure_provenance(authoritative_stage)
+    diagnostic = diagnostic_from_service_error(
+        PmxServiceOperation.APPLY_STRUCTURAL_TRANSACTION,
+        error,
+    )
+    reserved_keys = {
+        "stage",
+        "provenance",
+        "source_bytes_read",
+        "source_modified",
+        "destination_published",
+    }
+    if any(key in reserved_keys for key, _value in diagnostic.details):
+        raise AssertionError(
+            "diagnostic already contains transaction provenance details"
+        )
+    details: list[tuple[str, str | int | bool | None]] = [
+        *diagnostic.details,
+        ("stage", authoritative_stage),
+        ("provenance", provenance),
+        ("source_bytes_read", source_bytes_read),
+        ("source_modified", False),
+        ("destination_published", False),
+    ]
+    if isinstance(error, PmxStructuralTransactionPreviewError):
+        for key, value in (
+            ("operation_index", error.operation_index),
+            (
+                "target_kind",
+                error.target_kind.value
+                if error.target_kind is not None
+                else None,
+            ),
+            ("new_id", error.new_id),
+            ("relationship_id", error.relationship_id),
+        ):
+            if value is not None:
+                details.append((key, value))
+    return PmxServiceError(
+        PmxServiceDiagnostic(
+            code=diagnostic.code,
+            operation=diagnostic.operation,
+            message=diagnostic.message,
+            details=tuple(details),
+        )
+    )
+
+
 def _plan_structural_transaction(
     document: PmxDocument,
     request: PmxStructuralTransactionRequest,
 ) -> PmxStructuralTransactionPreview:
     """Build the sole typed plan shared by preview and future execution."""
 
+    return _plan_structural_transaction_with_stage_callback(
+        document,
+        request,
+        None,
+    )
+
+
+def _plan_structural_transaction_with_stage_callback(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+    stage_callback: _TransactionStageCallback | None,
+) -> PmxStructuralTransactionPreview:
+    """Build the sole plan while reporting only contract-level stages."""
+
+    if stage_callback is not None and not callable(stage_callback):
+        raise TypeError("stage_callback must be callable or None.")
     if not isinstance(document, PmxDocument):
         raise TypeError("document must be a PmxDocument instance.")
     if not isinstance(request, PmxStructuralTransactionRequest):
@@ -950,6 +1074,7 @@ def _plan_structural_transaction(
             "structural_certification"
         ) from error
 
+    _notify_transaction_stage(stage_callback, "transaction_normalization")
     try:
         reference_composition, reference_descriptors = _build_composition(
             document,
@@ -969,6 +1094,7 @@ def _plan_structural_transaction(
             "transaction_normalization"
         ) from error
 
+    _notify_transaction_stage(stage_callback, "reference_resolution")
     try:
         reference_request, reference_local_references = _resolve_operations(
             request,
@@ -985,6 +1111,8 @@ def _plan_structural_transaction(
             "reference_resolution"
         ) from error
 
+    _notify_transaction_stage(stage_callback, "dependency_resolution")
+    _notify_transaction_stage(stage_callback, "capacity_preflight")
     try:
         composition, descriptors = _build_composition(document, request)
     except PmxStructuralTransactionCapacityPreflightError as error:
@@ -1027,6 +1155,7 @@ def _plan_structural_transaction(
             "capacity_preflight"
         ) from error
 
+    _notify_transaction_stage(stage_callback, "transform")
     return preview_pmx_structural_transaction(
         document,
         composition,
@@ -1051,6 +1180,28 @@ def _serialize_structural_transaction(
     )
 
 
+def _serialize_structural_transaction_with_stage_callback(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+    stage_callback: _TransactionStageCallback,
+) -> _PmxStructuralTransactionSerializationResult:
+    if not callable(stage_callback):
+        raise TypeError("stage_callback must be callable.")
+    from mmd_registry.pmx.structural_output import (
+        _PmxStructuralTransactionSerializationResult,
+    )
+
+    preview = _plan_structural_transaction_with_stage_callback(
+        document,
+        request,
+        stage_callback,
+    )
+    return _PmxStructuralTransactionSerializationResult._with_stage_callback(
+        preview,
+        stage_callback,
+    )
+
+
 def _verify_structural_transaction_serialization(
     document: PmxDocument,
     request: PmxStructuralTransactionRequest,
@@ -1066,6 +1217,28 @@ def _verify_structural_transaction_serialization(
     )
 
 
+def _verify_structural_transaction_serialization_with_stage_callback(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+    stage_callback: _TransactionStageCallback,
+) -> _PmxVerifiedStructuralTransactionSerializationResult:
+    if not callable(stage_callback):
+        raise TypeError("stage_callback must be callable.")
+    from mmd_registry.pmx.structural_output import (
+        _PmxVerifiedStructuralTransactionSerializationResult,
+    )
+
+    serialization = _serialize_structural_transaction_with_stage_callback(
+        document,
+        request,
+        stage_callback,
+    )
+    return _PmxVerifiedStructuralTransactionSerializationResult._with_stage_callback(
+        serialization,
+        stage_callback,
+    )
+
+
 def _write_structural_transaction(
     input_path: str | Path,
     output_path: str | Path,
@@ -1075,25 +1248,92 @@ def _write_structural_transaction(
 ) -> PmxStructuralWriteResult:
     """Atomically publish only CP20-verified transaction serialization."""
 
+    return _write_structural_transaction_with_stage_callback(
+        input_path,
+        output_path,
+        request,
+        overwrite=overwrite,
+        stage_callback=None,
+    )
+
+
+def _write_structural_transaction_with_stage_callback(
+    input_path: str | Path,
+    output_path: str | Path,
+    request: PmxStructuralTransactionRequest,
+    *,
+    overwrite: bool,
+    stage_callback: _TransactionStageCallback | None,
+) -> PmxStructuralWriteResult:
+    """Run the private writer with optional transaction-stage translation."""
+
     if not isinstance(request, PmxStructuralTransactionRequest):
         raise TypeError(
             "request must be a PmxStructuralTransactionRequest instance."
         )
     if not isinstance(overwrite, bool):
         raise TypeError("overwrite must be a boolean.")
+    if stage_callback is not None and not callable(stage_callback):
+        raise TypeError("stage_callback must be callable or None.")
 
     from mmd_registry.pmx.structural_output import (
+        PmxStructuralOutputVerificationError,
         _write_verified_structural_transaction,
     )
 
-    return _write_verified_structural_transaction(
-        input_path,
-        output_path,
-        lambda document, _stage_callback: (
-            _verify_structural_transaction_serialization(document, request)
-        ),
-        overwrite=overwrite,
-    )
+    if stage_callback is None:
+        return _write_verified_structural_transaction(
+            input_path,
+            output_path,
+            lambda document, _stage_callback: (
+                _verify_structural_transaction_serialization(document, request)
+            ),
+            overwrite=overwrite,
+        )
+
+    last_stage: str | None = None
+
+    def report_output_stage(stage: str) -> None:
+        nonlocal last_stage
+        if stage == "intent_resolution":
+            return
+        transaction_stage = (
+            "source_reverify" if stage == "output_commit" else stage
+        )
+        _transaction_failure_provenance(transaction_stage)
+        last_stage = transaction_stage
+        stage_callback(transaction_stage)
+
+    def serialize_transaction(
+        document: PmxDocument,
+        output_stage_callback: _TransactionStageCallback | None,
+    ) -> _PmxVerifiedStructuralTransactionSerializationResult:
+        if output_stage_callback is None:
+            raise AssertionError("transaction execution requires stage reporting")
+        return _verify_structural_transaction_serialization_with_stage_callback(
+            document,
+            request,
+            output_stage_callback,
+        )
+
+    try:
+        result = _write_verified_structural_transaction(
+            input_path,
+            output_path,
+            serialize_transaction,
+            overwrite=overwrite,
+            _stage_callback=report_output_stage,
+        )
+    except Exception as error:
+        if last_stage == "source_reverify" and not isinstance(
+            error,
+            PmxStructuralOutputVerificationError,
+        ):
+            last_stage = "output_commit"
+            stage_callback(last_stage)
+        raise
+    stage_callback("output_commit")
+    return result
 
 
 def preview_structural_transaction(
@@ -1111,9 +1351,53 @@ def preview_structural_transaction(
     raise failure from None
 
 
+def apply_structural_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    request: PmxStructuralTransactionRequest,
+    *,
+    overwrite: bool = False,
+) -> PmxStructuralExecutionResult:
+    """Execute and atomically publish one complete structural transaction."""
+
+    failure_stage = "service_validation"
+    source_bytes_read = False
+
+    def record_stage(stage: str) -> None:
+        nonlocal failure_stage, source_bytes_read
+        _transaction_failure_provenance(stage)
+        failure_stage = stage
+        if stage == "source_parse":
+            source_bytes_read = True
+
+    try:
+        if not isinstance(request, PmxStructuralTransactionRequest):
+            raise TypeError(
+                "request must be a PmxStructuralTransactionRequest instance."
+            )
+        if not isinstance(overwrite, bool):
+            raise TypeError("overwrite must be a boolean.")
+        result = _write_structural_transaction_with_stage_callback(
+            input_path,
+            output_path,
+            request,
+            overwrite=overwrite,
+            stage_callback=record_stage,
+        )
+        return PmxStructuralExecutionResult(result)
+    except Exception as error:
+        failure = _execution_service_error(
+            error,
+            failure_stage,
+            source_bytes_read=source_bytes_read,
+        )
+    raise failure from None
+
+
 __all__ = (
     "PmxStructuralTransactionOperation",
     "PmxStructuralTransactionRequest",
     "PmxStructuralTransactionPreviewResult",
     "preview_structural_transaction",
+    "apply_structural_transaction",
 )

@@ -109,7 +109,7 @@ assert '_serialize_structural_transaction' not in transaction.__all__
 assert not hasattr(mmd_registry, '_serialize_structural_transaction')
 assert not hasattr(pmx, '_serialize_structural_transaction')
 assert not hasattr(services, '_serialize_structural_transaction')
-assert not hasattr(transaction, 'apply_structural_transaction')
+assert hasattr(transaction, 'apply_structural_transaction')
 """
         environment = dict(__import__("os").environ)
         environment["PYTHONDONTWRITEBYTECODE"] = "1"

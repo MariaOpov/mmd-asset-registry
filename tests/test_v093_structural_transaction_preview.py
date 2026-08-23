@@ -103,6 +103,7 @@ class V093StructuralTransactionPreviewTests(unittest.TestCase):
                 "PmxStructuralTransactionRequest",
                 "PmxStructuralTransactionPreviewResult",
                 "preview_structural_transaction",
+                "apply_structural_transaction",
             ),
         )
         self.assertEqual(
@@ -113,7 +114,7 @@ class V093StructuralTransactionPreviewTests(unittest.TestCase):
             self.assertFalse(hasattr(mmd_registry, name), name)
             self.assertFalse(hasattr(services, name), name)
         self.assertFalse(hasattr(pmx, "PmxStructuralTransactionPreview"))
-        self.assertFalse(hasattr(transaction, "apply_structural_transaction"))
+        self.assertTrue(hasattr(transaction, "apply_structural_transaction"))
 
         result = preview_structural_transaction(
             _clean_document(),

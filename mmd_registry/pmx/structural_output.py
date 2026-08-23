@@ -405,6 +405,23 @@ class _PmxStructuralTransactionSerializationResult:
     output_sha256: str = field(init=False)
 
     def __post_init__(self) -> None:
+        self._derive_reparsed_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        preview: PmxStructuralTransactionPreview,
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxStructuralTransactionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "preview", preview)
+        result._derive_reparsed_evidence(stage_callback)
+        return result
+
+    def _derive_reparsed_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
         if not isinstance(self.preview, PmxStructuralTransactionPreview):
             raise TypeError(
                 "preview must be a PmxStructuralTransactionPreview instance."
@@ -412,7 +429,7 @@ class _PmxStructuralTransactionSerializationResult:
         preview, serialized, reparsed_certificate, output_sha256 = (
             _derive_reparsed_structural_serialization(
                 lambda: self.preview,
-                None,
+                stage_callback,
             )
         )
         if preview is not self.preview:
@@ -437,6 +454,23 @@ class _PmxVerifiedStructuralTransactionSerializationResult:
     )
 
     def __post_init__(self) -> None:
+        self._require_semantic_equality(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        serialization: _PmxStructuralTransactionSerializationResult,
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxVerifiedStructuralTransactionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "serialization", serialization)
+        result._require_semantic_equality(stage_callback)
+        return result
+
+    def _require_semantic_equality(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
         if not isinstance(
             self.serialization,
             _PmxStructuralTransactionSerializationResult,
@@ -444,6 +478,7 @@ class _PmxVerifiedStructuralTransactionSerializationResult:
             raise TypeError(
                 "serialization must be a transaction serialization result."
             )
+        _notify_structural_stage(stage_callback, "semantic_compare")
         _require_canonical_structural_document_equality(
             self.serialization.preview.certificate,
             self.serialization.reparsed_certificate,

@@ -52,6 +52,7 @@ PUBLIC_TRANSACTION_SURFACE = (
     "PmxStructuralTransactionRequest",
     "PmxStructuralTransactionPreviewResult",
     "preview_structural_transaction",
+    "apply_structural_transaction",
 )
 
 
@@ -118,7 +119,7 @@ import {TRANSACTION_MODULE_NAME} as transaction
 assert {OUTPUT_MODULE_NAME!r} not in sys.modules
 assert hasattr(transaction, '_write_structural_transaction')
 assert '_write_structural_transaction' not in transaction.__all__
-assert not hasattr(transaction, 'apply_structural_transaction')
+assert hasattr(transaction, 'apply_structural_transaction')
 assert not hasattr(mmd_registry, 'apply_structural_transaction')
 assert not hasattr(pmx, 'apply_structural_transaction')
 assert not hasattr(services, 'apply_structural_transaction')
@@ -512,7 +513,7 @@ assert signature.return_annotation == 'PmxStructuralWriteResult'
 
         self.assertEqual(transaction.__all__, PUBLIC_TRANSACTION_SURFACE)
         self.assertNotIn("_write_structural_transaction", transaction.__all__)
-        self.assertFalse(hasattr(transaction, "apply_structural_transaction"))
+        self.assertTrue(hasattr(transaction, "apply_structural_transaction"))
         self.assertFalse(hasattr(services, "apply_structural_transaction"))
         self.assertFalse(hasattr(mmd_registry, "apply_structural_transaction"))
         self.assertFalse(hasattr(pmx, "apply_structural_transaction"))

@@ -80,15 +80,13 @@ class V093StructuralTransactionModelTests(unittest.TestCase):
                 "PmxStructuralTransactionRequest",
                 "PmxStructuralTransactionPreviewResult",
                 "preview_structural_transaction",
+                "apply_structural_transaction",
             ),
         )
         for name in transaction.__all__:
             self.assertTrue(hasattr(transaction, name), name)
 
-        for forbidden in (
-            "apply_structural_transaction",
-            "PmxStructuralTransactionExecutionResult",
-        ):
+        for forbidden in ("PmxStructuralTransactionExecutionResult",):
             self.assertFalse(hasattr(transaction, forbidden), forbidden)
 
     def test_operation_union_reuses_exact_released_dto_identities(self) -> None:
@@ -208,6 +206,7 @@ class V093StructuralTransactionModelTests(unittest.TestCase):
                 "    'PmxStructuralTransactionRequest',",
                 "    'PmxStructuralTransactionPreviewResult',",
                 "    'preview_structural_transaction',",
+                "    'apply_structural_transaction',",
                 ")",
                 "assert not hasattr(services, 'PmxStructuralTransactionRequest')",
                 "assert not hasattr(mmd_registry, 'PmxStructuralTransactionRequest')",

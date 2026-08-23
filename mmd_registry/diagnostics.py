@@ -36,6 +36,7 @@ class PmxServiceOperation(StrEnum):
     PREVIEW_STRUCTURAL_EDIT = "preview_structural_edit"
     APPLY_STRUCTURAL_EDIT = "apply_structural_edit"
     PREVIEW_STRUCTURAL_TRANSACTION = "preview_structural_transaction"
+    APPLY_STRUCTURAL_TRANSACTION = "apply_structural_transaction"
 
 
 class PmxServiceDiagnosticCode(StrEnum):
@@ -211,7 +212,10 @@ def diagnostic_from_service_error(
             "Structural preview failed reference-safety validation.",
         )
 
-    if operation is PmxServiceOperation.APPLY_STRUCTURAL_EDIT:
+    if operation in (
+        PmxServiceOperation.APPLY_STRUCTURAL_EDIT,
+        PmxServiceOperation.APPLY_STRUCTURAL_TRANSACTION,
+    ):
         # Keep the structural-output dependency lazy so importing the public
         # diagnostics/service namespaces does not load the writer kernel.
         from mmd_registry.pmx.structural_output import (

@@ -121,7 +121,7 @@ assert '_verify_structural_transaction_serialization' not in transaction.__all__
 assert not hasattr(mmd_registry, '_verify_structural_transaction_serialization')
 assert not hasattr(pmx, '_verify_structural_transaction_serialization')
 assert not hasattr(services, '_verify_structural_transaction_serialization')
-assert not hasattr(transaction, 'apply_structural_transaction')
+assert hasattr(transaction, 'apply_structural_transaction')
 """
         environment = dict(os.environ)
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -358,6 +358,7 @@ assert not hasattr(transaction, 'apply_structural_transaction')
             "PmxStructuralTransactionRequest",
             "PmxStructuralTransactionPreviewResult",
             "preview_structural_transaction",
+            "apply_structural_transaction",
         )
         plan = transaction._plan_structural_transaction(
             _clean_document(),
@@ -365,7 +366,7 @@ assert not hasattr(transaction, 'apply_structural_transaction')
         )
 
         self.assertEqual(transaction.__all__, public_surface)
-        self.assertFalse(hasattr(transaction, "apply_structural_transaction"))
+        self.assertTrue(hasattr(transaction, "apply_structural_transaction"))
         self.assertFalse(hasattr(services, "apply_structural_transaction"))
         self.assertFalse(hasattr(mmd_registry, "apply_structural_transaction"))
         self.assertEqual(plan.plan_sha256, NOOP_PLAN_SHA256)

@@ -51,6 +51,7 @@ PUBLIC_TRANSACTION_SURFACE = (
     "PmxStructuralTransactionRequest",
     "PmxStructuralTransactionPreviewResult",
     "preview_structural_transaction",
+    "apply_structural_transaction",
 )
 NOOP_PLAN_SHA256 = (
     "9640b9df4b009c6f5e6688cdf7ea6385a56446abcdd6964e6783b7387441d77b"
@@ -266,7 +267,7 @@ class V093StructuralTransactionExecutionFoundationTests(unittest.TestCase):
     ) -> None:
         transaction = importlib.import_module(TRANSACTION_MODULE_NAME)
         self.assertEqual(transaction.__all__, PUBLIC_TRANSACTION_SURFACE)
-        self.assertFalse(hasattr(transaction, "apply_structural_transaction"))
+        self.assertTrue(hasattr(transaction, "apply_structural_transaction"))
         self.assertFalse(hasattr(services, "apply_structural_transaction"))
         self.assertFalse(hasattr(mmd_registry, "apply_structural_transaction"))
 

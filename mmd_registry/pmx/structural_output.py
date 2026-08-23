@@ -40,6 +40,12 @@ equality covers every header, model-information, geometry, texture, material,
 bone, morph, display, physics, soft-body, and trailing-data field.  This layer
 still cannot publish; CP21 owns that authority.
 
+CP21 admits only that private CP20 wrapper to the existing structural output
+transaction.  The mature v0.8 kernel still owns path resolution, temporary-file
+hashing, source/destination revalidation, atomic no-clobber or overwrite, and
+failure cleanup.  The unverified CP19 result remains ineligible for publication,
+and a committed result is constructed only after the kernel returns success.
+
 Only then may those verified bytes be passed to the reused v0.8 atomic output
 kernel. Direct write-result construction is intentionally blocked so ordinary
 callers use the supported successful-commit path. This is an API-integrity
@@ -462,6 +468,27 @@ class _PmxVerifiedStructuralTransactionSerializationResult:
     @property
     def output_size_bytes(self) -> int:
         return self.serialization.output_size_bytes
+
+    @property
+    def status(self) -> str:
+        return self.preview.status
+
+    def to_dict(self) -> dict[str, object]:
+        """Return deterministic verified transaction serialization evidence."""
+
+        report = _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
+        plan = report["plan"]
+        if not isinstance(plan, dict):
+            raise AssertionError("transaction plan evidence must be a dictionary.")
+        source = plan["source"]
+        if not isinstance(source, dict):
+            raise AssertionError("transaction source evidence must be a dictionary.")
+        report["source"] = dict(source)
+        return report
 
 
 @dataclass(frozen=True, slots=True)
@@ -1233,6 +1260,7 @@ class PmxStructuralWriteResult:
     source_size_bytes: int
     serialization: (
         PmxStructuralSerializationResult
+        | _PmxVerifiedStructuralTransactionSerializationResult
         | _PmxTextureInsertionSerializationResult
         | _PmxMaterialInsertionSerializationResult
         | _PmxBoneInsertionSerializationResult
@@ -1259,6 +1287,7 @@ class PmxStructuralWriteResult:
         source_size_bytes: int,
         serialization: (
             PmxStructuralSerializationResult
+            | _PmxVerifiedStructuralTransactionSerializationResult
             | _PmxTextureInsertionSerializationResult
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
@@ -1281,6 +1310,7 @@ class PmxStructuralWriteResult:
             serialization,
             (
                 PmxStructuralSerializationResult,
+                _PmxVerifiedStructuralTransactionSerializationResult,
                 _PmxTextureInsertionSerializationResult,
                 _PmxMaterialInsertionSerializationResult,
                 _PmxBoneInsertionSerializationResult,
@@ -1366,6 +1396,7 @@ def _write_verified_structural_transaction(
         [PmxDocument, _StructuralStageCallback | None],
         (
             PmxStructuralSerializationResult
+            | _PmxVerifiedStructuralTransactionSerializationResult
             | _PmxTextureInsertionSerializationResult
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
@@ -1413,6 +1444,7 @@ def _write_verified_structural_transaction(
         serialization,
         (
             PmxStructuralSerializationResult,
+            _PmxVerifiedStructuralTransactionSerializationResult,
             _PmxTextureInsertionSerializationResult,
             _PmxMaterialInsertionSerializationResult,
             _PmxBoneInsertionSerializationResult,

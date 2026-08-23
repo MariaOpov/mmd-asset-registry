@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
 from mmd_registry.diagnostics import (
@@ -84,6 +85,7 @@ from mmd_registry.services.structural_vertex import (
 
 if TYPE_CHECKING:
     from mmd_registry.pmx.structural_output import (
+        PmxStructuralWriteResult,
         _PmxStructuralTransactionSerializationResult,
         _PmxVerifiedStructuralTransactionSerializationResult,
     )
@@ -1061,6 +1063,36 @@ def _verify_structural_transaction_serialization(
 
     return _PmxVerifiedStructuralTransactionSerializationResult(
         _serialize_structural_transaction(document, request)
+    )
+
+
+def _write_structural_transaction(
+    input_path: str | Path,
+    output_path: str | Path,
+    request: PmxStructuralTransactionRequest,
+    *,
+    overwrite: bool = False,
+) -> PmxStructuralWriteResult:
+    """Atomically publish only CP20-verified transaction serialization."""
+
+    if not isinstance(request, PmxStructuralTransactionRequest):
+        raise TypeError(
+            "request must be a PmxStructuralTransactionRequest instance."
+        )
+    if not isinstance(overwrite, bool):
+        raise TypeError("overwrite must be a boolean.")
+
+    from mmd_registry.pmx.structural_output import (
+        _write_verified_structural_transaction,
+    )
+
+    return _write_verified_structural_transaction(
+        input_path,
+        output_path,
+        lambda document, _stage_callback: (
+            _verify_structural_transaction_serialization(document, request)
+        ),
+        overwrite=overwrite,
     )
 
 

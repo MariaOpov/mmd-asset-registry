@@ -920,6 +920,113 @@ def _service_error(error: Exception) -> PmxServiceError:
     return PmxServiceError(diagnostic)
 
 
+def _plan_structural_transaction(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+) -> PmxStructuralTransactionPreview:
+    """Build the sole typed plan shared by preview and future execution."""
+
+    if not isinstance(document, PmxDocument):
+        raise TypeError("document must be a PmxDocument instance.")
+    if not isinstance(request, PmxStructuralTransactionRequest):
+        raise TypeError(
+            "request must be a PmxStructuralTransactionRequest instance."
+        )
+    try:
+        source_certificate = PmxStructuralInvariantCertificate(
+            document=document
+        )
+    except (PmxValidationError, PmxStructuralInvariantError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "structural_certification"
+        ) from error
+
+    try:
+        reference_composition, reference_descriptors = _build_composition(
+            document,
+            request,
+            index_widths=_REFERENCE_PLANNING_INDEX_WIDTHS,
+        )
+    except PmxStructuralTransactionPlacementError as error:
+        raise PmxStructuralTransactionPreviewError(
+            "transaction_normalization"
+        ) from error
+    except PmxStructuralTransactionCapacityPreflightError as error:
+        raise PmxStructuralTransactionPreviewError(
+            "capacity_preflight"
+        ) from error
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "transaction_normalization"
+        ) from error
+
+    try:
+        reference_request, reference_local_references = _resolve_operations(
+            request,
+            reference_composition,
+        )
+        _preflight_existing_references(
+            source_certificate,
+            reference_composition,
+        )
+    except PmxStructuralTransactionPreviewError:
+        raise
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "reference_resolution"
+        ) from error
+
+    try:
+        composition, descriptors = _build_composition(document, request)
+    except PmxStructuralTransactionCapacityPreflightError as error:
+        raise PmxStructuralTransactionPreviewError(
+            "capacity_preflight"
+        ) from error
+    except PmxStructuralTransactionPlacementError as error:
+        raise PmxStructuralTransactionPreviewError(
+            "transaction_normalization"
+        ) from error
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "transaction_normalization"
+        ) from error
+
+    try:
+        resolved_request, local_references = _resolve_operations(
+            request,
+            composition,
+        )
+    except PmxStructuralTransactionPreviewError:
+        raise
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "reference_resolution"
+        ) from error
+    if (
+        descriptors != reference_descriptors
+        or resolved_request != reference_request
+        or local_references != reference_local_references
+    ):
+        raise AssertionError(
+            "reference planning changed under declared capacity widths."
+        )
+
+    try:
+        payloads = _build_payloads(resolved_request)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPreviewError(
+            "capacity_preflight"
+        ) from error
+
+    return preview_pmx_structural_transaction(
+        document,
+        composition,
+        descriptors,
+        payloads,
+        local_references,
+    )
+
+
 def preview_structural_transaction(
     document: PmxDocument,
     request: PmxStructuralTransactionRequest,
@@ -927,106 +1034,8 @@ def preview_structural_transaction(
     """Preview one bounded transaction without filesystem access or publication."""
 
     try:
-        if not isinstance(document, PmxDocument):
-            raise TypeError("document must be a PmxDocument instance.")
-        if not isinstance(request, PmxStructuralTransactionRequest):
-            raise TypeError(
-                "request must be a PmxStructuralTransactionRequest instance."
-            )
-        try:
-            source_certificate = PmxStructuralInvariantCertificate(
-                document=document
-            )
-        except (PmxValidationError, PmxStructuralInvariantError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "structural_certification"
-            ) from error
-
-        try:
-            reference_composition, reference_descriptors = _build_composition(
-                document,
-                request,
-                index_widths=_REFERENCE_PLANNING_INDEX_WIDTHS,
-            )
-        except PmxStructuralTransactionPlacementError as error:
-            raise PmxStructuralTransactionPreviewError(
-                "transaction_normalization"
-            ) from error
-        except PmxStructuralTransactionCapacityPreflightError as error:
-            raise PmxStructuralTransactionPreviewError(
-                "capacity_preflight"
-            ) from error
-        except (TypeError, ValueError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "transaction_normalization"
-            ) from error
-
-        try:
-            reference_request, reference_local_references = _resolve_operations(
-                request,
-                reference_composition,
-            )
-            _preflight_existing_references(
-                source_certificate,
-                reference_composition,
-            )
-        except PmxStructuralTransactionPreviewError:
-            raise
-        except (TypeError, ValueError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "reference_resolution"
-            ) from error
-
-        try:
-            composition, descriptors = _build_composition(document, request)
-        except PmxStructuralTransactionCapacityPreflightError as error:
-            raise PmxStructuralTransactionPreviewError(
-                "capacity_preflight"
-            ) from error
-        except PmxStructuralTransactionPlacementError as error:
-            raise PmxStructuralTransactionPreviewError(
-                "transaction_normalization"
-            ) from error
-        except (TypeError, ValueError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "transaction_normalization"
-            ) from error
-
-        try:
-            resolved_request, local_references = _resolve_operations(
-                request,
-                composition,
-            )
-        except PmxStructuralTransactionPreviewError:
-            raise
-        except (TypeError, ValueError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "reference_resolution"
-            ) from error
-        if (
-            descriptors != reference_descriptors
-            or resolved_request != reference_request
-            or local_references != reference_local_references
-        ):
-            raise AssertionError(
-                "reference planning changed under declared capacity widths."
-            )
-
-        try:
-            payloads = _build_payloads(resolved_request)
-        except (TypeError, ValueError) as error:
-            raise PmxStructuralTransactionPreviewError(
-                "capacity_preflight"
-            ) from error
-
         return PmxStructuralTransactionPreviewResult(
-            preview_pmx_structural_transaction(
-                document,
-                composition,
-                descriptors,
-                payloads,
-                local_references,
-            )
+            _plan_structural_transaction(document, request)
         )
     except Exception as error:
         failure = _service_error(error)

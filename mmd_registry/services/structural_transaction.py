@@ -85,6 +85,7 @@ from mmd_registry.services.structural_vertex import (
 if TYPE_CHECKING:
     from mmd_registry.pmx.structural_output import (
         _PmxStructuralTransactionSerializationResult,
+        _PmxVerifiedStructuralTransactionSerializationResult,
     )
 
 
@@ -1045,6 +1046,21 @@ def _serialize_structural_transaction(
 
     return _PmxStructuralTransactionSerializationResult(
         _plan_structural_transaction(document, request)
+    )
+
+
+def _verify_structural_transaction_serialization(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+) -> _PmxVerifiedStructuralTransactionSerializationResult:
+    """Prove CP20 whole-document equality without publication authority."""
+
+    from mmd_registry.pmx.structural_output import (
+        _PmxVerifiedStructuralTransactionSerializationResult,
+    )
+
+    return _PmxVerifiedStructuralTransactionSerializationResult(
+        _serialize_structural_transaction(document, request)
     )
 
 

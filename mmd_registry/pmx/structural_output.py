@@ -33,6 +33,13 @@ semantic comparison and cannot reach the publication kernel; CP20 and CP21 own
 those later authorities.  Existing legacy results continue through comparison
 and retain their exact write behavior.
 
+CP20 wraps that CP19 result in a distinct private verified type only after the
+two independently certified whole ``PmxDocument`` values compare equal.  The
+immutable typed document is the canonical semantic model, so direct document
+equality covers every header, model-information, geometry, texture, material,
+bone, morph, display, physics, soft-body, and trailing-data field.  This layer
+still cannot publish; CP21 owns that authority.
+
 Only then may those verified bytes be passed to the reused v0.8 atomic output
 kernel. Direct write-result construction is intentionally blocked so ordinary
 callers use the supported successful-commit path. This is an API-integrity
@@ -230,6 +237,32 @@ def _derive_reparsed_structural_serialization(
     )
 
 
+def _require_canonical_structural_document_equality(
+    intended_certificate: PmxStructuralInvariantCertificate,
+    reparsed_certificate: PmxStructuralInvariantCertificate,
+) -> None:
+    """Require equality of every field in two independently certified documents."""
+
+    if not isinstance(
+        intended_certificate,
+        PmxStructuralInvariantCertificate,
+    ):
+        raise TypeError(
+            "intended_certificate must be a PmxStructuralInvariantCertificate."
+        )
+    if not isinstance(
+        reparsed_certificate,
+        PmxStructuralInvariantCertificate,
+    ):
+        raise TypeError(
+            "reparsed_certificate must be a PmxStructuralInvariantCertificate."
+        )
+    if reparsed_certificate.document != intended_certificate.document:
+        raise PmxStructuralOutputVerificationError(
+            "serialized structural PMX does not match the intended certified document."
+        )
+
+
 def _derive_verified_structural_serialization(
     preview_factory: Callable[[], _StructuralPreview],
     stage_callback: _StructuralStageCallback | None,
@@ -248,10 +281,10 @@ def _derive_verified_structural_serialization(
         )
     )
     _notify_structural_stage(stage_callback, "semantic_compare")
-    if reparsed_certificate.document != preview.certificate.document:
-        raise PmxStructuralOutputVerificationError(
-            "serialized structural PMX does not match the intended certified document."
-        )
+    _require_canonical_structural_document_equality(
+        preview.certificate,
+        reparsed_certificate,
+    )
     return preview, serialized, reparsed_certificate, output_sha256
 
 
@@ -387,6 +420,48 @@ class _PmxStructuralTransactionSerializationResult:
     @property
     def output_size_bytes(self) -> int:
         return len(self.serialized_bytes)
+
+
+@dataclass(frozen=True, slots=True)
+class _PmxVerifiedStructuralTransactionSerializationResult:
+    """Private CP20 result whose complete reparsed semantics equal its intent."""
+
+    serialization: _PmxStructuralTransactionSerializationResult = field(
+        repr=False
+    )
+
+    def __post_init__(self) -> None:
+        if not isinstance(
+            self.serialization,
+            _PmxStructuralTransactionSerializationResult,
+        ):
+            raise TypeError(
+                "serialization must be a transaction serialization result."
+            )
+        _require_canonical_structural_document_equality(
+            self.serialization.preview.certificate,
+            self.serialization.reparsed_certificate,
+        )
+
+    @property
+    def preview(self) -> PmxStructuralTransactionPreview:
+        return self.serialization.preview
+
+    @property
+    def serialized_bytes(self) -> bytes:
+        return self.serialization.serialized_bytes
+
+    @property
+    def reparsed_certificate(self) -> PmxStructuralInvariantCertificate:
+        return self.serialization.reparsed_certificate
+
+    @property
+    def output_sha256(self) -> str:
+        return self.serialization.output_sha256
+
+    @property
+    def output_size_bytes(self) -> int:
+        return self.serialization.output_size_bytes
 
 
 @dataclass(frozen=True, slots=True)

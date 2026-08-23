@@ -35,6 +35,7 @@ class PmxServiceOperation(StrEnum):
     APPLY_EDIT = "apply_edit"
     PREVIEW_STRUCTURAL_EDIT = "preview_structural_edit"
     APPLY_STRUCTURAL_EDIT = "apply_structural_edit"
+    PREVIEW_STRUCTURAL_TRANSACTION = "preview_structural_transaction"
 
 
 class PmxServiceDiagnosticCode(StrEnum):

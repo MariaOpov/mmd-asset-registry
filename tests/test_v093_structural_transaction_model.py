@@ -78,15 +78,15 @@ class V093StructuralTransactionModelTests(unittest.TestCase):
             (
                 "PmxStructuralTransactionOperation",
                 "PmxStructuralTransactionRequest",
+                "PmxStructuralTransactionPreviewResult",
+                "preview_structural_transaction",
             ),
         )
         for name in transaction.__all__:
             self.assertTrue(hasattr(transaction, name), name)
 
         for forbidden in (
-            "preview_structural_transaction",
             "apply_structural_transaction",
-            "PmxStructuralTransactionPreviewResult",
             "PmxStructuralTransactionExecutionResult",
         ):
             self.assertFalse(hasattr(transaction, forbidden), forbidden)
@@ -206,6 +206,8 @@ class V093StructuralTransactionModelTests(unittest.TestCase):
                 "assert transaction.__all__ == (",
                 "    'PmxStructuralTransactionOperation',",
                 "    'PmxStructuralTransactionRequest',",
+                "    'PmxStructuralTransactionPreviewResult',",
+                "    'preview_structural_transaction',",
                 ")",
                 "assert not hasattr(services, 'PmxStructuralTransactionRequest')",
                 "assert not hasattr(mmd_registry, 'PmxStructuralTransactionRequest')",

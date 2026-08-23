@@ -305,7 +305,7 @@ class V093StructuralTransactionInsertDeleteTests(unittest.TestCase):
                 operations=operations,
             )
 
-    def test_delete_plus_reorder_remains_deferred_to_cp13(self) -> None:
+    def test_delete_plus_reorder_preserves_deleted_anchor_blocker(self) -> None:
         target_kind = PmxReferenceTargetKind.RIGID_BODY
         transform = _transform(
             target_kind,
@@ -315,17 +315,17 @@ class V093StructuralTransactionInsertDeleteTests(unittest.TestCase):
         self.assertTrue(transform.has_deletions)
         self.assertTrue(transform.has_reorder)
 
+        operation = _operation(
+            0,
+            target_kind,
+            position=PmxStructuralInsertPosition.insert_before(1),
+        )
         placement_error = _placement_module().PmxStructuralTransactionPlacementError
         with self.assertRaisesRegex(
             placement_error,
-            r"delete-plus-reorder is deferred to CP13",
+            r"insert_before anchor rigid_body\[1\] is deleted",
         ):
-            _plan(
-                transform,
-                operations=(
-                    _operation(0, target_kind),
-                ),
-            )
+            _plan(transform, operations=(operation,))
 
 
 if __name__ == "__main__":

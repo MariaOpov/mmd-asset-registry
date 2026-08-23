@@ -1,15 +1,15 @@
 """Internal insertion placement over structural survivor transforms.
 
-This CP11/CP12 layer composes one released ``PmxCollectionTransform`` with
+This CP11-CP13 layer composes one released ``PmxCollectionTransform`` with
 validated CP10 insertion operations. Source anchors follow their named
 surviving old records through the transform's final survivor order. The result
 is exactly one insertion-capable ``PmxIndexRemap``; no independent transform
 and insertion maps are retained.
 
-CP12 permits deletion-only survivor transforms and blocks deleted insertion
-anchors. A transform that both deletes and reorders remains deferred to CP13.
-The planner accepts no PMX payload, does not mutate a document, and performs no
-materialization or filesystem I/O.
+CP12 blocks deleted insertion anchors and CP13 accepts the released complete
+survivor sequence when deletion and reorder coexist. The planner accepts no
+PMX payload, does not mutate a document, and performs no materialization or
+filesystem I/O.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def _require_nonnegative_plain_int(value: object, field_name: str) -> int:
 
 
 class PmxStructuralTransactionPlacementError(ValueError):
-    """Raised when CP11/CP12 cannot derive one safe combined placement."""
+    """Raised when CP11-CP13 cannot derive one safe combined placement."""
 
 
 def _validate_operations(
@@ -165,12 +165,6 @@ class PmxStructuralTransactionCollectionPlacement:
     def __post_init__(self) -> None:
         if not isinstance(self.transform, PmxCollectionTransform):
             raise TypeError("transform must be a PmxCollectionTransform value.")
-        if self.transform.has_deletions and self.transform.has_reorder:
-            raise PmxStructuralTransactionPlacementError(
-                "CP12 insert-plus-delete placement does not authorize a transform "
-                "that also reorders survivors; delete-plus-reorder is deferred "
-                "to CP13."
-            )
         _validate_operations(self.transform, self.operations)
 
         capacity = analyze_structural_capacity(
@@ -281,7 +275,7 @@ def plan_structural_transaction_collection_placement(
     index_width: int,
     operations: tuple[PmxStructuralTransactionInsertionOperation, ...] = (),
 ) -> PmxStructuralTransactionCollectionPlacement:
-    """Compose source-anchored insertions with one CP11/CP12 transform."""
+    """Compose source-anchored insertions with one CP11-CP13 transform."""
 
     return PmxStructuralTransactionCollectionPlacement(
         transform=transform,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 
@@ -16,10 +17,12 @@ _MATERIALIZATION_TIE_ORDER = (
     PmxReferenceTargetKind.RIGID_BODY,
     PmxReferenceTargetKind.MORPH,
 )
-_MATERIALIZATION_RANK = {
-    target_kind: rank
-    for rank, target_kind in enumerate(_MATERIALIZATION_TIE_ORDER)
-}
+_MATERIALIZATION_RANK = MappingProxyType(
+    {
+        target_kind: rank
+        for rank, target_kind in enumerate(_MATERIALIZATION_TIE_ORDER)
+    }
+)
 _SEMANTIC_EDGE_PAIRS = (
     (PmxReferenceTargetKind.TEXTURE, PmxReferenceTargetKind.MATERIAL),
     (PmxReferenceTargetKind.BONE, PmxReferenceTargetKind.VERTEX),

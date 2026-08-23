@@ -9,6 +9,7 @@ transform or PMX payload and performs no document mutation or materialization.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from mmd_registry.pmx.document import VALID_PMX_INDEX_SIZES
 from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
@@ -32,9 +33,12 @@ from mmd_registry.pmx.structural_transaction_reference import (
 
 
 _TARGET_KIND_ORDER = tuple(PmxReferenceTargetKind)
-_TARGET_KIND_RANK = {
-    target_kind: rank for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
-}
+_TARGET_KIND_RANK = MappingProxyType(
+    {
+        target_kind: rank
+        for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
+    }
+)
 
 
 def _require_nonnegative_plain_int(value: object, field_name: str) -> int:

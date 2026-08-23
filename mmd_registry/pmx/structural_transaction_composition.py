@@ -11,6 +11,7 @@ document, or perform filesystem I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from mmd_registry.pmx.collection_transform import (
     PmxCollectionTransform,
@@ -41,9 +42,12 @@ from mmd_registry.pmx.structural_transaction_reference import (
 
 
 _TARGET_KIND_ORDER = tuple(PmxReferenceTargetKind)
-_TARGET_KIND_RANK = {
-    target_kind: rank for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
-}
+_TARGET_KIND_RANK = MappingProxyType(
+    {
+        target_kind: rank
+        for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
+    }
+)
 
 
 def _require_nonnegative_plain_int(value: object, field_name: str) -> int:

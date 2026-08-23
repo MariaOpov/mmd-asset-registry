@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import json
+from types import MappingProxyType
 from typing import Final
 
 from mmd_registry.pmx.document import PmxDocument
@@ -67,29 +68,39 @@ from mmd_registry.pmx.writer import serialize_pmx
 
 _PLAN_SCHEMA: Final[str] = "mmd_registry.structural_transaction.plan.v1"
 _TARGET_KIND_ORDER = tuple(PmxReferenceTargetKind)
-_TARGET_KIND_RANK = {
-    target_kind: rank for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
-}
-_SOURCE_SECTION_RANK = {
-    section: rank for rank, section in enumerate(PmxReferenceSourceSection)
-}
-_OWNER_TARGETS = {
-    PmxReferenceSourceSection.VERTICES: PmxReferenceTargetKind.VERTEX,
-    PmxReferenceSourceSection.MATERIALS: PmxReferenceTargetKind.MATERIAL,
-    PmxReferenceSourceSection.BONES: PmxReferenceTargetKind.BONE,
-    PmxReferenceSourceSection.MORPHS: PmxReferenceTargetKind.MORPH,
-    PmxReferenceSourceSection.RIGID_BODIES: (
-        PmxReferenceTargetKind.RIGID_BODY
-    ),
-}
-_STAGE_PROVENANCE = {
-    "transaction_normalization": "transaction_plan",
-    "reference_resolution": "transaction_plan",
-    "dependency_resolution": "transaction_plan",
-    "capacity_preflight": "transaction_plan",
-    "transform": "structural_pipeline",
-    "structural_certification": "structural_pipeline",
-}
+_TARGET_KIND_RANK = MappingProxyType(
+    {
+        target_kind: rank
+        for rank, target_kind in enumerate(_TARGET_KIND_ORDER)
+    }
+)
+_SOURCE_SECTION_RANK = MappingProxyType(
+    {
+        section: rank
+        for rank, section in enumerate(PmxReferenceSourceSection)
+    }
+)
+_OWNER_TARGETS = MappingProxyType(
+    {
+        PmxReferenceSourceSection.VERTICES: PmxReferenceTargetKind.VERTEX,
+        PmxReferenceSourceSection.MATERIALS: PmxReferenceTargetKind.MATERIAL,
+        PmxReferenceSourceSection.BONES: PmxReferenceTargetKind.BONE,
+        PmxReferenceSourceSection.MORPHS: PmxReferenceTargetKind.MORPH,
+        PmxReferenceSourceSection.RIGID_BODIES: (
+            PmxReferenceTargetKind.RIGID_BODY
+        ),
+    }
+)
+_STAGE_PROVENANCE = MappingProxyType(
+    {
+        "transaction_normalization": "transaction_plan",
+        "reference_resolution": "transaction_plan",
+        "dependency_resolution": "transaction_plan",
+        "capacity_preflight": "transaction_plan",
+        "transform": "structural_pipeline",
+        "structural_certification": "structural_pipeline",
+    }
+)
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -337,14 +348,16 @@ class _PayloadPreflightDocumentView:
     rigid_bodies: object
 
 
-_TARGET_COLLECTION_ATTRIBUTES = {
-    PmxReferenceTargetKind.VERTEX: "vertices",
-    PmxReferenceTargetKind.TEXTURE: "texture_paths",
-    PmxReferenceTargetKind.MATERIAL: "materials",
-    PmxReferenceTargetKind.BONE: "bones",
-    PmxReferenceTargetKind.MORPH: "morphs",
-    PmxReferenceTargetKind.RIGID_BODY: "rigid_bodies",
-}
+_TARGET_COLLECTION_ATTRIBUTES = MappingProxyType(
+    {
+        PmxReferenceTargetKind.VERTEX: "vertices",
+        PmxReferenceTargetKind.TEXTURE: "texture_paths",
+        PmxReferenceTargetKind.MATERIAL: "materials",
+        PmxReferenceTargetKind.BONE: "bones",
+        PmxReferenceTargetKind.MORPH: "morphs",
+        PmxReferenceTargetKind.RIGID_BODY: "rigid_bodies",
+    }
+)
 
 
 def _surviving_source_collection(

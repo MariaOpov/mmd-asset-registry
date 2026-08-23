@@ -1,10 +1,11 @@
 """Internal mixed-target composition for structural transactions.
 
 CP14 joins the released six-target transform and insertion primitives into one
-deterministic immutable planning value.  It reuses CP11-CP13 placement, CP08
-final-state reference resolution, and CP09 dependency evidence.  This layer
-does not translate public DTO payloads, perform CP15 whole-plan preflight,
-materialize a PMX document, or perform filesystem I/O.
+deterministic immutable planning value.  CP15 adds complete all-target capacity
+preflight without changing declared index widths.  The composition reuses
+CP11-CP13 placement, CP08 final-state reference resolution, and CP09 dependency
+evidence.  It does not translate public DTO payloads, materialize a PMX
+document, or perform filesystem I/O.
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ from mmd_registry.pmx.structural_transaction_insertion import (
 from mmd_registry.pmx.structural_transaction_placement import (
     PmxStructuralTransactionCollectionPlacement,
     plan_structural_transaction_collection_placement,
+)
+from mmd_registry.pmx.structural_transaction_preflight import (
+    PmxStructuralTransactionCapacityPreflight,
+    preflight_structural_transaction_capacity,
 )
 from mmd_registry.pmx.structural_transaction_reference import (
     PmxStructuralTransactionIdentityBinding,
@@ -140,6 +145,7 @@ class PmxStructuralTransactionComposition:
     identities: tuple[PmxStructuralTransactionIdentityBinding, ...] = field(
         init=False
     )
+    preflight: PmxStructuralTransactionCapacityPreflight = field(init=False)
     reference_resolver: PmxStructuralTransactionReferenceResolver = field(
         init=False,
         repr=False,
@@ -169,6 +175,13 @@ class PmxStructuralTransactionComposition:
                     f"{transform.kind.value} transform old_size must match "
                     "its captured source count."
                 )
+
+        preflight = preflight_structural_transaction_capacity(
+            source_counts=self.source_counts,
+            index_widths=self.index_widths,
+            transforms=self.transforms,
+            operations=self.operations,
+        )
 
         placements: list[PmxStructuralTransactionCollectionPlacement] = []
         for target_kind in _TARGET_KIND_ORDER:
@@ -242,6 +255,7 @@ class PmxStructuralTransactionComposition:
         object.__setattr__(self, "placements", tuple(placements))
         object.__setattr__(self, "bindings", bindings)
         object.__setattr__(self, "identities", identities)
+        object.__setattr__(self, "preflight", preflight)
         object.__setattr__(self, "reference_resolver", reference_resolver)
 
     @staticmethod

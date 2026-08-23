@@ -205,6 +205,7 @@ class V093StructuralTransactionMixedSixTargetTests(unittest.TestCase):
                 "placements",
                 "bindings",
                 "identities",
+                "preflight",
                 "reference_resolver",
             ),
         )
@@ -268,6 +269,17 @@ class V093StructuralTransactionMixedSixTargetTests(unittest.TestCase):
             tuple(PmxReferenceTargetKind),
         )
         self.assertEqual(plan.total_insert_count, 6)
+        self.assertEqual(
+            plan.preflight.final_counts,
+            (
+                (PmxReferenceTargetKind.VERTEX, 4),
+                (PmxReferenceTargetKind.TEXTURE, 4),
+                (PmxReferenceTargetKind.MATERIAL, 4),
+                (PmxReferenceTargetKind.BONE, 5),
+                (PmxReferenceTargetKind.MORPH, 3),
+                (PmxReferenceTargetKind.RIGID_BODY, 3),
+            ),
+        )
         expected_maps = {
             PmxReferenceTargetKind.VERTEX: ((2, None, 0, 3), (1,)),
             PmxReferenceTargetKind.TEXTURE: ((0, 1, 2), (3,)),

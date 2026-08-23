@@ -1,13 +1,15 @@
-"""Internal insert-plus-reorder placement for structural transactions.
+"""Internal insertion placement over structural survivor transforms.
 
-This CP11 layer composes one released reorder-only
-``PmxCollectionTransform`` with validated CP10 insertion operations. Source
-anchors follow their named surviving old records through the transform's final
-survivor order. The result is exactly one insertion-capable ``PmxIndexRemap``;
-no independent pre-reorder insertion map is retained.
+This CP11/CP12 layer composes one released ``PmxCollectionTransform`` with
+validated CP10 insertion operations. Source anchors follow their named
+surviving old records through the transform's final survivor order. The result
+is exactly one insertion-capable ``PmxIndexRemap``; no independent transform
+and insertion maps are retained.
 
-Deletion remains outside this checkpoint. The planner accepts no PMX payload,
-does not mutate a document, and performs no materialization or filesystem I/O.
+CP12 permits deletion-only survivor transforms and blocks deleted insertion
+anchors. A transform that both deletes and reorders remains deferred to CP13.
+The planner accepts no PMX payload, does not mutate a document, and performs no
+materialization or filesystem I/O.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ def _require_nonnegative_plain_int(value: object, field_name: str) -> int:
 
 
 class PmxStructuralTransactionPlacementError(ValueError):
-    """Raised when CP11 cannot derive one safe combined placement."""
+    """Raised when CP11/CP12 cannot derive one safe combined placement."""
 
 
 def _validate_operations(
@@ -76,6 +78,14 @@ def _validate_operations(
             )
         previous_ordinal = operation.request_ordinal
         operation.position.validate_for_source_size(transform.old_size)
+        if operation.position.mode is PmxStructuralInsertPositionMode.INSERT_BEFORE:
+            assert operation.position.source_index is not None
+            if transform.remap.target_for(operation.position.source_index) is None:
+                raise PmxStructuralTransactionPlacementError(
+                    "insert_before anchor "
+                    f"{transform.kind.value}[{operation.position.source_index}] "
+                    "is deleted by the same transaction."
+                )
 
         if operation.new_id is None:
             continue
@@ -155,9 +165,11 @@ class PmxStructuralTransactionCollectionPlacement:
     def __post_init__(self) -> None:
         if not isinstance(self.transform, PmxCollectionTransform):
             raise TypeError("transform must be a PmxCollectionTransform value.")
-        if self.transform.has_deletions:
+        if self.transform.has_deletions and self.transform.has_reorder:
             raise PmxStructuralTransactionPlacementError(
-                "CP11 insert-plus-reorder placement does not authorize deletion."
+                "CP12 insert-plus-delete placement does not authorize a transform "
+                "that also reorders survivors; delete-plus-reorder is deferred "
+                "to CP13."
             )
         _validate_operations(self.transform, self.operations)
 
@@ -269,7 +281,7 @@ def plan_structural_transaction_collection_placement(
     index_width: int,
     operations: tuple[PmxStructuralTransactionInsertionOperation, ...] = (),
 ) -> PmxStructuralTransactionCollectionPlacement:
-    """Compose source-anchored insertions with one reorder-only transform."""
+    """Compose source-anchored insertions with one CP11/CP12 transform."""
 
     return PmxStructuralTransactionCollectionPlacement(
         transform=transform,

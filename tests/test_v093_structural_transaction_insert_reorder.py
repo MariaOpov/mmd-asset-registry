@@ -355,7 +355,7 @@ class V093StructuralTransactionInsertReorderTests(unittest.TestCase):
                 operations=material_operations,
             )
 
-    def test_invalid_or_delete_capable_inputs_fail_closed(self) -> None:
+    def test_invalid_inputs_and_cp13_boundary_fail_closed(self) -> None:
         placement_module = _placement_module()
         placement_error = placement_module.PmxStructuralTransactionPlacementError
         texture_transform = _transform(
@@ -443,25 +443,16 @@ class V093StructuralTransactionInsertReorderTests(unittest.TestCase):
                 with self.assertRaisesRegex(error, message):
                     build()
 
-        delete_transform = _transform(
+        delete_and_reorder_transform = _transform(
             PmxReferenceTargetKind.TEXTURE,
-            (1,),
-            source_count=2,
+            (2, 0),
+            source_count=3,
         )
         with self.assertRaisesRegex(
             placement_error,
-            r"CP11.*does not authorize deletion",
+            r"delete-plus-reorder is deferred to CP13",
         ):
-            _plan(
-                delete_transform,
-                operations=(
-                    _operation(
-                        0,
-                        PmxReferenceTargetKind.TEXTURE,
-                        position=PmxStructuralInsertPosition.insert_before(1),
-                    ),
-                ),
-            )
+            _plan(delete_and_reorder_transform)
 
         plan = _plan(
             texture_transform,

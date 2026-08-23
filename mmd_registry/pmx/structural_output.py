@@ -18,15 +18,20 @@ service wrapper; this raw writer and its transaction helper remain implementatio
 details.
 
 This module does not resize index widths, repair documents, expose a CLI mutation
-command, or modify the certified preview contract. A structural serialization
-result exists
-only after:
+command, or modify the certified preview contract. An existing publishable
+structural serialization result exists only after:
 
 * CP17 produced a CP16-certified intended document;
 * deterministic ``serialize_pmx`` completed;
 * the bytes reparsed successfully;
 * the reparsed document independently passed CP16 certification; and
 * reparsed document equality matched the intended certified document exactly.
+
+CP19 adds one private transaction-only in-memory result that stops after the
+fresh reparse certificate.  It deliberately performs no intended/reparsed
+semantic comparison and cannot reach the publication kernel; CP20 and CP21 own
+those later authorities.  Existing legacy results continue through comparison
+and retain their exact write behavior.
 
 Only then may those verified bytes be passed to the reused v0.8 atomic output
 kernel. Direct write-result construction is intentionally blocked so ordinary
@@ -100,6 +105,9 @@ from mmd_registry.pmx.structural_texture_insertion import (
     PmxTextureInsertionPreview,
     preview_pmx_texture_insertions,
 )
+from mmd_registry.pmx.structural_transaction_preview import (
+    PmxStructuralTransactionPreview,
+)
 from mmd_registry.pmx.structural_vertex_insertion import (
     PmxVertexInsertionPayload,
     PmxVertexInsertionPreview,
@@ -151,10 +159,11 @@ _StructuralPreview = (
     | PmxRigidBodyInsertionPreview
     | PmxVertexInsertionPreview
     | PmxCoordinatedInsertionPreview
+    | PmxStructuralTransactionPreview
 )
 
 
-def _derive_verified_structural_serialization(
+def _derive_reparsed_structural_serialization(
     preview_factory: Callable[[], _StructuralPreview],
     stage_callback: _StructuralStageCallback | None,
 ) -> tuple[
@@ -163,7 +172,7 @@ def _derive_verified_structural_serialization(
     PmxStructuralInvariantCertificate,
     str,
 ]:
-    """Serialize one certified preview and independently verify its exact meaning."""
+    """Serialize, reparse, and independently certify one structural preview."""
 
     if not callable(preview_factory):
         raise TypeError("preview_factory must be callable.")
@@ -183,6 +192,7 @@ def _derive_verified_structural_serialization(
             PmxRigidBodyInsertionPreview,
             PmxVertexInsertionPreview,
             PmxCoordinatedInsertionPreview,
+            PmxStructuralTransactionPreview,
         ),
     ):
         raise TypeError(
@@ -212,18 +222,37 @@ def _derive_verified_structural_serialization(
             f"{error}"
         ) from error
 
-    _notify_structural_stage(stage_callback, "semantic_compare")
-    if reparsed_document != intended_document:
-        raise PmxStructuralOutputVerificationError(
-            "serialized structural PMX does not match the intended certified document."
-        )
-
     return (
         preview,
         serialized,
         reparsed_certificate,
         hashlib.sha256(serialized).hexdigest(),
     )
+
+
+def _derive_verified_structural_serialization(
+    preview_factory: Callable[[], _StructuralPreview],
+    stage_callback: _StructuralStageCallback | None,
+) -> tuple[
+    _StructuralPreview,
+    bytes,
+    PmxStructuralInvariantCertificate,
+    str,
+]:
+    """Serialize one certified preview and independently verify its exact meaning."""
+
+    preview, serialized, reparsed_certificate, output_sha256 = (
+        _derive_reparsed_structural_serialization(
+            preview_factory,
+            stage_callback,
+        )
+    )
+    _notify_structural_stage(stage_callback, "semantic_compare")
+    if reparsed_certificate.document != preview.certificate.document:
+        raise PmxStructuralOutputVerificationError(
+            "serialized structural PMX does not match the intended certified document."
+        )
+    return preview, serialized, reparsed_certificate, output_sha256
 
 
 def _verified_serialization_report(
@@ -325,6 +354,39 @@ class PmxStructuralSerializationResult:
             self.output_sha256,
             self.output_size_bytes,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _PmxStructuralTransactionSerializationResult:
+    """Private CP19 bytes and fresh certificate without semantic comparison."""
+
+    preview: PmxStructuralTransactionPreview
+    serialized_bytes: bytes = field(init=False, repr=False)
+    reparsed_certificate: PmxStructuralInvariantCertificate = field(init=False)
+    output_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.preview, PmxStructuralTransactionPreview):
+            raise TypeError(
+                "preview must be a PmxStructuralTransactionPreview instance."
+            )
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_reparsed_structural_serialization(
+                lambda: self.preview,
+                None,
+            )
+        )
+        if preview is not self.preview:
+            raise AssertionError(
+                "transaction serialization changed the planned preview."
+            )
+        object.__setattr__(self, "serialized_bytes", serialized)
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
+        object.__setattr__(self, "output_sha256", output_sha256)
+
+    @property
+    def output_size_bytes(self) -> int:
+        return len(self.serialized_bytes)
 
 
 @dataclass(frozen=True, slots=True)

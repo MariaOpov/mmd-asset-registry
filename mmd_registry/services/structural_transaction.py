@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 from mmd_registry.diagnostics import (
     PmxServiceDiagnostic,
@@ -80,6 +80,12 @@ from mmd_registry.services.structural_vertex import (
     PmxStructuralVertexQdef,
     PmxStructuralVertexSdef,
 )
+
+
+if TYPE_CHECKING:
+    from mmd_registry.pmx.structural_output import (
+        _PmxStructuralTransactionSerializationResult,
+    )
 
 
 PmxStructuralTransactionOperation: TypeAlias = (
@@ -1024,6 +1030,21 @@ def _plan_structural_transaction(
         descriptors,
         payloads,
         local_references,
+    )
+
+
+def _serialize_structural_transaction(
+    document: PmxDocument,
+    request: PmxStructuralTransactionRequest,
+) -> _PmxStructuralTransactionSerializationResult:
+    """Derive CP19 in-memory bytes from the sole transaction planner."""
+
+    from mmd_registry.pmx.structural_output import (
+        _PmxStructuralTransactionSerializationResult,
+    )
+
+    return _PmxStructuralTransactionSerializationResult(
+        _plan_structural_transaction(document, request)
     )
 
 

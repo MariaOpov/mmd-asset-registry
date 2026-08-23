@@ -113,7 +113,7 @@ class V093StructuralTransactionExecutionFoundationTests(unittest.TestCase):
         self.assertFalse(hasattr(services, "_plan_structural_transaction"))
         self.assertFalse(hasattr(pmx, "_plan_structural_transaction"))
 
-        source = inspect.getsource(transaction)
+        source = inspect.getsource(transaction._plan_structural_transaction)
         for forbidden in (
             "structural_output",
             "apply_structural_transaction",

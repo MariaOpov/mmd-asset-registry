@@ -41,7 +41,7 @@ diagnostic, or filesystem behavior.
 | PMX byte serialization | `mmd_registry/pmx/writer.py::serialize_pmx` | Existing deterministic writer authority. It validates the complete document before emitting bytes. |
 | Structural serialization and output transaction | `mmd_registry/pmx/structural_output.py` | Converges every legacy/single-target/coordinated path through preview, serialize, reparse, independent certification, semantic equality, and verified output commit. |
 | Filesystem safety and publication | private hooks in `mmd_registry/pmx/editing/output.py` | Existing shared authority for path resolution, alias/race checks, source re-verification, same-directory temporary files, atomic publication, and cleanup. |
-| Capability reporting | `mmd_registry/capabilities.py` | Reports the released v0.9.2 dimensions: structural preview, write, insertion, target kinds, and execution contract. No transaction capability exists yet. |
+| Capability reporting | `mmd_registry/capabilities.py` | Preserves the released v0.9.2 dimensions and, after CP27 installed-wheel validation, appends the transaction capability with a legacy-safe default. |
 
 ## 2. Public boundary and route selection
 
@@ -275,13 +275,17 @@ The released capability manifest reports:
 structural_preview = True
 structural_write = True
 structural_insert = True
+structural_transaction = True
 structural_contract = "reference_safe_execution"
 ```
 
 The six structural target kinds are derived from `PmxReferenceTargetKind`.
-CP03 does not add a `structural_transaction` field or reinterpret any existing
-capability. Any transaction capability decision remains reserved for the later
-contract and release gates.
+CP03 did not add or authorize a transaction capability. CP27 resolves that
+reserved decision after the transaction contract, safety, compatibility,
+private-runtime, and installed-wheel gates: the canonical manifest now reports
+`structural_transaction=True`. The new field is trailing and defaults to
+`False` for legacy direct construction. No existing capability is reinterpreted
+and no transaction API is promoted to an older root namespace.
 
 The public insertion vocabulary remains split by explicit submodule:
 

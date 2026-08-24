@@ -47,12 +47,13 @@ slotted, deterministic, independent from private runtime configuration, and
 contains only the PMX versions, encodings, index widths, deform and morph
 types, round-trip contract, texture portability, soft-body support, the three
 edit operations already implemented by v0.8.5, and the reviewed structural
-contract. The canonical v0.9.2 manifest reports preview, bounded structural
-write, and `structural_insert=True` support for the six target kinds under
+contract. The canonical v0.9.3 feature-branch manifest reports preview,
+bounded structural write, `structural_insert=True`, and
+`structural_transaction=True` support for the six target kinds under
 `reference_safe_execution`. The dataclass constructor keeps its legacy
-preview-only defaults and adds `structural_insert=False` as a trailing default,
-so callers that construct the manifest with the old argument shape remain
-compatible.
+preview-only defaults, keeps `structural_insert=False`, and appends
+`structural_transaction=False`, so callers that construct the manifest with an
+older argument shape remain compatible.
 
 Absence from the manifest means unsupported; the API does not imply model
 creation, VMD editing, plugin loading, unrestricted physics editing, or any
@@ -228,6 +229,13 @@ The canonical v0.9.2 manifest reports `structural_preview=True`,
 `structural_write=True`, `structural_insert=True`, the same six target kinds,
 and `structural_contract="reference_safe_execution"`. Legacy manifest
 construction defaults `structural_insert` to `False`.
+
+The v0.9.3 CP27 distribution gate appends
+`structural_transaction=True` to the canonical manifest after clean-wheel
+validation of the complete transaction path. Direct construction defaults the
+new field to `False`. Transaction symbols remain public only from
+`mmd_registry.services.structural_transaction`; none are promoted to an older
+root facade.
 
 Insertion supports append and source-domain `insert_before` positions, including
 coordinated new-to-new references within one request. Capacity checks fail

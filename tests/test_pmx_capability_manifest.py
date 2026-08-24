@@ -45,6 +45,7 @@ class PmxCapabilityManifestTests(unittest.TestCase):
             ("vertex", "texture", "material", "bone", "morph", "rigid_body"),
         )
         self.assertEqual(manifest.structural_contract, "reference_safe_execution")
+        self.assertTrue(manifest.structural_transaction)
 
     def test_edit_operations_come_from_authoritative_catalog(self) -> None:
         manifest = get_pmx_capability_manifest()
@@ -113,6 +114,7 @@ class PmxCapabilityManifestTests(unittest.TestCase):
                 ],
                 "structural_contract": "reference_safe_execution",
                 "structural_insert": True,
+                "structural_transaction": True,
             },
         )
 

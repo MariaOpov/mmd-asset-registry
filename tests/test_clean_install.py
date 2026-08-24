@@ -133,12 +133,33 @@ class CleanInstallTests(unittest.TestCase):
         self.assertIn("installed capability manifest mismatch", PROBE_SOURCE)
         self.assertIn("installed structural capability mismatch", PROBE_SOURCE)
         self.assertIn("capability_manifest.structural_insert is True", PROBE_SOURCE)
+        self.assertIn(
+            "capability_manifest.structural_transaction is True",
+            PROBE_SOURCE,
+        )
         self.assertIn("PmxStructuralNewReference", PROBE_SOURCE)
         self.assertIn("installed structural insertion preview mismatch", PROBE_SOURCE)
         self.assertIn("installed structural insertion execution mismatch", PROBE_SOURCE)
         self.assertIn('insertion_execution.status == "written"', PROBE_SOURCE)
         self.assertIn("installed structural insertion changed source", PROBE_SOURCE)
         self.assertIn("installed structural insertion reparse mismatch", PROBE_SOURCE)
+        self.assertIn("installed_transactions", PROBE_SOURCE)
+        self.assertIn(
+            "installed structural transaction preview mismatch",
+            PROBE_SOURCE,
+        )
+        self.assertIn(
+            "installed structural transaction execution mismatch",
+            PROBE_SOURCE,
+        )
+        self.assertIn(
+            "installed structural transaction changed source",
+            PROBE_SOURCE,
+        )
+        self.assertIn(
+            "installed structural transaction reparse mismatch",
+            PROBE_SOURCE,
+        )
         self.assertIn("public diagnostic exports mismatch", PROBE_SOURCE)
         self.assertIn("installed diagnostic redaction mismatch", PROBE_SOURCE)
         self.assertIn("installed document service mismatch", PROBE_SOURCE)

@@ -33,6 +33,24 @@ and index-width mutation private; registry schema `0.3` remains unchanged.
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
 
+## Version 0.9.3 structural transaction distribution gate
+
+The v0.9.3 feature branch now has installed-wheel evidence for the bounded
+structural transaction service:
+
+- The canonical capability manifest reports `structural_transaction=True`.
+  The field is appended after the released v0.9.2 fields and defaults to
+  `False` for callers that directly construct the legacy manifest shape.
+- Transaction request, preview, and execution APIs remain public only through
+  `mmd_registry.services.structural_transaction`; no transaction symbol is
+  promoted to the package, PMX, or root service namespace.
+- Clean-install validation imports the transaction submodule from a disposable
+  external environment, previews and atomically writes a real transaction,
+  verifies source immutability, and independently reparses the published PMX.
+- The package version remains `0.9.2` on the feature branch. Version promotion,
+  final artifact digests, push/PR/CI, tagging, and publication remain CP28
+  release-gate decisions.
+
 ## Version 0.9.2 safe structural insertion and capacity foundation
 
 Version 0.9.2 additively promotes the insertion work validated on the v0.9.2

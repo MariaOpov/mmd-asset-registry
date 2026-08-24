@@ -216,7 +216,30 @@ class V093StructuralTransactionBackwardCompatibilityTests(unittest.TestCase):
             manifest_fields[: len(CAPABILITY_FIELDS)],
             CAPABILITY_FIELDS,
         )
-        self.assertNotIn("structural_transaction", capabilities.get_capabilities().to_dict())
+        self.assertEqual(
+            manifest_fields[len(CAPABILITY_FIELDS) :],
+            ("structural_transaction",),
+        )
+        self.assertTrue(
+            capabilities.get_capabilities().structural_transaction
+        )
+        legacy_manifest = capabilities.PmxCapabilityManifest(
+            pmx_versions=(2.0, 2.1),
+            text_encodings=("utf-16-le", "utf-8"),
+            index_sizes=(1, 2, 4),
+            deform_types=(0, 1, 2, 3, 4),
+            morph_types=tuple(range(11)),
+            soft_body_support=True,
+            roundtrip_contract="validated_semantic_roundtrip",
+            edit_operation_types=(
+                "set_model_info",
+                "set_texture_path",
+                "update_material",
+            ),
+            texture_portability=True,
+            private_runtime_required=False,
+        )
+        self.assertFalse(legacy_manifest.structural_transaction)
         self.assertEqual(mmd_registry.__version__, "0.9.2")
 
     def test_v08_edit_preview_and_write_survive_transaction_activity(self) -> None:

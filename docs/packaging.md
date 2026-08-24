@@ -75,7 +75,9 @@ its declared dependencies in a disposable environment outside the checkout,
 and exercises installed metadata, imports, capabilities, diagnostics,
 document/validation/edit services, structural preview/execution services,
 the v0.9.2 public insertion DTO vocabulary, one coordinated six-target
-installed insertion, and console entry points.
+installed insertion, the v0.9.3 structural transaction capability and one
+installed transaction preview/atomic execution/reparse cycle, and console
+entry points.
 
 The standard `build` frontend is pinned to `1.5.0` in
 `requirements-dev.txt`. It is CI/development tooling only and is not a runtime
@@ -130,6 +132,14 @@ namespaces, execute one coordinated insertion covering vertex, texture,
 material, bone, morph, and rigid-body targets with request-local new references,
 reparse the written output, and prove the installed source bytes remain
 unchanged. This does not expose a new root service authority.
+
+For v0.9.3 CP27 the same external probe must additionally verify
+`structural_transaction=True`, import
+`mmd_registry.services.structural_transaction` from the installed wheel,
+preview and execute one bounded transaction, prove the source bytes remain
+unchanged, and independently reparse the published output. The transaction
+API remains submodule-only, and this gate neither uploads nor publishes an
+artifact.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

@@ -106,6 +106,13 @@ jobs:
           tests.test_v092_capability_promotion
           tests.test_v092_backward_compatibility
 
+      - name: Run v0.9.3 transaction distribution capability regressions
+        run: >-
+          python -m unittest -q
+          tests.test_v093_structural_transaction_backward_compatibility
+          tests.test_v093_structural_transaction_distribution_capability
+          tests.test_v093_structural_transaction_private_runtime
+
       - name: Run full test suite with coverage
         run: |
           python -m coverage erase

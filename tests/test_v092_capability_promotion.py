@@ -90,7 +90,7 @@ class V092CapabilityPromotionTests(unittest.TestCase):
             ("vertex", "texture", "material", "bone", "morph", "rigid_body"),
         )
         self.assertIs(payload["structural_insert"], True)
-        self.assertEqual(list(payload)[-1], "structural_insert")
+        self.assertEqual(list(payload)[-2], "structural_insert")
         self.assertEqual(
             capabilities.get_pmx_capability_manifest().to_dict(),
             payload,
@@ -115,10 +115,14 @@ class V092CapabilityPromotionTests(unittest.TestCase):
         )
 
         self.assertFalse(legacy.structural_insert)
+        self.assertFalse(legacy.structural_transaction)
         self.assertTrue(legacy.structural_preview)
         self.assertFalse(legacy.structural_write)
         self.assertEqual(legacy.structural_contract, "reference_safe_preview")
-        self.assertEqual(fields(capabilities.PmxCapabilityManifest)[-1].name, "structural_insert")
+        field_names = tuple(
+            field.name for field in fields(capabilities.PmxCapabilityManifest)
+        )
+        self.assertEqual(field_names[-2:], ("structural_insert", "structural_transaction"))
 
     def test_root_service_authority_and_request_alias_remain_exact(self) -> None:
         self.assertEqual(services.__all__, ROOT_SERVICE_EXPORTS)

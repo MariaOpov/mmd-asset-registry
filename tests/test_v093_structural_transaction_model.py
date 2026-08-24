@@ -192,8 +192,8 @@ class V093StructuralTransactionModelTests(unittest.TestCase):
             self.assertFalse(hasattr(mmd_registry, name))
 
         capabilities = services.get_capabilities()
-        self.assertFalse(hasattr(capabilities, "structural_transaction"))
-        self.assertNotIn("structural_transaction", capabilities.to_dict())
+        self.assertTrue(capabilities.structural_transaction)
+        self.assertIs(capabilities.to_dict()["structural_transaction"], True)
 
     def test_explicit_submodule_supports_a_clean_cold_import(self) -> None:
         script = "\n".join(

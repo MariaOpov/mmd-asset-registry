@@ -41,7 +41,7 @@ diagnostic, or filesystem behavior.
 | PMX byte serialization | `mmd_registry/pmx/writer.py::serialize_pmx` | Existing deterministic writer authority. It validates the complete document before emitting bytes. |
 | Structural serialization and output transaction | `mmd_registry/pmx/structural_output.py` | Converges every legacy/single-target/coordinated path through preview, serialize, reparse, independent certification, semantic equality, and verified output commit. |
 | Filesystem safety and publication | private hooks in `mmd_registry/pmx/editing/output.py` | Existing shared authority for path resolution, alias/race checks, source re-verification, same-directory temporary files, atomic publication, and cleanup. |
-| Capability reporting | `mmd_registry/capabilities.py` | Preserves the released v0.9.2 dimensions and, after CP27 installed-wheel validation, appends the transaction capability with a legacy-safe default. |
+| Capability reporting | `mmd_registry/capabilities.py` | Preserves the released v0.9.2 dimensions and appends the released v0.9.3 transaction capability with a legacy-safe default. |
 
 ## 2. Public boundary and route selection
 
@@ -347,5 +347,5 @@ target-specific insertion, reference analysis, complete invariant
 certification, deterministic serialization, semantic equality, source race
 checks, destination safety, atomic publication, and bounded public diagnostics.
 
-v0.9.3 transaction work should add orchestration and contract semantics around
-these authorities. It should not replace or duplicate them.
+The released v0.9.3 transaction layer adds orchestration and contract semantics
+around these authorities without replacing or duplicating them.

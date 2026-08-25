@@ -1,11 +1,11 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.2. The release retains read-only reference analysis and the v0.9.1
+v0.9.3. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
-structural insertion through the same preview/apply authority. Raw structural
-writer, remap, serialization, and filesystem-publication internals remain
-non-public.
+structural insertion and transactions through the reviewed authorities. Raw
+structural writer, remap, serialization, and filesystem-publication internals
+remain non-public.
 
 ## Public surface
 
@@ -47,8 +47,8 @@ slotted, deterministic, independent from private runtime configuration, and
 contains only the PMX versions, encodings, index widths, deform and morph
 types, round-trip contract, texture portability, soft-body support, the three
 edit operations already implemented by v0.8.5, and the reviewed structural
-contract. The canonical v0.9.3 feature-branch manifest reports preview,
-bounded structural write, `structural_insert=True`, and
+contract. The canonical v0.9.3 release manifest reports preview, bounded
+structural write, `structural_insert=True`, and
 `structural_transaction=True` support for the six target kinds under
 `reference_safe_execution`. The dataclass constructor keeps its legacy
 preview-only defaults, keeps `structural_insert=False`, and appends
@@ -230,18 +230,37 @@ The canonical v0.9.2 manifest reports `structural_preview=True`,
 and `structural_contract="reference_safe_execution"`. Legacy manifest
 construction defaults `structural_insert` to `False`.
 
-The v0.9.3 CP27 distribution gate appends
-`structural_transaction=True` to the canonical manifest after clean-wheel
-validation of the complete transaction path. Direct construction defaults the
-new field to `False`. Transaction symbols remain public only from
-`mmd_registry.services.structural_transaction`; none are promoted to an older
-root facade.
+v0.9.3 appends `structural_transaction=True` to the canonical manifest after
+clean-wheel validation of the complete transaction path. Direct construction
+defaults the new field to `False`.
 
 Insertion supports append and source-domain `insert_before` positions, including
 coordinated new-to-new references within one request. Capacity checks fail
 closed when existing PMX index widths cannot represent the requested result;
 automatic index-width widening is not authorized. Execution reuses the v0.9.1
 source-immutable, distinct-destination, certified and atomic publication chain.
+
+### Structural transaction promotion (v0.9.3)
+
+v0.9.3 exposes transaction request, preview, and apply symbols only through
+`mmd_registry.services.structural_transaction`. None is promoted to
+`mmd_registry`, `mmd_registry.pmx`, or the older `mmd_registry.services` root
+facade. Existing preview/apply structural authorities and constructor shapes
+remain unchanged.
+
+A transaction composes only the reviewed insertion, reorder, and deletion
+vocabularies across vertex, texture, material, bone, morph, and rigid-body
+targets. Request-local identities and deterministic dependency ordering resolve
+the final state before transforms run. Cycles, unresolved references,
+unsupported retargeting, capacity overflow, invalid references, and opaque
+trailing data fail closed.
+
+Preview and execution share one semantic plan authority. Execution serializes
+the certified preview document, independently reparses and certifies it,
+requires whole-document canonical semantic equality, re-verifies source and
+destination state, and atomically publishes only after every gate passes.
+Failures expose only bounded stage/provenance evidence. The source is never
+written in place and temporary output is cleaned on failure.
 
 ## Edit service
 

@@ -85,6 +85,7 @@ class PublicCapabilityApiTests(unittest.TestCase):
                 ],
                 "structural_contract": "reference_safe_execution",
                 "structural_insert": True,
+                "structural_transaction": True,
             },
         )
 

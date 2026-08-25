@@ -66,6 +66,7 @@ import mmd_registry.diagnostics as public_diagnostics
 import mmd_registry.pmx
 import mmd_registry.pmx.editing
 import mmd_registry.services as public_services
+from mmd_registry.services import structural_transaction as installed_transactions
 from mmd_registry.services.structural_bone import PmxStructuralBoneInsertion
 from mmd_registry.services.structural_material import PmxStructuralMaterialInsertion
 from mmd_registry.services.structural_morph import (
@@ -98,6 +99,7 @@ assert (
     capability_manifest.structural_preview is True
     and capability_manifest.structural_write is True
     and capability_manifest.structural_insert is True
+    and capability_manifest.structural_transaction is True
     and capability_manifest.structural_target_kinds
     == ("vertex", "texture", "material", "bone", "morph", "rigid_body")
     and capability_manifest.structural_contract == "reference_safe_execution"
@@ -382,6 +384,53 @@ assert insertion_execution.to_dict()["output"]["target_counts"] == expected_inse
 )
 assert insertion_execution.to_dict()["verification"]["semantic"] == "passed"
 assert insertion_execution.to_dict()["verification"]["input_unchanged"] is True
+
+transaction_request = installed_transactions.PmxStructuralTransactionRequest(
+    (
+        PmxStructuralTextureInsertion(
+            "textures/installed-transaction.png",
+            new_id="transaction-texture",
+        ),
+    )
+)
+transaction_preview = installed_transactions.preview_structural_transaction(
+    installed_document,
+    transaction_request,
+)
+assert transaction_preview.status == "changes_pending", (
+    "installed structural transaction preview status mismatch"
+)
+assert transaction_preview.to_dict()["counts"]["final"]["texture"] == 1, (
+    "installed structural transaction preview mismatch"
+)
+
+transaction_source_path = working_directory / "installed-transaction-source.pmx"
+transaction_output_path = working_directory / "installed-transaction-output.pmx"
+transaction_source_path.write_bytes(document_source)
+transaction_execution = installed_transactions.apply_structural_transaction(
+    transaction_source_path,
+    transaction_output_path,
+    transaction_request,
+)
+assert transaction_execution.status == "written", (
+    "installed structural transaction execution status mismatch"
+)
+assert transaction_execution.document == transaction_preview.document, (
+    "installed structural transaction execution mismatch"
+)
+assert transaction_source_path.read_bytes() == document_source, (
+    "installed structural transaction changed source"
+)
+assert transaction_output_path.is_file(), (
+    "installed structural transaction created no output"
+)
+reparsed_transaction = public_services.load_document(transaction_output_path)
+assert reparsed_transaction == transaction_preview.document, (
+    "installed structural transaction reparse mismatch"
+)
+transaction_evidence = transaction_execution.to_dict()
+assert transaction_evidence["verification"]["semantic"] == "passed"
+assert transaction_evidence["verification"]["input_unchanged"] is True
 
 edit_plan = mmd_registry.pmx.editing.PmxEditPlan(
     operations=(

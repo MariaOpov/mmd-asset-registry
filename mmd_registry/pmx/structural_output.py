@@ -18,15 +18,33 @@ service wrapper; this raw writer and its transaction helper remain implementatio
 details.
 
 This module does not resize index widths, repair documents, expose a CLI mutation
-command, or modify the certified preview contract. A structural serialization
-result exists
-only after:
+command, or modify the certified preview contract. An existing publishable
+structural serialization result exists only after:
 
 * CP17 produced a CP16-certified intended document;
 * deterministic ``serialize_pmx`` completed;
 * the bytes reparsed successfully;
 * the reparsed document independently passed CP16 certification; and
 * reparsed document equality matched the intended certified document exactly.
+
+CP19 adds one private transaction-only in-memory result that stops after the
+fresh reparse certificate.  It deliberately performs no intended/reparsed
+semantic comparison and cannot reach the publication kernel; CP20 and CP21 own
+those later authorities.  Existing legacy results continue through comparison
+and retain their exact write behavior.
+
+CP20 wraps that CP19 result in a distinct private verified type only after the
+two independently certified whole ``PmxDocument`` values compare equal.  The
+immutable typed document is the canonical semantic model, so direct document
+equality covers every header, model-information, geometry, texture, material,
+bone, morph, display, physics, soft-body, and trailing-data field.  This layer
+still cannot publish; CP21 owns that authority.
+
+CP21 admits only that private CP20 wrapper to the existing structural output
+transaction.  The mature v0.8 kernel still owns path resolution, temporary-file
+hashing, source/destination revalidation, atomic no-clobber or overwrite, and
+failure cleanup.  The unverified CP19 result remains ineligible for publication,
+and a committed result is constructed only after the kernel returns success.
 
 Only then may those verified bytes be passed to the reused v0.8 atomic output
 kernel. Direct write-result construction is intentionally blocked so ordinary
@@ -100,6 +118,9 @@ from mmd_registry.pmx.structural_texture_insertion import (
     PmxTextureInsertionPreview,
     preview_pmx_texture_insertions,
 )
+from mmd_registry.pmx.structural_transaction_preview import (
+    PmxStructuralTransactionPreview,
+)
 from mmd_registry.pmx.structural_vertex_insertion import (
     PmxVertexInsertionPayload,
     PmxVertexInsertionPreview,
@@ -151,10 +172,11 @@ _StructuralPreview = (
     | PmxRigidBodyInsertionPreview
     | PmxVertexInsertionPreview
     | PmxCoordinatedInsertionPreview
+    | PmxStructuralTransactionPreview
 )
 
 
-def _derive_verified_structural_serialization(
+def _derive_reparsed_structural_serialization(
     preview_factory: Callable[[], _StructuralPreview],
     stage_callback: _StructuralStageCallback | None,
 ) -> tuple[
@@ -163,7 +185,7 @@ def _derive_verified_structural_serialization(
     PmxStructuralInvariantCertificate,
     str,
 ]:
-    """Serialize one certified preview and independently verify its exact meaning."""
+    """Serialize, reparse, and independently certify one structural preview."""
 
     if not callable(preview_factory):
         raise TypeError("preview_factory must be callable.")
@@ -183,6 +205,7 @@ def _derive_verified_structural_serialization(
             PmxRigidBodyInsertionPreview,
             PmxVertexInsertionPreview,
             PmxCoordinatedInsertionPreview,
+            PmxStructuralTransactionPreview,
         ),
     ):
         raise TypeError(
@@ -212,18 +235,63 @@ def _derive_verified_structural_serialization(
             f"{error}"
         ) from error
 
-    _notify_structural_stage(stage_callback, "semantic_compare")
-    if reparsed_document != intended_document:
-        raise PmxStructuralOutputVerificationError(
-            "serialized structural PMX does not match the intended certified document."
-        )
-
     return (
         preview,
         serialized,
         reparsed_certificate,
         hashlib.sha256(serialized).hexdigest(),
     )
+
+
+def _require_canonical_structural_document_equality(
+    intended_certificate: PmxStructuralInvariantCertificate,
+    reparsed_certificate: PmxStructuralInvariantCertificate,
+) -> None:
+    """Require equality of every field in two independently certified documents."""
+
+    if not isinstance(
+        intended_certificate,
+        PmxStructuralInvariantCertificate,
+    ):
+        raise TypeError(
+            "intended_certificate must be a PmxStructuralInvariantCertificate."
+        )
+    if not isinstance(
+        reparsed_certificate,
+        PmxStructuralInvariantCertificate,
+    ):
+        raise TypeError(
+            "reparsed_certificate must be a PmxStructuralInvariantCertificate."
+        )
+    if reparsed_certificate.document != intended_certificate.document:
+        raise PmxStructuralOutputVerificationError(
+            "serialized structural PMX does not match the intended certified document."
+        )
+
+
+def _derive_verified_structural_serialization(
+    preview_factory: Callable[[], _StructuralPreview],
+    stage_callback: _StructuralStageCallback | None,
+) -> tuple[
+    _StructuralPreview,
+    bytes,
+    PmxStructuralInvariantCertificate,
+    str,
+]:
+    """Serialize one certified preview and independently verify its exact meaning."""
+
+    preview, serialized, reparsed_certificate, output_sha256 = (
+        _derive_reparsed_structural_serialization(
+            preview_factory,
+            stage_callback,
+        )
+    )
+    _notify_structural_stage(stage_callback, "semantic_compare")
+    _require_canonical_structural_document_equality(
+        preview.certificate,
+        reparsed_certificate,
+    )
+    return preview, serialized, reparsed_certificate, output_sha256
 
 
 def _verified_serialization_report(
@@ -325,6 +393,137 @@ class PmxStructuralSerializationResult:
             self.output_sha256,
             self.output_size_bytes,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _PmxStructuralTransactionSerializationResult:
+    """Private CP19 bytes and fresh certificate without semantic comparison."""
+
+    preview: PmxStructuralTransactionPreview
+    serialized_bytes: bytes = field(init=False, repr=False)
+    reparsed_certificate: PmxStructuralInvariantCertificate = field(init=False)
+    output_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._derive_reparsed_evidence(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        preview: PmxStructuralTransactionPreview,
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxStructuralTransactionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "preview", preview)
+        result._derive_reparsed_evidence(stage_callback)
+        return result
+
+    def _derive_reparsed_evidence(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
+        if not isinstance(self.preview, PmxStructuralTransactionPreview):
+            raise TypeError(
+                "preview must be a PmxStructuralTransactionPreview instance."
+            )
+        preview, serialized, reparsed_certificate, output_sha256 = (
+            _derive_reparsed_structural_serialization(
+                lambda: self.preview,
+                stage_callback,
+            )
+        )
+        if preview is not self.preview:
+            raise AssertionError(
+                "transaction serialization changed the planned preview."
+            )
+        object.__setattr__(self, "serialized_bytes", serialized)
+        object.__setattr__(self, "reparsed_certificate", reparsed_certificate)
+        object.__setattr__(self, "output_sha256", output_sha256)
+
+    @property
+    def output_size_bytes(self) -> int:
+        return len(self.serialized_bytes)
+
+
+@dataclass(frozen=True, slots=True)
+class _PmxVerifiedStructuralTransactionSerializationResult:
+    """Private CP20 result whose complete reparsed semantics equal its intent."""
+
+    serialization: _PmxStructuralTransactionSerializationResult = field(
+        repr=False
+    )
+
+    def __post_init__(self) -> None:
+        self._require_semantic_equality(None)
+
+    @classmethod
+    def _with_stage_callback(
+        cls,
+        serialization: _PmxStructuralTransactionSerializationResult,
+        stage_callback: _StructuralStageCallback,
+    ) -> "_PmxVerifiedStructuralTransactionSerializationResult":
+        result = object.__new__(cls)
+        object.__setattr__(result, "serialization", serialization)
+        result._require_semantic_equality(stage_callback)
+        return result
+
+    def _require_semantic_equality(
+        self,
+        stage_callback: _StructuralStageCallback | None,
+    ) -> None:
+        if not isinstance(
+            self.serialization,
+            _PmxStructuralTransactionSerializationResult,
+        ):
+            raise TypeError(
+                "serialization must be a transaction serialization result."
+            )
+        _notify_structural_stage(stage_callback, "semantic_compare")
+        _require_canonical_structural_document_equality(
+            self.serialization.preview.certificate,
+            self.serialization.reparsed_certificate,
+        )
+
+    @property
+    def preview(self) -> PmxStructuralTransactionPreview:
+        return self.serialization.preview
+
+    @property
+    def serialized_bytes(self) -> bytes:
+        return self.serialization.serialized_bytes
+
+    @property
+    def reparsed_certificate(self) -> PmxStructuralInvariantCertificate:
+        return self.serialization.reparsed_certificate
+
+    @property
+    def output_sha256(self) -> str:
+        return self.serialization.output_sha256
+
+    @property
+    def output_size_bytes(self) -> int:
+        return self.serialization.output_size_bytes
+
+    @property
+    def status(self) -> str:
+        return self.preview.status
+
+    def to_dict(self) -> dict[str, object]:
+        """Return deterministic verified transaction serialization evidence."""
+
+        report = _verified_serialization_report(
+            self.preview,
+            self.output_sha256,
+            self.output_size_bytes,
+        )
+        plan = report["plan"]
+        if not isinstance(plan, dict):
+            raise AssertionError("transaction plan evidence must be a dictionary.")
+        source = plan["source"]
+        if not isinstance(source, dict):
+            raise AssertionError("transaction source evidence must be a dictionary.")
+        report["source"] = dict(source)
+        return report
 
 
 @dataclass(frozen=True, slots=True)
@@ -1096,6 +1295,7 @@ class PmxStructuralWriteResult:
     source_size_bytes: int
     serialization: (
         PmxStructuralSerializationResult
+        | _PmxVerifiedStructuralTransactionSerializationResult
         | _PmxTextureInsertionSerializationResult
         | _PmxMaterialInsertionSerializationResult
         | _PmxBoneInsertionSerializationResult
@@ -1122,6 +1322,7 @@ class PmxStructuralWriteResult:
         source_size_bytes: int,
         serialization: (
             PmxStructuralSerializationResult
+            | _PmxVerifiedStructuralTransactionSerializationResult
             | _PmxTextureInsertionSerializationResult
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
@@ -1144,6 +1345,7 @@ class PmxStructuralWriteResult:
             serialization,
             (
                 PmxStructuralSerializationResult,
+                _PmxVerifiedStructuralTransactionSerializationResult,
                 _PmxTextureInsertionSerializationResult,
                 _PmxMaterialInsertionSerializationResult,
                 _PmxBoneInsertionSerializationResult,
@@ -1229,6 +1431,7 @@ def _write_verified_structural_transaction(
         [PmxDocument, _StructuralStageCallback | None],
         (
             PmxStructuralSerializationResult
+            | _PmxVerifiedStructuralTransactionSerializationResult
             | _PmxTextureInsertionSerializationResult
             | _PmxMaterialInsertionSerializationResult
             | _PmxBoneInsertionSerializationResult
@@ -1276,6 +1479,7 @@ def _write_verified_structural_transaction(
         serialization,
         (
             PmxStructuralSerializationResult,
+            _PmxVerifiedStructuralTransactionSerializationResult,
             _PmxTextureInsertionSerializationResult,
             _PmxMaterialInsertionSerializationResult,
             _PmxBoneInsertionSerializationResult,

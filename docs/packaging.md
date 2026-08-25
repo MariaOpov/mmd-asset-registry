@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.2` maps
-to the PEP 440 Python distribution version `0.9.2`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.3` maps
+to the PEP 440 Python distribution version `0.9.3`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -75,7 +75,9 @@ its declared dependencies in a disposable environment outside the checkout,
 and exercises installed metadata, imports, capabilities, diagnostics,
 document/validation/edit services, structural preview/execution services,
 the v0.9.2 public insertion DTO vocabulary, one coordinated six-target
-installed insertion, and console entry points.
+installed insertion, the v0.9.3 structural transaction capability and one
+installed transaction preview/atomic execution/reparse cycle, and console
+entry points.
 
 The standard `build` frontend is pinned to `1.5.0` in
 `requirements-dev.txt`. It is CI/development tooling only and is not a runtime
@@ -130,6 +132,16 @@ namespaces, execute one coordinated insertion covering vertex, texture,
 material, bone, morph, and rigid-body targets with request-local new references,
 reparse the written output, and prove the installed source bytes remain
 unchanged. This does not expose a new root service authority.
+
+For v0.9.3 the same external probe must additionally verify
+`structural_transaction=True`, import
+`mmd_registry.services.structural_transaction` from the installed wheel,
+preview and execute one bounded transaction, prove the source bytes remain
+unchanged, and independently reparse the published output. The transaction
+API remains submodule-only, and this gate neither uploads nor publishes an
+artifact. Final release artifact member counts and SHA-256 digests are captured
+from a fresh verified merged-main build; feature-branch build digests are not
+reused as release authority.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

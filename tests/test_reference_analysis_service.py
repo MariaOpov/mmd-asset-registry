@@ -71,6 +71,8 @@ class ReferenceAnalysisServiceTests(unittest.TestCase):
                 "apply_edit",
                 "preview_structural_edit",
                 "apply_structural_edit",
+                "preview_structural_transaction",
+                "apply_structural_transaction",
             ),
         )
 

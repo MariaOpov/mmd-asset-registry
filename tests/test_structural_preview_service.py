@@ -68,9 +68,19 @@ class StructuralPreviewServiceTests(unittest.TestCase):
     def test_service_operation_adds_reviewed_structural_execution(self) -> None:
         values = tuple(operation.value for operation in PmxServiceOperation)
 
-        self.assertEqual(values[-2:], ("preview_structural_edit", "apply_structural_edit"))
+        self.assertEqual(
+            values[-4:],
+            (
+                "preview_structural_edit",
+                "apply_structural_edit",
+                "preview_structural_transaction",
+                "apply_structural_transaction",
+            ),
+        )
         self.assertEqual(values.count("preview_structural_edit"), 1)
         self.assertEqual(values.count("apply_structural_edit"), 1)
+        self.assertEqual(values.count("preview_structural_transaction"), 1)
+        self.assertEqual(values.count("apply_structural_transaction"), 1)
 
     def test_collection_edit_and_request_are_immutable_and_hashable(self) -> None:
         edit = services.PmxStructuralCollectionEdit(

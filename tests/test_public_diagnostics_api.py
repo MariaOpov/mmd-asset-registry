@@ -57,6 +57,8 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
                 "apply_edit",
                 "preview_structural_edit",
                 "apply_structural_edit",
+                "preview_structural_transaction",
+                "apply_structural_transaction",
             ),
         )
         serialized = " ".join(
@@ -84,6 +86,10 @@ class PublicDiagnosticsApiTests(unittest.TestCase):
         self.assertEqual(
             diagnostics.PmxServiceDiagnosticCode.STRUCTURAL_VERIFICATION_FAILED.value,
             "structural_verification_failed",
+        )
+        self.assertEqual(
+            diagnostics.PmxServiceOperation.APPLY_STRUCTURAL_TRANSACTION.value,
+            "apply_structural_transaction",
         )
 
     def test_cp17_reuses_details_without_expanding_diagnostic_codes(self) -> None:

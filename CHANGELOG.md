@@ -2,6 +2,61 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.3 - 2026-08-25
+
+### Added
+
+- A bounded structural transaction API in
+  `mmd_registry.services.structural_transaction` for composing reviewed
+  insertion, reorder, and deletion operations across vertex, texture,
+  material, bone, morph, and rigid-body targets.
+- Deterministic transaction-local identities, final-state reference
+  resolution, dependency ordering, whole-transaction capacity preflight, and
+  stable preview evidence with canonical plan SHA-256.
+- Regression gates for shared preview/execution authority and independent
+  serialization/reparse certification.
+- Transaction gates require whole-document canonical semantic equality, frozen
+  failure provenance, atomic publication, source/destination races, adversarial
+  state isolation, backward compatibility, and optional private real-PMX
+  validation.
+
+### Changed
+
+- Runtime/distribution version and release-facing contracts are promoted from
+  `0.9.2` / `v0.9.2` to `0.9.3` / `v0.9.3`.
+- The canonical capability manifest additively reports
+  `structural_transaction=True`; direct legacy construction keeps a trailing
+  `structural_transaction=False` default.
+- Clean installed-package verification imports the explicit transaction
+  submodule, previews and executes a real bounded transaction, proves source
+  immutability, and independently reparses the atomically published output.
+
+### Verified
+
+- Transaction execution reuses the same semantic plan and preview authority;
+  there is no parallel interpreter for execution.
+- Publication occurs only after serialization, independent reparse and
+  certification, canonical semantic equality, fresh source verification, and
+  destination-safety checks all pass.
+- Representative v0.8 through v0.9.2 public, CLI, diagnostic, edit, insertion,
+  and structural execution contracts remain additively compatible.
+- Optional private runtime evidence validates a real PMX transaction without
+  disclosing or packaging private model bytes, names, or paths.
+
+### Safety and compatibility
+
+- Registry schema remains `0.3`, supported registry schemas remain `0.2` and
+  `0.3`, and edit-plan schema remains `1`.
+- Transaction symbols remain submodule-only. The existing
+  `preview_structural_edit()` and `apply_structural_edit()` authority, root
+  exports, and raw-writer privacy remain unchanged.
+- v0.9.3 does not authorize in-place source mutation, automatic index-width
+  expansion, silent repair, arbitrary structural CRUD, model creation, GUI,
+  Smart Tools, plugins, telemetry, cloud features, or AI editing.
+- Push, pull request, cross-platform CI, merge, merged-main certification, tag,
+  and GitHub Release remain distinct authorization gates. No PyPI publication
+  is authorized without separate explicit Maintainer approval.
+
 ## 0.9.2 - 2026-08-22
 
 ### Added

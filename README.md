@@ -17,21 +17,45 @@ an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.2
-Release label: v0.9.2
+Tool version: 0.9.3
+Release label: v0.9.3
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.2` maps to the PEP 440 Python package version
-`0.9.2`. This release additively promotes the reviewed structural insertion
-pipeline through the existing `preview_structural_edit()` /
-`apply_structural_edit()` authority while keeping raw writers, remap kernels,
-and index-width mutation private; registry schema `0.3` remains unchanged.
+GitHub release label `v0.9.3` maps to the PEP 440 Python package version
+`0.9.3`. This release additively promotes the reviewed structural transaction
+service while keeping transaction symbols in their explicit submodule and raw
+writers, remap kernels, and index-width mutation private. Registry schema
+`0.3` remains unchanged.
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
+
+## Version 0.9.3 safe structural transactions
+
+Version 0.9.3 promotes the bounded structural transaction service after the
+full transaction path passed installed-wheel validation:
+
+- The canonical capability manifest reports `structural_transaction=True`.
+  The field is appended after the released v0.9.2 fields and defaults to
+  `False` for callers that directly construct the legacy manifest shape.
+- Transaction request, preview, and execution APIs remain public only through
+  `mmd_registry.services.structural_transaction`; no transaction symbol is
+  promoted to the package, PMX, or root service namespace.
+- Clean-install validation imports the transaction submodule from a disposable
+  external environment, previews and atomically writes a real transaction,
+  verifies source immutability, and independently reparses the published PMX.
+- One transaction may compose reviewed insertion, reorder, and deletion
+  operations across the six structural target kinds using deterministic
+  transaction-local identities and dependency ordering.
+- Preview evidence, serialization, independent reparse/certification,
+  whole-document canonical semantic equality, source/destination race checks,
+  and atomic publication remain one shared authority.
+- Push, pull request, cross-platform CI, merged-main certification, tag, and
+  GitHub Release remain separate Maintainer-controlled release gates. PyPI
+  publication is not authorized by this release workflow.
 
 ## Version 0.9.2 safe structural insertion and capacity foundation
 
@@ -1421,7 +1445,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.2` package-version assertion
+8. Exact `0.9.3` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands
@@ -1532,7 +1556,7 @@ mmd-asset-registry/
 
 ## Current limitations
 
-v0.9.2 does not:
+v0.9.3 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
@@ -1569,6 +1593,9 @@ Release progression after the completed v0.8 line:
 - `v0.9.2` / package `0.9.2` — Bounded six-target structural insertion,
   coordinated request-local references, capacity fail-closed behavior, and
   installed-wheel insertion verification through the same public authority
+- `v0.9.3` / package `0.9.3` — Bounded multi-operation structural transactions,
+  deterministic evidence, canonical semantic equality, race-safe atomic
+  publication, and installed-wheel transaction verification
 - Later v0.9 releases — Separately reviewed, safety-bounded feature work
 - Later: multilingual PMX naming with external reviewable dictionaries,
   animation-pipeline integration, PMD structural scanning, registry/browser

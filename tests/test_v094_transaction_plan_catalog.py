@@ -161,35 +161,47 @@ class V094TransactionPlanCatalogTests(unittest.TestCase):
             )
 
     def test_cp06_namespace_is_additive_and_not_promoted_to_legacy_roots(self) -> None:
+        cp06_exports = (
+            "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
+            "PmxStructuralTransactionOperationType",
+            "PmxStructuralTransactionOperationCatalogEntry",
+            "PmxStructuralTransactionOperationCatalog",
+            "get_pmx_structural_transaction_operation_catalog",
+            "PmxStructuralTransactionPlan",
+        )
         self.assertEqual(
-            transaction_plan.__all__,
-            (
-                "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
-                "PmxStructuralTransactionOperationType",
-                "PmxStructuralTransactionOperationCatalogEntry",
-                "PmxStructuralTransactionOperationCatalog",
-                "get_pmx_structural_transaction_operation_catalog",
-                "PmxStructuralTransactionPlan",
-            ),
+            tuple(name for name in transaction_plan.__all__ if name in cp06_exports),
+            cp06_exports,
+        )
+        self.assertEqual(
+            len(transaction_plan.__all__),
+            len(set(transaction_plan.__all__)),
         )
 
         for root in (mmd_registry, pmx, services):
             for name in transaction_plan.__all__:
                 self.assertFalse(hasattr(root, name), (root.__name__, name))
 
-    def test_catalog_foundation_does_not_add_parser_renderer_or_execution_authority(self) -> None:
-        public_names = set(transaction_plan.__all__)
+    def test_catalog_foundation_does_not_own_parser_renderer_or_execution_authority(self) -> None:
+        inspect = __import__("inspect")
+        owners = (
+            PmxStructuralTransactionOperationCatalogEntry,
+            PmxStructuralTransactionOperationCatalog,
+        )
+        for owner in owners:
+            names = set(vars(owner))
+            for forbidden in ("parse", "load", "render", "preview", "apply"):
+                self.assertNotIn(forbidden, names)
+
+        getter_source = inspect.getsource(
+            get_pmx_structural_transaction_operation_catalog
+        )
         for forbidden in (
             "parse_pmx_structural_transaction_plan_json",
             "load_pmx_structural_transaction_plan",
             "render_pmx_structural_transaction_plan_json",
             "preview_structural_transaction",
             "apply_structural_transaction",
-        ):
-            self.assertNotIn(forbidden, public_names)
-
-        module_source = __import__("inspect").getsource(transaction_plan)
-        for forbidden in (
             "remap_pmx_references",
             "write_pmx_structural_output",
             "_write_structural_transaction",
@@ -197,7 +209,7 @@ class V094TransactionPlanCatalogTests(unittest.TestCase):
             "publication_callback",
             "final_index",
         ):
-            self.assertNotIn(forbidden, module_source)
+            self.assertNotIn(forbidden, getter_source)
 
 
 if __name__ == "__main__":

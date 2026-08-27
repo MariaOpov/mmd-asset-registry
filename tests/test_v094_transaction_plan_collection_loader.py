@@ -199,7 +199,6 @@ class V094TransactionPlanCollectionLoaderTests(unittest.TestCase):
 
     def test_unimplemented_insertion_discriminators_fail_closed_until_later_checkpoints(self) -> None:
         for operation_name in (
-            "insert_bone",
             "insert_morph",
             "insert_rigid_body",
             "insert_vertex",

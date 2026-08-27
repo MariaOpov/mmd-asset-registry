@@ -428,9 +428,8 @@ class V094TransactionPlanTextureMaterialLoaderTests(unittest.TestCase):
         self.assertIsInstance(plan.operations[2], PmxStructuralMaterialInsertion)
         self.assertEqual(plan.operations[0].target_kind, PmxReferenceTargetKind.BONE)
 
-    def test_remaining_four_insertion_discriminators_still_fail_closed(self) -> None:
+    def test_remaining_unimplemented_insertion_discriminators_still_fail_closed(self) -> None:
         for operation_name in (
-            "insert_bone",
             "insert_morph",
             "insert_rigid_body",
             "insert_vertex",

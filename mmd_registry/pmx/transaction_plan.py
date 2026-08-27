@@ -15,7 +15,11 @@ from mmd_registry.services import (
     PmxReferenceTargetKind,
     PmxStructuralCollectionEdit,
 )
-from mmd_registry.services.structural_bone import PmxStructuralBoneInsertion
+from mmd_registry.services.structural_bone import (
+    PmxStructuralBoneIk,
+    PmxStructuralBoneIkLink,
+    PmxStructuralBoneInsertion,
+)
 from mmd_registry.services.structural_material import PmxStructuralMaterialInsertion
 from mmd_registry.services.structural_morph import PmxStructuralMorphInsertion
 from mmd_registry.services.structural_reference import PmxStructuralNewReference
@@ -208,6 +212,42 @@ _INSERT_MATERIAL_FIELDS: Final[frozenset[str]] = frozenset(
         "new_id",
     }
 )
+_INSERT_BONE_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "op",
+        "local_name",
+        "universal_name",
+        "bone_position",
+        "parent_bone_index",
+        "transform_layer",
+        "rotatable",
+        "translatable",
+        "visible",
+        "enabled",
+        "local_append",
+        "after_physics",
+        "tail_offset",
+        "tail_bone_index",
+        "inherit_rotation",
+        "inherit_translation",
+        "inherit_parent_bone_index",
+        "inherit_weight",
+        "fixed_axis",
+        "local_axis_x",
+        "local_axis_z",
+        "external_parent_key",
+        "ik",
+        "position",
+        "source_index",
+        "new_id",
+    }
+)
+_BONE_IK_FIELDS: Final[frozenset[str]] = frozenset(
+    {"target_bone_index", "loop_count", "angle_limit", "links"}
+)
+_BONE_IK_LINK_FIELDS: Final[frozenset[str]] = frozenset(
+    {"bone_index", "lower_limit", "upper_limit"}
+)
 _NEW_REFERENCE_FIELDS: Final[frozenset[str]] = frozenset(
     {"ref", "target_kind", "new_id"}
 )
@@ -219,6 +259,8 @@ _COLLECTION_TARGET_KINDS: Final[tuple[str, ...]] = (
     "morph",
     "rigid_body",
 )
+_INT32_MIN: Final[int] = -(1 << 31)
+_INT32_MAX: Final[int] = (1 << 31) - 1
 
 
 class PmxStructuralTransactionPlanError(ValueError):
@@ -375,6 +417,46 @@ def _require_integer(
             operation_type=operation_type,
         )
     return value
+
+
+def _require_boolean(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> bool:
+    if type(value) is not bool:
+        raise _field_error(
+            "value must be a JSON boolean.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return value
+
+
+def _require_int32(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> int:
+    integer = _require_integer(
+        value,
+        field=field,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if not _INT32_MIN <= integer <= _INT32_MAX:
+        raise _field_error(
+            "value must fit in a signed 32-bit integer.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return integer
 
 
 def _require_float(
@@ -926,6 +1008,411 @@ def _parse_material_insertion_operation(
         ) from error
 
 
+def _parse_optional_float_vector(
+    value: object,
+    *,
+    field: str,
+    length: int,
+    operation_index: int,
+    operation_type: str,
+) -> tuple[float, ...] | None:
+    if value is None:
+        return None
+    return _require_float_vector(
+        value,
+        field=field,
+        length=length,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+
+def _parse_bone_reference(
+    value: object,
+    *,
+    field: str,
+    allow_sentinel: bool,
+    operation_index: int,
+    operation_type: str,
+) -> int:
+    index = _require_integer(
+        value,
+        field=field,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    minimum = -1 if allow_sentinel else 0
+    if index < minimum:
+        message = (
+            "captured-source bone reference cannot be smaller than -1."
+            if allow_sentinel
+            else "captured-source bone reference cannot be negative."
+        )
+        raise _field_error(
+            message,
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return index
+
+
+def _parse_bone_ik_link(
+    payload: object,
+    *,
+    operation_index: int,
+    operation_type: str,
+    link_index: int,
+) -> PmxStructuralBoneIkLink:
+    field_prefix = f"ik.links[{link_index}]"
+    if type(payload) is not dict:
+        raise _field_error(
+            "value must be a JSON object.",
+            field=field_prefix,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    unknown_fields = sorted(set(payload) - _BONE_IK_LINK_FIELDS)
+    if unknown_fields:
+        unknown = unknown_fields[0]
+        raise _field_error(
+            f"unknown field {unknown!r}.",
+            field=f"{field_prefix}.{unknown}",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    bone_index = _parse_bone_reference(
+        _require_field(
+            payload,
+            "bone_index",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field=f"{field_prefix}.bone_index",
+        allow_sentinel=False,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    lower = None
+    upper = None
+    if "lower_limit" in payload:
+        lower = _parse_optional_float_vector(
+            payload["lower_limit"],
+            field=f"{field_prefix}.lower_limit",
+            length=3,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if "upper_limit" in payload:
+        upper = _parse_optional_float_vector(
+            payload["upper_limit"],
+            field=f"{field_prefix}.upper_limit",
+            length=3,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    try:
+        return PmxStructuralBoneIkLink(
+            bone_index=bone_index,
+            lower_limit=lower,
+            upper_limit=upper,
+        )
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_bone_ik(
+    payload: object,
+    *,
+    operation_index: int,
+    operation_type: str,
+) -> PmxStructuralBoneIk | None:
+    if payload is None:
+        return None
+    if type(payload) is not dict:
+        raise _field_error(
+            "value must be a JSON object or null.",
+            field="ik",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    unknown_fields = sorted(set(payload) - _BONE_IK_FIELDS)
+    if unknown_fields:
+        unknown = unknown_fields[0]
+        raise _field_error(
+            f"unknown field {unknown!r}.",
+            field=f"ik.{unknown}",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    kwargs: dict[str, object] = {
+        "target_bone_index": _parse_bone_reference(
+            _require_field(
+                payload,
+                "target_bone_index",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            field="ik.target_bone_index",
+            allow_sentinel=False,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    }
+
+    if "loop_count" in payload:
+        loop_count = _require_integer(
+            payload["loop_count"],
+            field="ik.loop_count",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if not 0 <= loop_count <= _INT32_MAX:
+            raise _field_error(
+                "value must fit in a nonnegative signed 32-bit integer.",
+                field="ik.loop_count",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["loop_count"] = loop_count
+
+    if "angle_limit" in payload:
+        kwargs["angle_limit"] = _require_float(
+            payload["angle_limit"],
+            field="ik.angle_limit",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "links" in payload:
+        links_value = payload["links"]
+        if type(links_value) is not list:
+            raise _field_error(
+                "value must be a JSON array.",
+                field="ik.links",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["links"] = tuple(
+            _parse_bone_ik_link(
+                link,
+                operation_index=operation_index,
+                operation_type=operation_type,
+                link_index=link_index,
+            )
+            for link_index, link in enumerate(links_value)
+        )
+
+    try:
+        return PmxStructuralBoneIk(**kwargs)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_bone_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralBoneInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_BONE.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_BONE_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    kwargs: dict[str, object] = {
+        "local_name": _require_string(
+            _require_field(
+                payload,
+                "local_name",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            field="local_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    }
+
+    if "universal_name" in payload:
+        kwargs["universal_name"] = _require_string(
+            payload["universal_name"],
+            field="universal_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "bone_position" in payload:
+        kwargs["bone_position"] = _require_float_vector(
+            payload["bone_position"],
+            field="bone_position",
+            length=3,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "parent_bone_index" in payload:
+        kwargs["parent_bone_index"] = _parse_bone_reference(
+            payload["parent_bone_index"],
+            field="parent_bone_index",
+            allow_sentinel=True,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "transform_layer" in payload:
+        kwargs["transform_layer"] = _require_int32(
+            payload["transform_layer"],
+            field="transform_layer",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    for field in (
+        "rotatable",
+        "translatable",
+        "visible",
+        "enabled",
+        "local_append",
+        "after_physics",
+        "inherit_rotation",
+        "inherit_translation",
+    ):
+        if field in payload:
+            kwargs[field] = _require_boolean(
+                payload[field],
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    tail_offset_authored = "tail_offset" in payload
+    tail_index_authored = "tail_bone_index" in payload
+    if tail_offset_authored:
+        kwargs["tail_offset"] = _parse_optional_float_vector(
+            payload["tail_offset"],
+            field="tail_offset",
+            length=3,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if tail_index_authored:
+        tail_value = payload["tail_bone_index"]
+        kwargs["tail_bone_index"] = (
+            None
+            if tail_value is None
+            else _parse_bone_reference(
+                tail_value,
+                field="tail_bone_index",
+                allow_sentinel=True,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        )
+        if not tail_offset_authored:
+            kwargs["tail_offset"] = None
+
+    if "inherit_parent_bone_index" in payload:
+        inherit_parent = payload["inherit_parent_bone_index"]
+        kwargs["inherit_parent_bone_index"] = (
+            None
+            if inherit_parent is None
+            else _parse_bone_reference(
+                inherit_parent,
+                field="inherit_parent_bone_index",
+                allow_sentinel=True,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        )
+
+    if "inherit_weight" in payload:
+        inherit_weight = payload["inherit_weight"]
+        kwargs["inherit_weight"] = (
+            None
+            if inherit_weight is None
+            else _require_float(
+                inherit_weight,
+                field="inherit_weight",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        )
+
+    for field in ("fixed_axis", "local_axis_x", "local_axis_z"):
+        if field in payload:
+            kwargs[field] = _parse_optional_float_vector(
+                payload[field],
+                field=field,
+                length=3,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    if "external_parent_key" in payload:
+        external_parent_key = payload["external_parent_key"]
+        kwargs["external_parent_key"] = (
+            None
+            if external_parent_key is None
+            else _require_int32(
+                external_parent_key,
+                field="external_parent_key",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        )
+
+    if "ik" in payload:
+        kwargs["ik"] = _parse_bone_ik(
+            payload["ik"],
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if "position" in payload:
+        kwargs["position"] = position
+    if source_index is not None:
+        kwargs["source_index"] = source_index
+
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if new_id is not None:
+        kwargs["new_id"] = new_id
+
+    try:
+        return PmxStructuralBoneInsertion(**kwargs)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
 def _parse_transaction_operation(
     payload: object,
     *,
@@ -954,6 +1441,11 @@ def _parse_transaction_operation(
         )
     if operation_name == PmxStructuralTransactionOperationType.INSERT_MATERIAL:
         return _parse_material_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_BONE:
+        return _parse_bone_insertion_operation(
             payload,
             operation_index=operation_index,
         )

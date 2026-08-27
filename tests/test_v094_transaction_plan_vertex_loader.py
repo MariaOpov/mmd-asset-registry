@@ -538,6 +538,7 @@ class V094TransactionPlanVertexLoaderTests(unittest.TestCase):
             "PmxStructuralTransactionPlanDecodeError",
             "parse_pmx_structural_transaction_plan_json",
             "load_pmx_structural_transaction_plan",
+            "render_pmx_structural_transaction_plan_json",
             "PmxStructuralTransactionPlan",
         }
         self.assertEqual(set(transaction_plan.__all__), expected)

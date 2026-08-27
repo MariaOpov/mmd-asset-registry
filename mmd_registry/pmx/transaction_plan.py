@@ -2951,6 +2951,435 @@ class PmxStructuralTransactionPlan:
                 )
 
 
+def _canonical_json_float(value: float) -> float:
+    """Collapse semantically equal signed zero to one canonical JSON float."""
+
+    return 0.0 if value == 0.0 else value
+
+
+def _render_float_vector(value: tuple[float, ...]) -> list[float]:
+    return [_canonical_json_float(item) for item in value]
+
+
+def _render_new_reference(value: PmxStructuralNewReference) -> dict[str, object]:
+    return {
+        "ref": "new",
+        "target_kind": value.target_kind,
+        "new_id": value.new_id,
+    }
+
+
+def _render_reference(
+    value: int | PmxStructuralNewReference,
+) -> int | dict[str, object]:
+    if type(value) is int:
+        return value
+    if isinstance(value, PmxStructuralNewReference):
+        return _render_new_reference(value)
+    raise TypeError(
+        "validated transaction plan exposed an unsupported reference value."
+    )
+
+
+def _append_insertion_metadata(
+    payload: dict[str, object],
+    *,
+    position: str,
+    source_index: int | None,
+    new_id: str | None,
+) -> None:
+    if position != "append":
+        payload["position"] = position
+        assert source_index is not None
+        payload["source_index"] = source_index
+    if new_id is not None:
+        payload["new_id"] = new_id
+
+
+def _render_bone_ik_link(
+    link: PmxStructuralBoneIkLink,
+) -> dict[str, object]:
+    payload: dict[str, object] = {"bone_index": link.bone_index}
+    if link.lower_limit is not None:
+        assert link.upper_limit is not None
+        payload["lower_limit"] = _render_float_vector(link.lower_limit)
+        payload["upper_limit"] = _render_float_vector(link.upper_limit)
+    return payload
+
+
+def _render_bone_ik(ik: PmxStructuralBoneIk) -> dict[str, object]:
+    payload: dict[str, object] = {"target_bone_index": ik.target_bone_index}
+    if ik.loop_count != 1:
+        payload["loop_count"] = ik.loop_count
+    if ik.angle_limit != 0.0:
+        payload["angle_limit"] = _canonical_json_float(ik.angle_limit)
+    if ik.links:
+        payload["links"] = [_render_bone_ik_link(link) for link in ik.links]
+    return payload
+
+
+def _render_vertex_deform(
+    deform: object,
+) -> dict[str, object]:
+    if isinstance(deform, PmxStructuralVertexBdef1):
+        return {
+            "type": "bdef1",
+            "bone_index": _render_reference(deform.bone_index),
+        }
+    if isinstance(deform, PmxStructuralVertexBdef2):
+        return {
+            "type": "bdef2",
+            "bone_indices": [
+                _render_reference(value) for value in deform.bone_indices
+            ],
+            "bone_1_weight": _canonical_json_float(deform.bone_1_weight),
+        }
+    if isinstance(deform, PmxStructuralVertexBdef4):
+        return {
+            "type": "bdef4",
+            "bone_indices": [
+                _render_reference(value) for value in deform.bone_indices
+            ],
+            "weights": _render_float_vector(deform.weights),
+        }
+    if isinstance(deform, PmxStructuralVertexSdef):
+        return {
+            "type": "sdef",
+            "bone_indices": [
+                _render_reference(value) for value in deform.bone_indices
+            ],
+            "bone_1_weight": _canonical_json_float(deform.bone_1_weight),
+            "c": _render_float_vector(deform.c),
+            "r0": _render_float_vector(deform.r0),
+            "r1": _render_float_vector(deform.r1),
+        }
+    if isinstance(deform, PmxStructuralVertexQdef):
+        return {
+            "type": "qdef",
+            "bone_indices": [
+                _render_reference(value) for value in deform.bone_indices
+            ],
+            "weights": _render_float_vector(deform.weights),
+        }
+    raise TypeError(
+        "validated transaction plan exposed an unsupported vertex deform."
+    )
+
+
+def _render_morph_offset(
+    offset: object,
+) -> dict[str, object]:
+    if isinstance(offset, PmxStructuralMorphGroupOffset):
+        return {
+            "type": "group",
+            "morph_index": offset.morph_index,
+            "weight": _canonical_json_float(offset.weight),
+        }
+    if isinstance(offset, PmxStructuralMorphVertexOffset):
+        return {
+            "type": "vertex",
+            "vertex_index": _render_reference(offset.vertex_index),
+            "translation": _render_float_vector(offset.translation),
+        }
+    if isinstance(offset, PmxStructuralMorphBoneOffset):
+        return {
+            "type": "bone",
+            "bone_index": _render_reference(offset.bone_index),
+            "translation": _render_float_vector(offset.translation),
+            "rotation": _render_float_vector(offset.rotation),
+        }
+    if isinstance(offset, PmxStructuralMorphUvOffset):
+        return {
+            "type": "uv",
+            "vertex_index": _render_reference(offset.vertex_index),
+            "uv_offset": _render_float_vector(offset.uv_offset),
+        }
+    if isinstance(offset, PmxStructuralMorphMaterialOffset):
+        return {
+            "type": "material",
+            "material_index": _render_reference(offset.material_index),
+            "operation": offset.operation,
+            "diffuse": _render_float_vector(offset.diffuse),
+            "specular": _render_float_vector(offset.specular),
+            "specular_strength": _canonical_json_float(offset.specular_strength),
+            "ambient": _render_float_vector(offset.ambient),
+            "edge_color": _render_float_vector(offset.edge_color),
+            "edge_scale": _canonical_json_float(offset.edge_scale),
+            "texture_tint": _render_float_vector(offset.texture_tint),
+            "sphere_tint": _render_float_vector(offset.sphere_tint),
+            "toon_tint": _render_float_vector(offset.toon_tint),
+        }
+    if isinstance(offset, PmxStructuralMorphFlipOffset):
+        return {
+            "type": "flip",
+            "morph_index": offset.morph_index,
+            "weight": _canonical_json_float(offset.weight),
+        }
+    if isinstance(offset, PmxStructuralMorphImpulseOffset):
+        return {
+            "type": "impulse",
+            "rigid_body_index": _render_reference(offset.rigid_body_index),
+            "local": offset.local,
+            "velocity": _render_float_vector(offset.velocity),
+            "angular_torque": _render_float_vector(offset.angular_torque),
+        }
+    raise TypeError(
+        "validated transaction plan exposed an unsupported morph offset."
+    )
+
+
+def _render_transaction_operation(
+    operation: PmxStructuralTransactionOperation,
+) -> dict[str, object]:
+    if isinstance(operation, PmxStructuralCollectionEdit):
+        return {
+            "op": PmxStructuralTransactionOperationType.TRANSFORM_COLLECTION.value,
+            "target_kind": operation.target_kind.value,
+            "old_indices_in_new_order": list(operation.old_indices_in_new_order),
+        }
+
+    if isinstance(operation, PmxStructuralTextureInsertion):
+        payload: dict[str, object] = {
+            "op": PmxStructuralTransactionOperationType.INSERT_TEXTURE.value,
+            "path": operation.path,
+        }
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    if isinstance(operation, PmxStructuralMaterialInsertion):
+        payload = {
+            "op": PmxStructuralTransactionOperationType.INSERT_MATERIAL.value,
+            "local_name": operation.local_name,
+        }
+        if operation.universal_name != "":
+            payload["universal_name"] = operation.universal_name
+        if operation.memo != "":
+            payload["memo"] = operation.memo
+        if operation.texture_index != -1:
+            payload["texture_index"] = _render_reference(operation.texture_index)
+        if operation.sphere_texture_index != -1:
+            payload["sphere_texture_index"] = _render_reference(
+                operation.sphere_texture_index
+            )
+        if operation.sphere_mode != 0:
+            payload["sphere_mode"] = operation.sphere_mode
+        if operation.toon_reference_mode != "texture":
+            payload["toon_reference_mode"] = operation.toon_reference_mode
+        if operation.toon_reference_index != -1:
+            payload["toon_reference_index"] = _render_reference(
+                operation.toon_reference_index
+            )
+        if operation.diffuse != (1.0, 1.0, 1.0, 1.0):
+            payload["diffuse"] = _render_float_vector(operation.diffuse)
+        if operation.specular != (0.0, 0.0, 0.0):
+            payload["specular"] = _render_float_vector(operation.specular)
+        if operation.specular_strength != 0.0:
+            payload["specular_strength"] = _canonical_json_float(
+                operation.specular_strength
+            )
+        if operation.ambient != (0.5, 0.5, 0.5):
+            payload["ambient"] = _render_float_vector(operation.ambient)
+        if operation.drawing_flags != 0:
+            payload["drawing_flags"] = operation.drawing_flags
+        if operation.edge_color != (0.0, 0.0, 0.0, 1.0):
+            payload["edge_color"] = _render_float_vector(operation.edge_color)
+        if operation.edge_scale != 1.0:
+            payload["edge_scale"] = _canonical_json_float(operation.edge_scale)
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    if isinstance(operation, PmxStructuralBoneInsertion):
+        payload = {
+            "op": PmxStructuralTransactionOperationType.INSERT_BONE.value,
+            "local_name": operation.local_name,
+        }
+        if operation.universal_name != "":
+            payload["universal_name"] = operation.universal_name
+        if operation.bone_position != (0.0, 0.0, 0.0):
+            payload["bone_position"] = _render_float_vector(operation.bone_position)
+        if operation.parent_bone_index != -1:
+            payload["parent_bone_index"] = operation.parent_bone_index
+        if operation.transform_layer != 0:
+            payload["transform_layer"] = operation.transform_layer
+        for field in (
+            "rotatable",
+            "translatable",
+            "visible",
+            "enabled",
+            "local_append",
+            "after_physics",
+        ):
+            if getattr(operation, field):
+                payload[field] = True
+
+        if operation.tail_bone_index is not None:
+            payload["tail_bone_index"] = operation.tail_bone_index
+        elif operation.tail_offset != (0.0, 0.0, 0.0):
+            assert operation.tail_offset is not None
+            payload["tail_offset"] = _render_float_vector(operation.tail_offset)
+
+        if operation.inherit_rotation:
+            payload["inherit_rotation"] = True
+        if operation.inherit_translation:
+            payload["inherit_translation"] = True
+        if operation.inherit_rotation or operation.inherit_translation:
+            assert operation.inherit_parent_bone_index is not None
+            assert operation.inherit_weight is not None
+            payload["inherit_parent_bone_index"] = (
+                operation.inherit_parent_bone_index
+            )
+            payload["inherit_weight"] = _canonical_json_float(
+                operation.inherit_weight
+            )
+
+        if operation.fixed_axis is not None:
+            payload["fixed_axis"] = _render_float_vector(operation.fixed_axis)
+        if operation.local_axis_x is not None:
+            assert operation.local_axis_z is not None
+            payload["local_axis_x"] = _render_float_vector(operation.local_axis_x)
+            payload["local_axis_z"] = _render_float_vector(operation.local_axis_z)
+        if operation.external_parent_key is not None:
+            payload["external_parent_key"] = operation.external_parent_key
+        if operation.ik is not None:
+            payload["ik"] = _render_bone_ik(operation.ik)
+
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    if isinstance(operation, PmxStructuralMorphInsertion):
+        payload = {
+            "op": PmxStructuralTransactionOperationType.INSERT_MORPH.value,
+            "local_name": operation.local_name,
+            "morph_type": operation.morph_type,
+        }
+        if operation.universal_name != "":
+            payload["universal_name"] = operation.universal_name
+        if operation.panel != "other":
+            payload["panel"] = operation.panel
+        if operation.offsets:
+            payload["offsets"] = [
+                _render_morph_offset(offset) for offset in operation.offsets
+            ]
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    if isinstance(operation, PmxStructuralRigidBodyInsertion):
+        payload = {
+            "op": PmxStructuralTransactionOperationType.INSERT_RIGID_BODY.value,
+            "local_name": operation.local_name,
+        }
+        if operation.universal_name != "":
+            payload["universal_name"] = operation.universal_name
+        if operation.bone_index != -1:
+            payload["bone_index"] = _render_reference(operation.bone_index)
+        if operation.collision_group != 0:
+            payload["collision_group"] = operation.collision_group
+        if operation.collision_mask != 0xFFFF:
+            payload["collision_mask"] = operation.collision_mask
+        if operation.shape != "sphere":
+            payload["shape"] = operation.shape
+        if operation.size != (1.0, 1.0, 1.0):
+            payload["size"] = _render_float_vector(operation.size)
+        if operation.body_position != (0.0, 0.0, 0.0):
+            payload["body_position"] = _render_float_vector(operation.body_position)
+        if operation.rotation != (0.0, 0.0, 0.0):
+            payload["rotation"] = _render_float_vector(operation.rotation)
+        if operation.mass != 1.0:
+            payload["mass"] = _canonical_json_float(operation.mass)
+        if operation.linear_damping != 0.5:
+            payload["linear_damping"] = _canonical_json_float(
+                operation.linear_damping
+            )
+        if operation.angular_damping != 0.5:
+            payload["angular_damping"] = _canonical_json_float(
+                operation.angular_damping
+            )
+        if operation.restitution != 0.0:
+            payload["restitution"] = _canonical_json_float(operation.restitution)
+        if operation.friction != 0.5:
+            payload["friction"] = _canonical_json_float(operation.friction)
+        if operation.physics_mode != "bone_follow":
+            payload["physics_mode"] = operation.physics_mode
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    if isinstance(operation, PmxStructuralVertexInsertion):
+        payload = {
+            "op": PmxStructuralTransactionOperationType.INSERT_VERTEX.value,
+            "vertex_position": _render_float_vector(operation.vertex_position),
+            "normal": _render_float_vector(operation.normal),
+            "uv": _render_float_vector(operation.uv),
+            "additional_uvs": [
+                _render_float_vector(vector) for vector in operation.additional_uvs
+            ],
+            "deform": _render_vertex_deform(operation.deform),
+            "edge_scale": _canonical_json_float(operation.edge_scale),
+        }
+        _append_insertion_metadata(
+            payload,
+            position=operation.position,
+            source_index=operation.source_index,
+            new_id=operation.new_id,
+        )
+        return payload
+
+    raise TypeError(
+        "validated transaction plan exposed an unsupported operation type."
+    )
+
+
+def render_pmx_structural_transaction_plan_json(
+    plan: PmxStructuralTransactionPlan,
+) -> str:
+    """Render one immutable plan to canonical deterministic schema-one JSON."""
+
+    if not isinstance(plan, PmxStructuralTransactionPlan):
+        raise TypeError("plan must be a PmxStructuralTransactionPlan instance.")
+
+    payload: dict[str, object] = {
+        "schema_version": plan.schema_version,
+    }
+    if plan.expected_source_sha256 is not None:
+        payload["expected_source_sha256"] = plan.expected_source_sha256
+    payload["operations"] = [
+        _render_transaction_operation(operation) for operation in plan.operations
+    ]
+
+    return (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+
 __all__ = (
     "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
     "PmxStructuralTransactionOperationType",
@@ -2961,5 +3390,6 @@ __all__ = (
     "PmxStructuralTransactionPlanDecodeError",
     "parse_pmx_structural_transaction_plan_json",
     "load_pmx_structural_transaction_plan",
+    "render_pmx_structural_transaction_plan_json",
     "PmxStructuralTransactionPlan",
 )

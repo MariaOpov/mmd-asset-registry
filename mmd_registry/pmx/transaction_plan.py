@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, get_args
 
 from mmd_registry.services import (
@@ -16,6 +18,7 @@ from mmd_registry.services import (
 from mmd_registry.services.structural_bone import PmxStructuralBoneInsertion
 from mmd_registry.services.structural_material import PmxStructuralMaterialInsertion
 from mmd_registry.services.structural_morph import PmxStructuralMorphInsertion
+from mmd_registry.services.structural_reference import PmxStructuralNewReference
 from mmd_registry.services.structural_rigid_body import PmxStructuralRigidBodyInsertion
 from mmd_registry.services.structural_texture import PmxStructuralTextureInsertion
 from mmd_registry.services.structural_transaction import (
@@ -142,10 +145,12 @@ _OPERATION_TYPE_SPECS: Final = (
     ),
 )
 
-_OPERATION_TYPE_BY_DISCRIMINATOR: Final = {
-    operation_type.value: dto_type
-    for operation_type, dto_type, _purpose in _OPERATION_TYPE_SPECS
-}
+_OPERATION_TYPE_BY_DISCRIMINATOR: Final = MappingProxyType(
+    {
+        operation_type.value: dto_type
+        for operation_type, dto_type, _purpose in _OPERATION_TYPE_SPECS
+    }
+)
 
 if tuple(dto_type for _op, dto_type, _purpose in _OPERATION_TYPE_SPECS) != get_args(
     PmxStructuralTransactionOperation
@@ -176,6 +181,35 @@ _TOP_LEVEL_FIELDS: Final[frozenset[str]] = frozenset(
 )
 _TRANSFORM_COLLECTION_FIELDS: Final[frozenset[str]] = frozenset(
     {"op", "target_kind", "old_indices_in_new_order"}
+)
+_INSERT_TEXTURE_FIELDS: Final[frozenset[str]] = frozenset(
+    {"op", "path", "position", "source_index", "new_id"}
+)
+_INSERT_MATERIAL_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "op",
+        "local_name",
+        "universal_name",
+        "memo",
+        "texture_index",
+        "sphere_texture_index",
+        "sphere_mode",
+        "toon_reference_mode",
+        "toon_reference_index",
+        "diffuse",
+        "specular",
+        "specular_strength",
+        "ambient",
+        "drawing_flags",
+        "edge_color",
+        "edge_scale",
+        "position",
+        "source_index",
+        "new_id",
+    }
+)
+_NEW_REFERENCE_FIELDS: Final[frozenset[str]] = frozenset(
+    {"ref", "target_kind", "new_id"}
 )
 _COLLECTION_TARGET_KINDS: Final[tuple[str, ...]] = (
     "vertex",
@@ -343,6 +377,249 @@ def _require_integer(
     return value
 
 
+def _require_float(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> float:
+    if type(value) is not float:
+        raise _field_error(
+            "value must be a JSON float; integers are not coerced.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if not math.isfinite(value):
+        raise _field_error(
+            "floating-point value must be finite.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return value
+
+
+def _require_float_vector(
+    value: object,
+    *,
+    field: str,
+    length: int,
+    operation_index: int,
+    operation_type: str,
+) -> tuple[float, ...]:
+    if type(value) is not list:
+        raise _field_error(
+            "value must be a JSON array.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if len(value) != length:
+        raise _field_error(
+            f"array must contain exactly {length} values.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return tuple(
+        _require_float(
+            component,
+            field=f"{field}[{component_index}]",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        for component_index, component in enumerate(value)
+    )
+
+
+def _parse_optional_new_id(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+    operation_type: str,
+) -> str | None:
+    if "new_id" not in payload:
+        return None
+    return _require_string(
+        payload["new_id"],
+        field="new_id",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+
+def _parse_insertion_position(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+    operation_type: str,
+) -> tuple[str, int | None]:
+    if "position" in payload:
+        position = _require_string(
+            payload["position"],
+            field="position",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    else:
+        position = "append"
+
+    if position not in ("append", "insert_before"):
+        raise _field_error(
+            "value must be either 'append' or 'insert_before'.",
+            field="position",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if position == "append":
+        if "source_index" in payload:
+            raise _field_error(
+                "field is forbidden when position is 'append'.",
+                field="source_index",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        return position, None
+
+    source_index = _require_integer(
+        _require_field(
+            payload,
+            "source_index",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="source_index",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if source_index < 0:
+        raise _field_error(
+            "value cannot be negative.",
+            field="source_index",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return position, source_index
+
+
+def _parse_new_reference(
+    value: object,
+    *,
+    field: str,
+    expected_target_kind: str,
+    operation_index: int,
+    operation_type: str,
+) -> PmxStructuralNewReference:
+    if type(value) is not dict:
+        raise _field_error(
+            "value must be an integer or a new-reference JSON object.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    unknown_fields = sorted(set(value) - _NEW_REFERENCE_FIELDS)
+    if unknown_fields:
+        unknown = unknown_fields[0]
+        raise _field_error(
+            f"unknown field {unknown!r}.",
+            field=f"{field}.{unknown}",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    ref_value = _require_string(
+        _require_field(
+            value,
+            "ref",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field=f"{field}.ref",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if ref_value != "new":
+        raise _field_error(
+            "value must equal 'new'.",
+            field=f"{field}.ref",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    target_kind = _require_string(
+        _require_field(
+            value,
+            "target_kind",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field=f"{field}.target_kind",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if target_kind != expected_target_kind:
+        raise _field_error(
+            f"new reference must target {expected_target_kind}.",
+            field=f"{field}.target_kind",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    new_id = _require_string(
+        _require_field(
+            value,
+            "new_id",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field=f"{field}.new_id",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    try:
+        return PmxStructuralNewReference(
+            target_kind=target_kind,
+            new_id=new_id,
+        )
+    except (TypeError, ValueError) as error:
+        raise _field_error(
+            str(error),
+            field=f"{field}.new_id",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_texture_reference(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> int | PmxStructuralNewReference:
+    if type(value) is int:
+        if value < -1:
+            raise _field_error(
+                "existing texture reference cannot be smaller than -1.",
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        return value
+    return _parse_new_reference(
+        value,
+        field=field,
+        expected_target_kind="texture",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+
 def _parse_transform_collection_operation(
     payload: dict[str, object],
     *,
@@ -421,6 +698,234 @@ def _parse_transform_collection_operation(
     )
 
 
+def _parse_texture_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralTextureInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_TEXTURE.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_TEXTURE_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    path = _require_string(
+        _require_field(
+            payload,
+            "path",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="path",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    try:
+        return PmxStructuralTextureInsertion(
+            path=path,
+            position=position,
+            source_index=source_index,
+            new_id=new_id,
+        )
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_material_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralMaterialInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_MATERIAL.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_MATERIAL_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    kwargs: dict[str, object] = {
+        "local_name": _require_string(
+            _require_field(
+                payload,
+                "local_name",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            field="local_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    }
+
+    for field in ("universal_name", "memo"):
+        if field in payload:
+            kwargs[field] = _require_string(
+                payload[field],
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    for field in ("texture_index", "sphere_texture_index"):
+        if field in payload:
+            kwargs[field] = _parse_texture_reference(
+                payload[field],
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    if "sphere_mode" in payload:
+        sphere_mode = _require_integer(
+            payload["sphere_mode"],
+            field="sphere_mode",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if sphere_mode not in (0, 1, 2, 3):
+            raise _field_error(
+                "value must be from 0 through 3.",
+                field="sphere_mode",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["sphere_mode"] = sphere_mode
+
+    if "toon_reference_mode" in payload:
+        toon_mode = _require_string(
+            payload["toon_reference_mode"],
+            field="toon_reference_mode",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if toon_mode not in ("texture", "shared"):
+            raise _field_error(
+                "value must be either 'texture' or 'shared'.",
+                field="toon_reference_mode",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+    else:
+        toon_mode = "texture"
+
+    if "toon_reference_mode" in payload:
+        kwargs["toon_reference_mode"] = toon_mode
+
+    if toon_mode == "shared":
+        toon_index = _require_integer(
+            _require_field(
+                payload,
+                "toon_reference_index",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            field="toon_reference_index",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if not 0 <= toon_index <= 9:
+            raise _field_error(
+                "shared toon reference index must be from 0 through 9.",
+                field="toon_reference_index",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["toon_reference_index"] = toon_index
+    elif "toon_reference_index" in payload:
+        kwargs["toon_reference_index"] = _parse_texture_reference(
+            payload["toon_reference_index"],
+            field="toon_reference_index",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    vector_fields = (
+        ("diffuse", 4),
+        ("specular", 3),
+        ("ambient", 3),
+        ("edge_color", 4),
+    )
+    for field, length in vector_fields:
+        if field in payload:
+            kwargs[field] = _require_float_vector(
+                payload[field],
+                field=field,
+                length=length,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    for field in ("specular_strength", "edge_scale"):
+        if field in payload:
+            kwargs[field] = _require_float(
+                payload[field],
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+
+    if "drawing_flags" in payload:
+        drawing_flags = _require_integer(
+            payload["drawing_flags"],
+            field="drawing_flags",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if not 0 <= drawing_flags <= 0xFF:
+            raise _field_error(
+                "value must fit in one unsigned byte.",
+                field="drawing_flags",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["drawing_flags"] = drawing_flags
+
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if "position" in payload:
+        kwargs["position"] = position
+    if source_index is not None:
+        kwargs["source_index"] = source_index
+
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if new_id is not None:
+        kwargs["new_id"] = new_id
+
+    try:
+        return PmxStructuralMaterialInsertion(**kwargs)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
 def _parse_transaction_operation(
     payload: object,
     *,
@@ -442,12 +947,22 @@ def _parse_transaction_operation(
             payload,
             operation_index=operation_index,
         )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_TEXTURE:
+        return _parse_texture_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_MATERIAL:
+        return _parse_material_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
 
     if operation_name in _OPERATION_TYPE_BY_DISCRIMINATOR:
         raise _field_error(
             (
                 f"operation {operation_name!r} is recognized by schema 1 but "
-                "is not implemented by the CP07 collection loader."
+                "is not implemented by this loader stage."
             ),
             field="op",
             operation_index=operation_index,

@@ -197,10 +197,8 @@ class V094TransactionPlanCollectionLoaderTests(unittest.TestCase):
                 self.assertEqual(caught.exception.operation_index, 0)
                 self.assertEqual(caught.exception.field, "op")
 
-    def test_known_insertion_discriminators_fail_closed_until_later_checkpoints(self) -> None:
+    def test_unimplemented_insertion_discriminators_fail_closed_until_later_checkpoints(self) -> None:
         for operation_name in (
-            "insert_texture",
-            "insert_material",
             "insert_bone",
             "insert_morph",
             "insert_rigid_body",

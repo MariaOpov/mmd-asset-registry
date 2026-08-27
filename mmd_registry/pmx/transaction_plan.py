@@ -29,7 +29,14 @@ from mmd_registry.services.structural_transaction import (
     PmxStructuralTransactionOperation,
     PmxStructuralTransactionRequest,
 )
-from mmd_registry.services.structural_vertex import PmxStructuralVertexInsertion
+from mmd_registry.services.structural_vertex import (
+    PmxStructuralVertexBdef1,
+    PmxStructuralVertexBdef2,
+    PmxStructuralVertexBdef4,
+    PmxStructuralVertexInsertion,
+    PmxStructuralVertexQdef,
+    PmxStructuralVertexSdef,
+)
 
 
 PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION: Final = 1
@@ -247,6 +254,31 @@ _BONE_IK_FIELDS: Final[frozenset[str]] = frozenset(
 )
 _BONE_IK_LINK_FIELDS: Final[frozenset[str]] = frozenset(
     {"bone_index", "lower_limit", "upper_limit"}
+)
+_INSERT_VERTEX_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "op",
+        "vertex_position",
+        "normal",
+        "uv",
+        "additional_uvs",
+        "deform",
+        "edge_scale",
+        "position",
+        "source_index",
+        "new_id",
+    }
+)
+_VERTEX_DEFORM_FIELDS_BY_TYPE: Final = MappingProxyType(
+    {
+        "bdef1": frozenset({"type", "bone_index"}),
+        "bdef2": frozenset({"type", "bone_indices", "bone_1_weight"}),
+        "bdef4": frozenset({"type", "bone_indices", "weights"}),
+        "sdef": frozenset(
+            {"type", "bone_indices", "bone_1_weight", "c", "r0", "r1"}
+        ),
+        "qdef": frozenset({"type", "bone_indices", "weights"}),
+    }
 )
 _NEW_REFERENCE_FIELDS: Final[frozenset[str]] = frozenset(
     {"ref", "target_kind", "new_id"}
@@ -1413,6 +1445,413 @@ def _parse_bone_insertion_operation(
         ) from error
 
 
+def _parse_vertex_bone_reference(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> int | PmxStructuralNewReference:
+    if type(value) is int:
+        if value < -1:
+            raise _field_error(
+                "captured-source bone reference cannot be smaller than -1.",
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        return value
+    return _parse_new_reference(
+        value,
+        field=field,
+        expected_target_kind="bone",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+
+def _parse_vertex_bone_reference_array(
+    value: object,
+    *,
+    field: str,
+    length: int,
+    operation_index: int,
+    operation_type: str,
+) -> tuple[int | PmxStructuralNewReference, ...]:
+    if type(value) is not list:
+        raise _field_error(
+            "value must be a JSON array.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if len(value) != length:
+        raise _field_error(
+            f"array must contain exactly {length} values.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return tuple(
+        _parse_vertex_bone_reference(
+            item,
+            field=f"{field}[{index}]",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        for index, item in enumerate(value)
+    )
+
+
+def _parse_vertex_deform(
+    payload: object,
+    *,
+    operation_index: int,
+    operation_type: str,
+) -> object:
+    if type(payload) is not dict:
+        raise _field_error(
+            "value must be a JSON object.",
+            field="deform",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    deform_type = _require_string(
+        _require_field(
+            payload,
+            "type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="deform.type",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    allowed_fields = _VERTEX_DEFORM_FIELDS_BY_TYPE.get(deform_type)
+    if allowed_fields is None:
+        raise _field_error(
+            f"unsupported vertex deform type {deform_type!r}.",
+            field="deform.type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    unknown_fields = sorted(set(payload) - allowed_fields)
+    if unknown_fields:
+        unknown = unknown_fields[0]
+        raise _field_error(
+            f"unknown field {unknown!r}.",
+            field=f"deform.{unknown}",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    try:
+        if deform_type == "bdef1":
+            return PmxStructuralVertexBdef1(
+                bone_index=_parse_vertex_bone_reference(
+                    _require_field(
+                        payload,
+                        "bone_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_index",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                )
+            )
+
+        if deform_type == "bdef2":
+            return PmxStructuralVertexBdef2(
+                bone_indices=_parse_vertex_bone_reference_array(
+                    _require_field(
+                        payload,
+                        "bone_indices",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_indices",
+                    length=2,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                bone_1_weight=_require_float(
+                    _require_field(
+                        payload,
+                        "bone_1_weight",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_1_weight",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if deform_type == "bdef4":
+            return PmxStructuralVertexBdef4(
+                bone_indices=_parse_vertex_bone_reference_array(
+                    _require_field(
+                        payload,
+                        "bone_indices",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_indices",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                weights=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "weights",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.weights",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if deform_type == "sdef":
+            return PmxStructuralVertexSdef(
+                bone_indices=_parse_vertex_bone_reference_array(
+                    _require_field(
+                        payload,
+                        "bone_indices",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_indices",
+                    length=2,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                bone_1_weight=_require_float(
+                    _require_field(
+                        payload,
+                        "bone_1_weight",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.bone_1_weight",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                c=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "c",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.c",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                r0=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "r0",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.r0",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                r1=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "r1",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field="deform.r1",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        assert deform_type == "qdef"
+        return PmxStructuralVertexQdef(
+            bone_indices=_parse_vertex_bone_reference_array(
+                _require_field(
+                    payload,
+                    "bone_indices",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field="deform.bone_indices",
+                length=4,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            weights=_require_float_vector(
+                _require_field(
+                    payload,
+                    "weights",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field="deform.weights",
+                length=4,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+        )
+    except (TypeError, ValueError) as error:
+        if isinstance(error, PmxStructuralTransactionPlanError):
+            raise
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_vertex_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralVertexInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_VERTEX.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_VERTEX_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    vertex_position = _require_float_vector(
+        _require_field(
+            payload,
+            "vertex_position",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="vertex_position",
+        length=3,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    normal = _require_float_vector(
+        _require_field(
+            payload,
+            "normal",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="normal",
+        length=3,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    uv = _require_float_vector(
+        _require_field(
+            payload,
+            "uv",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="uv",
+        length=2,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    additional_uvs_value = _require_field(
+        payload,
+        "additional_uvs",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if type(additional_uvs_value) is not list:
+        raise _field_error(
+            "value must be a JSON array.",
+            field="additional_uvs",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if len(additional_uvs_value) > 4:
+        raise _field_error(
+            "array cannot contain more than 4 vectors.",
+            field="additional_uvs",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    additional_uvs = tuple(
+        _require_float_vector(
+            additional_uv,
+            field=f"additional_uvs[{index}]",
+            length=4,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        for index, additional_uv in enumerate(additional_uvs_value)
+    )
+
+    deform = _parse_vertex_deform(
+        _require_field(
+            payload,
+            "deform",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    edge_scale = _require_float(
+        _require_field(
+            payload,
+            "edge_scale",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="edge_scale",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    try:
+        return PmxStructuralVertexInsertion(
+            vertex_position=vertex_position,
+            normal=normal,
+            uv=uv,
+            additional_uvs=additional_uvs,
+            deform=deform,
+            edge_scale=edge_scale,
+            position=position,
+            source_index=source_index,
+            new_id=new_id,
+        )
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
 def _parse_transaction_operation(
     payload: object,
     *,
@@ -1446,6 +1885,11 @@ def _parse_transaction_operation(
         )
     if operation_name == PmxStructuralTransactionOperationType.INSERT_BONE:
         return _parse_bone_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_VERTEX:
+        return _parse_vertex_insertion_operation(
             payload,
             operation_index=operation_index,
         )

@@ -596,11 +596,10 @@ class V094TransactionPlanBoneLoaderTests(unittest.TestCase):
             ),
         )
 
-    def test_remaining_three_insertion_discriminators_still_fail_closed(self) -> None:
+    def test_remaining_two_insertion_discriminators_still_fail_closed(self) -> None:
         for operation_name in (
             "insert_morph",
             "insert_rigid_body",
-            "insert_vertex",
         ):
             with self.subTest(operation=operation_name):
                 with self.assertRaisesRegex(

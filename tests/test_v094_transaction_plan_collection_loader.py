@@ -201,7 +201,6 @@ class V094TransactionPlanCollectionLoaderTests(unittest.TestCase):
         for operation_name in (
             "insert_morph",
             "insert_rigid_body",
-            "insert_vertex",
         ):
             with self.subTest(operation=operation_name):
                 with self.assertRaisesRegex(

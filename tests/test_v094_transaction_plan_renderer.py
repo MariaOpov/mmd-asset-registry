@@ -808,7 +808,7 @@ class V094TransactionPlanRendererTests(unittest.TestCase):
             "render_pmx_structural_transaction_plan_json",
             "PmxStructuralTransactionPlan",
         }
-        self.assertEqual(set(transaction_plan.__all__), expected)
+        self.assertTrue(expected <= set(transaction_plan.__all__))
         self.assertEqual(
             len(transaction_plan.__all__),
             len(set(transaction_plan.__all__)),

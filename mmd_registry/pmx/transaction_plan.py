@@ -85,12 +85,20 @@ class PmxStructuralTransactionOperationCatalogEntry:
         if type(self.purpose) is not str or not self.purpose:
             raise ValueError("purpose must be a non-empty string.")
 
-    def to_dict(self) -> dict[str, str]:
+    @property
+    def field_names(self) -> tuple[str, ...]:
+        """Return deterministic top-level schema fields for this operation."""
+
+        fields = _OPERATION_FIELDS_BY_TYPE[self.operation_type]
+        return ("op", *sorted(fields - {"op"}))
+
+    def to_dict(self) -> dict[str, object]:
         """Return a deterministic JSON-safe catalog entry."""
 
         return {
             "op": self.operation_type.value,
             "purpose": self.purpose,
+            "fields": list(self.field_names),
         }
 
 
@@ -400,6 +408,23 @@ _COLLECTION_TARGET_KINDS: Final[tuple[str, ...]] = (
     "bone",
     "morph",
     "rigid_body",
+)
+_OPERATION_FIELDS_BY_TYPE: Final = MappingProxyType(
+    {
+        PmxStructuralTransactionOperationType.TRANSFORM_COLLECTION: (
+            _TRANSFORM_COLLECTION_FIELDS
+        ),
+        PmxStructuralTransactionOperationType.INSERT_TEXTURE: _INSERT_TEXTURE_FIELDS,
+        PmxStructuralTransactionOperationType.INSERT_MATERIAL: (
+            _INSERT_MATERIAL_FIELDS
+        ),
+        PmxStructuralTransactionOperationType.INSERT_BONE: _INSERT_BONE_FIELDS,
+        PmxStructuralTransactionOperationType.INSERT_MORPH: _INSERT_MORPH_FIELDS,
+        PmxStructuralTransactionOperationType.INSERT_RIGID_BODY: (
+            _INSERT_RIGID_BODY_FIELDS
+        ),
+        PmxStructuralTransactionOperationType.INSERT_VERTEX: _INSERT_VERTEX_FIELDS,
+    }
 )
 _INT32_MIN: Final[int] = -(1 << 31)
 _INT32_MAX: Final[int] = (1 << 31) - 1
@@ -3380,6 +3405,144 @@ def render_pmx_structural_transaction_plan_json(
         + "\n"
     )
 
+
+def get_pmx_structural_transaction_plan_template(
+    *,
+    expected_source_sha256: str | None = None,
+) -> PmxStructuralTransactionPlan:
+    """Return a safe empty schema-one starter plan."""
+
+    return PmxStructuralTransactionPlan(
+        operations=(),
+        expected_source_sha256=expected_source_sha256,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralTransactionOperationExplanation:
+    """One deterministic value-free explanation of a plan operation."""
+
+    operation_index: int
+    operation_type: PmxStructuralTransactionOperationType
+    purpose: str
+    canonical_fields: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.operation_index) is not int or self.operation_index < 0:
+            raise ValueError("operation_index must be a nonnegative integer.")
+        if not isinstance(
+            self.operation_type,
+            PmxStructuralTransactionOperationType,
+        ):
+            raise TypeError(
+                "operation_type must be a "
+                "PmxStructuralTransactionOperationType value."
+            )
+        if type(self.purpose) is not str or not self.purpose:
+            raise ValueError("purpose must be a non-empty string.")
+        if type(self.canonical_fields) is not tuple:
+            raise TypeError("canonical_fields must be a tuple.")
+        if any(type(name) is not str or not name for name in self.canonical_fields):
+            raise ValueError(
+                "canonical_fields must contain only non-empty strings."
+            )
+        if len(set(self.canonical_fields)) != len(self.canonical_fields):
+            raise ValueError("canonical_fields must be unique.")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable JSON-ready explanation record."""
+
+        return {
+            "operation_index": self.operation_index,
+            "op": self.operation_type.value,
+            "purpose": self.purpose,
+            "canonical_fields": list(self.canonical_fields),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PmxStructuralTransactionPlanExplanation:
+    """Deterministic value-free explanation of one typed transaction plan."""
+
+    schema_version: int
+    expected_source_sha256_declared: bool
+    operations: tuple[PmxStructuralTransactionOperationExplanation, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.schema_version) is not int:
+            raise TypeError("schema_version must be an integer.")
+        if self.schema_version != PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION:
+            raise ValueError(
+                "schema_version must match the supported transaction-plan schema."
+            )
+        if type(self.expected_source_sha256_declared) is not bool:
+            raise TypeError(
+                "expected_source_sha256_declared must be a boolean."
+            )
+        if type(self.operations) is not tuple:
+            raise TypeError("operations must be a tuple.")
+        if not all(
+            isinstance(item, PmxStructuralTransactionOperationExplanation)
+            for item in self.operations
+        ):
+            raise TypeError(
+                "operations must contain only transaction operation explanations."
+            )
+
+    @property
+    def operation_count(self) -> int:
+        """Return the number of explained operations."""
+
+        return len(self.operations)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable JSON-ready explanation payload."""
+
+        return {
+            "schema_version": self.schema_version,
+            "expected_source_sha256_declared": (
+                self.expected_source_sha256_declared
+            ),
+            "operation_count": self.operation_count,
+            "operations": [item.to_dict() for item in self.operations],
+        }
+
+
+def explain_pmx_structural_transaction_plan(
+    plan: PmxStructuralTransactionPlan,
+) -> PmxStructuralTransactionPlanExplanation:
+    """Explain typed authoring intent without PMX I/O or execution."""
+
+    if not isinstance(plan, PmxStructuralTransactionPlan):
+        raise TypeError("plan must be a PmxStructuralTransactionPlan instance.")
+
+    catalog_by_type = {
+        entry.operation_type: entry
+        for entry in get_pmx_structural_transaction_operation_catalog().operations
+    }
+    explanations: list[PmxStructuralTransactionOperationExplanation] = []
+    for operation_index, operation in enumerate(plan.operations):
+        rendered = _render_transaction_operation(operation)
+        operation_type = PmxStructuralTransactionOperationType(rendered["op"])
+        catalog_entry = catalog_by_type[operation_type]
+        explanations.append(
+            PmxStructuralTransactionOperationExplanation(
+                operation_index=operation_index,
+                operation_type=operation_type,
+                purpose=catalog_entry.purpose,
+                canonical_fields=tuple(
+                    field_name for field_name in rendered if field_name != "op"
+                ),
+            )
+        )
+
+    return PmxStructuralTransactionPlanExplanation(
+        schema_version=plan.schema_version,
+        expected_source_sha256_declared=plan.expected_source_sha256 is not None,
+        operations=tuple(explanations),
+    )
+
+
 __all__ = (
     "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
     "PmxStructuralTransactionOperationType",
@@ -3392,4 +3555,8 @@ __all__ = (
     "load_pmx_structural_transaction_plan",
     "render_pmx_structural_transaction_plan_json",
     "PmxStructuralTransactionPlan",
+    "get_pmx_structural_transaction_plan_template",
+    "PmxStructuralTransactionOperationExplanation",
+    "PmxStructuralTransactionPlanExplanation",
+    "explain_pmx_structural_transaction_plan",
 )

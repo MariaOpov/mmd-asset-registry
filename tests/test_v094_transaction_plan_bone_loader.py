@@ -620,7 +620,11 @@ class V094TransactionPlanBoneLoaderTests(unittest.TestCase):
             "render_pmx_structural_transaction_plan_json",
             "PmxStructuralTransactionPlan",
         }
-        self.assertEqual(set(transaction_plan.__all__), expected)
+        self.assertTrue(expected.issubset(set(transaction_plan.__all__)))
+        self.assertEqual(
+            len(transaction_plan.__all__),
+            len(set(transaction_plan.__all__)),
+        )
 
     def test_cp09_preserves_runtime_immutable_discriminator_mapping(self) -> None:
         mapping = transaction_plan._OPERATION_TYPE_BY_DISCRIMINATOR

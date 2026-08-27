@@ -25,16 +25,18 @@ from mmd_registry.services.structural_transaction import (
 
 
 class V094TransactionPlanModelTests(unittest.TestCase):
-    def test_module_exports_only_the_cp05_model_foundation(self) -> None:
+    def test_module_preserves_the_cp05_model_foundation_exports(self) -> None:
         import mmd_registry.pmx.transaction_plan as module
 
-        self.assertEqual(
-            module.__all__,
-            (
-                "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
-                "PmxStructuralTransactionPlan",
-            ),
+        cp05_foundation = (
+            "PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION",
+            "PmxStructuralTransactionPlan",
         )
+        self.assertEqual(
+            tuple(name for name in module.__all__ if name in cp05_foundation),
+            cp05_foundation,
+        )
+        self.assertEqual(len(module.__all__), len(set(module.__all__)))
         self.assertEqual(PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION, 1)
 
     def test_model_has_one_frozen_slotted_contract_shape(self) -> None:

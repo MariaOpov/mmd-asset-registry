@@ -21,9 +21,20 @@ from mmd_registry.services.structural_bone import (
     PmxStructuralBoneInsertion,
 )
 from mmd_registry.services.structural_material import PmxStructuralMaterialInsertion
-from mmd_registry.services.structural_morph import PmxStructuralMorphInsertion
+from mmd_registry.services.structural_morph import (
+    PmxStructuralMorphBoneOffset,
+    PmxStructuralMorphFlipOffset,
+    PmxStructuralMorphGroupOffset,
+    PmxStructuralMorphImpulseOffset,
+    PmxStructuralMorphInsertion,
+    PmxStructuralMorphMaterialOffset,
+    PmxStructuralMorphUvOffset,
+    PmxStructuralMorphVertexOffset,
+)
 from mmd_registry.services.structural_reference import PmxStructuralNewReference
-from mmd_registry.services.structural_rigid_body import PmxStructuralRigidBodyInsertion
+from mmd_registry.services.structural_rigid_body import (
+    PmxStructuralRigidBodyInsertion,
+)
 from mmd_registry.services.structural_texture import PmxStructuralTextureInsertion
 from mmd_registry.services.structural_transaction import (
     PmxStructuralTransactionOperation,
@@ -278,6 +289,105 @@ _VERTEX_DEFORM_FIELDS_BY_TYPE: Final = MappingProxyType(
             {"type", "bone_indices", "bone_1_weight", "c", "r0", "r1"}
         ),
         "qdef": frozenset({"type", "bone_indices", "weights"}),
+    }
+)
+_INSERT_MORPH_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "op",
+        "local_name",
+        "morph_type",
+        "universal_name",
+        "panel",
+        "offsets",
+        "position",
+        "source_index",
+        "new_id",
+    }
+)
+_MORPH_TYPES: Final[tuple[str, ...]] = (
+    "group",
+    "vertex",
+    "bone",
+    "uv",
+    "additional_uv_1",
+    "additional_uv_2",
+    "additional_uv_3",
+    "additional_uv_4",
+    "material",
+    "flip",
+    "impulse",
+)
+_MORPH_PANELS: Final[tuple[str, ...]] = (
+    "system",
+    "eyebrow",
+    "eye",
+    "mouth",
+    "other",
+)
+_MORPH_OFFSET_FIELDS_BY_TYPE: Final = MappingProxyType(
+    {
+        "group": frozenset({"type", "morph_index", "weight"}),
+        "vertex": frozenset({"type", "vertex_index", "translation"}),
+        "bone": frozenset({"type", "bone_index", "translation", "rotation"}),
+        "uv": frozenset({"type", "vertex_index", "uv_offset"}),
+        "material": frozenset(
+            {
+                "type",
+                "material_index",
+                "operation",
+                "diffuse",
+                "specular",
+                "specular_strength",
+                "ambient",
+                "edge_color",
+                "edge_scale",
+                "texture_tint",
+                "sphere_tint",
+                "toon_tint",
+            }
+        ),
+        "flip": frozenset({"type", "morph_index", "weight"}),
+        "impulse": frozenset(
+            {"type", "rigid_body_index", "local", "velocity", "angular_torque"}
+        ),
+    }
+)
+_MORPH_OFFSET_TYPE_BY_MORPH_TYPE: Final = MappingProxyType(
+    {
+        "group": "group",
+        "vertex": "vertex",
+        "bone": "bone",
+        "uv": "uv",
+        "additional_uv_1": "uv",
+        "additional_uv_2": "uv",
+        "additional_uv_3": "uv",
+        "additional_uv_4": "uv",
+        "material": "material",
+        "flip": "flip",
+        "impulse": "impulse",
+    }
+)
+_INSERT_RIGID_BODY_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "op",
+        "local_name",
+        "universal_name",
+        "bone_index",
+        "collision_group",
+        "collision_mask",
+        "shape",
+        "size",
+        "body_position",
+        "rotation",
+        "mass",
+        "linear_damping",
+        "angular_damping",
+        "restitution",
+        "friction",
+        "physics_mode",
+        "position",
+        "source_index",
+        "new_id",
     }
 )
 _NEW_REFERENCE_FIELDS: Final[frozenset[str]] = frozenset(
@@ -1852,6 +1962,783 @@ def _parse_vertex_insertion_operation(
         ) from error
 
 
+def _parse_cross_target_reference(
+    value: object,
+    *,
+    field: str,
+    expected_target_kind: str,
+    allow_sentinel: bool,
+    operation_index: int,
+    operation_type: str,
+) -> int | PmxStructuralNewReference:
+    if type(value) is int:
+        minimum = -1 if allow_sentinel else 0
+        if value < minimum:
+            message = (
+                f"captured-source {expected_target_kind} reference "
+                "cannot be smaller than -1."
+                if allow_sentinel
+                else f"captured-source {expected_target_kind} reference "
+                "cannot be negative."
+            )
+            raise _field_error(
+                message,
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        return value
+    return _parse_new_reference(
+        value,
+        field=field,
+        expected_target_kind=expected_target_kind,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+
+def _parse_nonnegative_source_index(
+    value: object,
+    *,
+    field: str,
+    operation_index: int,
+    operation_type: str,
+) -> int:
+    index = _require_integer(
+        value,
+        field=field,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if index < 0:
+        raise _field_error(
+            "captured-source index cannot be negative.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    return index
+
+
+def _parse_morph_offset(
+    payload: object,
+    *,
+    morph_type: str,
+    offset_index: int,
+    operation_index: int,
+    operation_type: str,
+) -> object:
+    field_prefix = f"offsets[{offset_index}]"
+    if type(payload) is not dict:
+        raise _field_error(
+            "value must be a JSON object.",
+            field=field_prefix,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    offset_type = _require_string(
+        _require_field(
+            payload,
+            "type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field=f"{field_prefix}.type",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    allowed_fields = _MORPH_OFFSET_FIELDS_BY_TYPE.get(offset_type)
+    if allowed_fields is None:
+        raise _field_error(
+            f"unsupported morph offset type {offset_type!r}.",
+            field=f"{field_prefix}.type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    expected_offset_type = _MORPH_OFFSET_TYPE_BY_MORPH_TYPE[morph_type]
+    if offset_type != expected_offset_type:
+        raise _field_error(
+            (
+                f"offset type {offset_type!r} does not match "
+                f"morph_type {morph_type!r}."
+            ),
+            field=f"{field_prefix}.type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    unknown_fields = sorted(set(payload) - allowed_fields)
+    if unknown_fields:
+        unknown = unknown_fields[0]
+        raise _field_error(
+            f"unknown field {unknown!r}.",
+            field=f"{field_prefix}.{unknown}",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    try:
+        if offset_type == "group":
+            return PmxStructuralMorphGroupOffset(
+                morph_index=_parse_nonnegative_source_index(
+                    _require_field(
+                        payload,
+                        "morph_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.morph_index",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                weight=_require_float(
+                    _require_field(
+                        payload,
+                        "weight",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.weight",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if offset_type == "vertex":
+            return PmxStructuralMorphVertexOffset(
+                vertex_index=_parse_cross_target_reference(
+                    _require_field(
+                        payload,
+                        "vertex_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.vertex_index",
+                    expected_target_kind="vertex",
+                    allow_sentinel=False,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                translation=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "translation",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.translation",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if offset_type == "bone":
+            return PmxStructuralMorphBoneOffset(
+                bone_index=_parse_cross_target_reference(
+                    _require_field(
+                        payload,
+                        "bone_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.bone_index",
+                    expected_target_kind="bone",
+                    allow_sentinel=False,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                translation=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "translation",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.translation",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                rotation=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "rotation",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.rotation",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if offset_type == "uv":
+            return PmxStructuralMorphUvOffset(
+                vertex_index=_parse_cross_target_reference(
+                    _require_field(
+                        payload,
+                        "vertex_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.vertex_index",
+                    expected_target_kind="vertex",
+                    allow_sentinel=False,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                uv_offset=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "uv_offset",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.uv_offset",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if offset_type == "material":
+            material_operation = _require_string(
+                _require_field(
+                    payload,
+                    "operation",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field=f"{field_prefix}.operation",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+            if material_operation not in ("multiply", "add"):
+                raise _field_error(
+                    "value must be either 'multiply' or 'add'.",
+                    field=f"{field_prefix}.operation",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                )
+            return PmxStructuralMorphMaterialOffset(
+                material_index=_parse_cross_target_reference(
+                    _require_field(
+                        payload,
+                        "material_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.material_index",
+                    expected_target_kind="material",
+                    allow_sentinel=True,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                operation=material_operation,
+                diffuse=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "diffuse",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.diffuse",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                specular=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "specular",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.specular",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                specular_strength=_require_float(
+                    _require_field(
+                        payload,
+                        "specular_strength",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.specular_strength",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                ambient=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "ambient",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.ambient",
+                    length=3,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                edge_color=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "edge_color",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.edge_color",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                edge_scale=_require_float(
+                    _require_field(
+                        payload,
+                        "edge_scale",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.edge_scale",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                texture_tint=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "texture_tint",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.texture_tint",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                sphere_tint=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "sphere_tint",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.sphere_tint",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                toon_tint=_require_float_vector(
+                    _require_field(
+                        payload,
+                        "toon_tint",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.toon_tint",
+                    length=4,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        if offset_type == "flip":
+            return PmxStructuralMorphFlipOffset(
+                morph_index=_parse_nonnegative_source_index(
+                    _require_field(
+                        payload,
+                        "morph_index",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.morph_index",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                weight=_require_float(
+                    _require_field(
+                        payload,
+                        "weight",
+                        operation_index=operation_index,
+                        operation_type=operation_type,
+                    ),
+                    field=f"{field_prefix}.weight",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+            )
+
+        assert offset_type == "impulse"
+        return PmxStructuralMorphImpulseOffset(
+            rigid_body_index=_parse_cross_target_reference(
+                _require_field(
+                    payload,
+                    "rigid_body_index",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field=f"{field_prefix}.rigid_body_index",
+                expected_target_kind="rigid_body",
+                allow_sentinel=False,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            local=_require_boolean(
+                _require_field(
+                    payload,
+                    "local",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field=f"{field_prefix}.local",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            velocity=_require_float_vector(
+                _require_field(
+                    payload,
+                    "velocity",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field=f"{field_prefix}.velocity",
+                length=3,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            angular_torque=_require_float_vector(
+                _require_field(
+                    payload,
+                    "angular_torque",
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                ),
+                field=f"{field_prefix}.angular_torque",
+                length=3,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+        )
+    except (TypeError, ValueError) as error:
+        if isinstance(error, PmxStructuralTransactionPlanError):
+            raise
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_morph_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralMorphInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_MORPH.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_MORPH_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    local_name = _require_string(
+        _require_field(
+            payload,
+            "local_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="local_name",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    morph_type = _require_string(
+        _require_field(
+            payload,
+            "morph_type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ),
+        field="morph_type",
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if morph_type not in _MORPH_TYPES:
+        raise _field_error(
+            f"unsupported morph_type {morph_type!r}.",
+            field="morph_type",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    kwargs: dict[str, object] = {
+        "local_name": local_name,
+        "morph_type": morph_type,
+    }
+
+    if "universal_name" in payload:
+        kwargs["universal_name"] = _require_string(
+            payload["universal_name"],
+            field="universal_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "panel" in payload:
+        panel = _require_string(
+            payload["panel"],
+            field="panel",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if panel not in _MORPH_PANELS:
+            raise _field_error(
+                "value must be system, eyebrow, eye, mouth, or other.",
+                field="panel",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["panel"] = panel
+
+    if "offsets" in payload:
+        offsets_value = payload["offsets"]
+        if type(offsets_value) is not list:
+            raise _field_error(
+                "value must be a JSON array.",
+                field="offsets",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["offsets"] = tuple(
+            _parse_morph_offset(
+                offset,
+                morph_type=morph_type,
+                offset_index=offset_index,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+            for offset_index, offset in enumerate(offsets_value)
+        )
+
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if "position" in payload:
+        kwargs["position"] = position
+    if source_index is not None:
+        kwargs["source_index"] = source_index
+
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if new_id is not None:
+        kwargs["new_id"] = new_id
+
+    try:
+        return PmxStructuralMorphInsertion(**kwargs)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
+def _parse_rigid_body_insertion_operation(
+    payload: dict[str, object],
+    *,
+    operation_index: int,
+) -> PmxStructuralRigidBodyInsertion:
+    operation_type = PmxStructuralTransactionOperationType.INSERT_RIGID_BODY.value
+    _reject_unknown_fields(
+        payload,
+        _INSERT_RIGID_BODY_FIELDS,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+
+    kwargs: dict[str, object] = {
+        "local_name": _require_string(
+            _require_field(
+                payload,
+                "local_name",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            ),
+            field="local_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    }
+
+    if "universal_name" in payload:
+        kwargs["universal_name"] = _require_string(
+            payload["universal_name"],
+            field="universal_name",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "bone_index" in payload:
+        kwargs["bone_index"] = _parse_cross_target_reference(
+            payload["bone_index"],
+            field="bone_index",
+            expected_target_kind="bone",
+            allow_sentinel=True,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+
+    if "collision_group" in payload:
+        collision_group = _require_integer(
+            payload["collision_group"],
+            field="collision_group",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if not 0 <= collision_group <= 15:
+            raise _field_error(
+                "value must be from 0 through 15.",
+                field="collision_group",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["collision_group"] = collision_group
+
+    if "collision_mask" in payload:
+        collision_mask = _require_integer(
+            payload["collision_mask"],
+            field="collision_mask",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if not 0 <= collision_mask <= 0xFFFF:
+            raise _field_error(
+                "value must fit in an unsigned 16-bit integer.",
+                field="collision_mask",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["collision_mask"] = collision_mask
+
+    if "shape" in payload:
+        shape = _require_string(
+            payload["shape"],
+            field="shape",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if shape not in ("sphere", "box", "capsule"):
+            raise _field_error(
+                "value must be sphere, box, or capsule.",
+                field="shape",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["shape"] = shape
+
+    for field in ("size", "body_position", "rotation"):
+        if field in payload:
+            vector = _require_float_vector(
+                payload[field],
+                field=field,
+                length=3,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+            if field == "size" and any(value < 0.0 for value in vector):
+                raise _field_error(
+                    "values cannot be negative.",
+                    field=field,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                )
+            kwargs[field] = vector
+
+    for field in (
+        "mass",
+        "linear_damping",
+        "angular_damping",
+        "restitution",
+        "friction",
+    ):
+        if field in payload:
+            value = _require_float(
+                payload[field],
+                field=field,
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+            if value < 0.0:
+                raise _field_error(
+                    "value cannot be negative.",
+                    field=field,
+                    operation_index=operation_index,
+                    operation_type=operation_type,
+                )
+            kwargs[field] = value
+
+    if "physics_mode" in payload:
+        physics_mode = _require_string(
+            payload["physics_mode"],
+            field="physics_mode",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if physics_mode not in (
+            "bone_follow",
+            "physics",
+            "physics_with_bone_alignment",
+        ):
+            raise _field_error(
+                (
+                    "value must be bone_follow, physics, or "
+                    "physics_with_bone_alignment."
+                ),
+                field="physics_mode",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        kwargs["physics_mode"] = physics_mode
+
+    position, source_index = _parse_insertion_position(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if "position" in payload:
+        kwargs["position"] = position
+    if source_index is not None:
+        kwargs["source_index"] = source_index
+
+    new_id = _parse_optional_new_id(
+        payload,
+        operation_index=operation_index,
+        operation_type=operation_type,
+    )
+    if new_id is not None:
+        kwargs["new_id"] = new_id
+
+    try:
+        return PmxStructuralRigidBodyInsertion(**kwargs)
+    except (TypeError, ValueError) as error:
+        raise PmxStructuralTransactionPlanError(
+            str(error),
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+
+
 def _parse_transaction_operation(
     payload: object,
     *,
@@ -1885,6 +2772,16 @@ def _parse_transaction_operation(
         )
     if operation_name == PmxStructuralTransactionOperationType.INSERT_BONE:
         return _parse_bone_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_MORPH:
+        return _parse_morph_insertion_operation(
+            payload,
+            operation_index=operation_index,
+        )
+    if operation_name == PmxStructuralTransactionOperationType.INSERT_RIGID_BODY:
+        return _parse_rigid_body_insertion_operation(
             payload,
             operation_index=operation_index,
         )

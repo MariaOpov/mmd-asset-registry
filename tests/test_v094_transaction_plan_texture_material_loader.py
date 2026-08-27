@@ -428,19 +428,15 @@ class V094TransactionPlanTextureMaterialLoaderTests(unittest.TestCase):
         self.assertIsInstance(plan.operations[2], PmxStructuralMaterialInsertion)
         self.assertEqual(plan.operations[0].target_kind, PmxReferenceTargetKind.BONE)
 
-    def test_remaining_unimplemented_insertion_discriminators_still_fail_closed(self) -> None:
-        for operation_name in (
-            "insert_morph",
-            "insert_rigid_body",
-        ):
+    def test_cp11_closes_remaining_schema_one_insertion_dispatch_gap(self) -> None:
+        for operation_name in ("insert_morph", "insert_rigid_body"):
             with self.subTest(operation=operation_name):
-                with self.assertRaisesRegex(
-                    PmxStructuralTransactionPlanError,
-                    "recognized by schema 1",
-                ):
+                with self.assertRaises(PmxStructuralTransactionPlanError) as caught:
                     parse_pmx_structural_transaction_plan_json(
                         _plan({"op": operation_name})
                     )
+                self.assertEqual(caught.exception.field, "local_name")
+                self.assertNotIn("recognized by schema 1", str(caught.exception))
 
     def test_texture_and_material_duplicate_nested_members_are_rejected(self) -> None:
         texts = (

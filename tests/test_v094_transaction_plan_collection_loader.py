@@ -197,21 +197,15 @@ class V094TransactionPlanCollectionLoaderTests(unittest.TestCase):
                 self.assertEqual(caught.exception.operation_index, 0)
                 self.assertEqual(caught.exception.field, "op")
 
-    def test_unimplemented_insertion_discriminators_fail_closed_until_later_checkpoints(self) -> None:
-        for operation_name in (
-            "insert_morph",
-            "insert_rigid_body",
-        ):
+    def test_cp11_closes_remaining_schema_one_insertion_dispatch_gap(self) -> None:
+        for operation_name in ("insert_morph", "insert_rigid_body"):
             with self.subTest(operation=operation_name):
-                with self.assertRaisesRegex(
-                    PmxStructuralTransactionPlanError,
-                    "recognized by schema 1",
-                ) as caught:
+                with self.assertRaises(PmxStructuralTransactionPlanError) as caught:
                     parse_pmx_structural_transaction_plan_json(
                         _plan({"op": operation_name})
                     )
-                self.assertEqual(caught.exception.operation_type, operation_name)
-                self.assertEqual(caught.exception.field, "op")
+                self.assertEqual(caught.exception.field, "local_name")
+                self.assertNotIn("recognized by schema 1", str(caught.exception))
 
     def test_transform_collection_rejects_unknown_or_missing_fields(self) -> None:
         with self.assertRaises(PmxStructuralTransactionPlanError) as caught:

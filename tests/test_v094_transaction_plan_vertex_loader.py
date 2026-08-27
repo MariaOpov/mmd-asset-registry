@@ -517,16 +517,15 @@ class V094TransactionPlanVertexLoaderTests(unittest.TestCase):
             ("PmxStructuralBoneInsertion", "PmxStructuralVertexInsertion"),
         )
 
-    def test_remaining_two_insertion_discriminators_still_fail_closed(self) -> None:
+    def test_cp11_closes_remaining_schema_one_insertion_dispatch_gap(self) -> None:
         for operation_name in ("insert_morph", "insert_rigid_body"):
             with self.subTest(operation=operation_name):
-                with self.assertRaisesRegex(
-                    PmxStructuralTransactionPlanError,
-                    "recognized by schema 1",
-                ):
+                with self.assertRaises(PmxStructuralTransactionPlanError) as caught:
                     parse_pmx_structural_transaction_plan_json(
                         _plan({"op": operation_name})
                     )
+                self.assertEqual(caught.exception.field, "local_name")
+                self.assertNotIn("recognized by schema 1", str(caught.exception))
 
     def test_cp10_adds_no_new_public_namespace_names(self) -> None:
         expected = {

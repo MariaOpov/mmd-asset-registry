@@ -53,6 +53,28 @@ from mmd_registry.services.structural_vertex import (
 PMX_STRUCTURAL_TRANSACTION_PLAN_SCHEMA_VERSION: Final = 1
 _LOWERCASE_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
+# Authoring resource ceilings intentionally mirror the repository's existing PMX
+# scanner safety policy where a corresponding PMX structure already has a bound.
+# They are resource limits only: actual source-domain membership and execution-
+# stage source identity remain the released structural-transaction authority.
+_MAX_TRANSACTION_PLAN_JSON_BYTES: Final[int] = 256 * 1024 * 1024
+_MAX_TRANSACTION_PLAN_JSON_DEPTH: Final[int] = 16
+_MAX_TRANSACTION_PLAN_STRING_UTF8_BYTES: Final[int] = 1024 * 1024
+_MAX_TRANSACTION_PLAN_TEXTURE_PATH_UTF8_BYTES: Final[int] = 64 * 1024
+_MAX_TRANSACTION_PLAN_OPERATION_COUNT: Final[int] = 2_000_000
+_MAX_TRANSACTION_PLAN_IK_LINK_COUNT: Final[int] = 100_000
+_MAX_TRANSACTION_PLAN_MORPH_OFFSET_COUNT: Final[int] = 2_000_000
+_COLLECTION_SOURCE_INDEX_LIMIT_BY_TARGET: Final = MappingProxyType(
+    {
+        "vertex": 2_000_000,
+        "texture": 100_000,
+        "material": 100_000,
+        "bone": 200_000,
+        "morph": 200_000,
+        "rigid_body": 200_000,
+    }
+)
+
 
 class PmxStructuralTransactionOperationType(StrEnum):
     """Stable schema-one top-level ``op`` discriminator vocabulary."""
@@ -558,10 +580,34 @@ def _require_string(
     field: str,
     operation_index: int | None = None,
     operation_type: str | None = None,
+    max_utf8_bytes: int = _MAX_TRANSACTION_PLAN_STRING_UTF8_BYTES,
 ) -> str:
     if type(value) is not str:
         raise _field_error(
             "value must be a JSON string.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    if len(value) > max_utf8_bytes:
+        raise _field_error(
+            f"UTF-8 value exceeds the safety limit of {max_utf8_bytes} bytes.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+    try:
+        encoded_size = len(value.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise _field_error(
+            "value must be encodable as UTF-8.",
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        ) from error
+    if encoded_size > max_utf8_bytes:
+        raise _field_error(
+            f"UTF-8 value exceeds the safety limit of {max_utf8_bytes} bytes.",
             field=field,
             operation_index=operation_index,
             operation_type=operation_type,
@@ -733,7 +779,7 @@ def _parse_insertion_position(
             )
         return position, None
 
-    source_index = _require_integer(
+    source_index = _require_int32(
         _require_field(
             payload,
             "source_index",
@@ -852,14 +898,20 @@ def _parse_texture_reference(
     operation_type: str,
 ) -> int | PmxStructuralNewReference:
     if type(value) is int:
-        if value < -1:
+        index = _require_int32(
+            value,
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
+        if index < -1:
             raise _field_error(
                 "existing texture reference cannot be smaller than -1.",
                 field=field,
                 operation_index=operation_index,
                 operation_type=operation_type,
             )
-        return value
+        return index
     return _parse_new_reference(
         value,
         field=field,
@@ -914,11 +966,19 @@ def _parse_transform_collection_operation(
             operation_index=operation_index,
             operation_type=operation_type,
         )
+    index_limit = _COLLECTION_SOURCE_INDEX_LIMIT_BY_TARGET[target_kind_value]
+    if len(indices_value) > index_limit:
+        raise _field_error(
+            f"array exceeds the safety limit of {index_limit} items.",
+            field="old_indices_in_new_order",
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
 
     indices: list[int] = []
     seen: set[int] = set()
     for index, value in enumerate(indices_value):
-        parsed = _require_integer(
+        parsed = _require_int32(
             value,
             field=f"old_indices_in_new_order[{index}]",
             operation_index=operation_index,
@@ -970,6 +1030,7 @@ def _parse_texture_insertion_operation(
         field="path",
         operation_index=operation_index,
         operation_type=operation_type,
+        max_utf8_bytes=_MAX_TRANSACTION_PLAN_TEXTURE_PATH_UTF8_BYTES,
     )
     position, source_index = _parse_insertion_position(
         payload,
@@ -1202,7 +1263,7 @@ def _parse_bone_reference(
     operation_index: int,
     operation_type: str,
 ) -> int:
-    index = _require_integer(
+    index = _require_int32(
         value,
         field=field,
         operation_index=operation_index,
@@ -1366,6 +1427,16 @@ def _parse_bone_ik(
         if type(links_value) is not list:
             raise _field_error(
                 "value must be a JSON array.",
+                field="ik.links",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
+        if len(links_value) > _MAX_TRANSACTION_PLAN_IK_LINK_COUNT:
+            raise _field_error(
+                (
+                    "array exceeds the safety limit of "
+                    f"{_MAX_TRANSACTION_PLAN_IK_LINK_COUNT} items."
+                ),
                 field="ik.links",
                 operation_index=operation_index,
                 operation_type=operation_type,
@@ -1997,8 +2068,14 @@ def _parse_cross_target_reference(
     operation_type: str,
 ) -> int | PmxStructuralNewReference:
     if type(value) is int:
+        index = _require_int32(
+            value,
+            field=field,
+            operation_index=operation_index,
+            operation_type=operation_type,
+        )
         minimum = -1 if allow_sentinel else 0
-        if value < minimum:
+        if index < minimum:
             message = (
                 f"captured-source {expected_target_kind} reference "
                 "cannot be smaller than -1."
@@ -2012,7 +2089,7 @@ def _parse_cross_target_reference(
                 operation_index=operation_index,
                 operation_type=operation_type,
             )
-        return value
+        return index
     return _parse_new_reference(
         value,
         field=field,
@@ -2029,7 +2106,7 @@ def _parse_nonnegative_source_index(
     operation_index: int,
     operation_type: str,
 ) -> int:
-    index = _require_integer(
+    index = _require_int32(
         value,
         field=field,
         operation_index=operation_index,
@@ -2540,6 +2617,16 @@ def _parse_morph_insertion_operation(
                 operation_index=operation_index,
                 operation_type=operation_type,
             )
+        if len(offsets_value) > _MAX_TRANSACTION_PLAN_MORPH_OFFSET_COUNT:
+            raise _field_error(
+                (
+                    "array exceeds the safety limit of "
+                    f"{_MAX_TRANSACTION_PLAN_MORPH_OFFSET_COUNT} items."
+                ),
+                field="offsets",
+                operation_index=operation_index,
+                operation_type=operation_type,
+            )
         kwargs["offsets"] = tuple(
             _parse_morph_offset(
                 offset,
@@ -2861,6 +2948,14 @@ def _parse_decoded_transaction_plan(
             "value must be a JSON array.",
             field="operations",
         )
+    if len(operations_value) > _MAX_TRANSACTION_PLAN_OPERATION_COUNT:
+        raise _field_error(
+            (
+                "array exceeds the safety limit of "
+                f"{_MAX_TRANSACTION_PLAN_OPERATION_COUNT} items."
+            ),
+            field="operations",
+        )
     operations = tuple(
         _parse_transaction_operation(operation, operation_index=index)
         for index, operation in enumerate(operations_value)
@@ -2888,13 +2983,49 @@ def _parse_decoded_transaction_plan(
         raise PmxStructuralTransactionPlanError(str(error)) from error
 
 
-def parse_pmx_structural_transaction_plan_json(
+def _require_transaction_plan_json_size(text: str) -> None:
+    if len(text) > _MAX_TRANSACTION_PLAN_JSON_BYTES:
+        raise PmxStructuralTransactionPlanDecodeError(
+            (
+                "JSON text exceeds the safety limit of "
+                f"{_MAX_TRANSACTION_PLAN_JSON_BYTES} UTF-8 bytes."
+            )
+        )
+    try:
+        encoded_size = len(text.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise PmxStructuralTransactionPlanDecodeError(
+            "JSON text must be encodable as UTF-8."
+        ) from error
+    if encoded_size > _MAX_TRANSACTION_PLAN_JSON_BYTES:
+        raise PmxStructuralTransactionPlanDecodeError(
+            (
+                "JSON text exceeds the safety limit of "
+                f"{_MAX_TRANSACTION_PLAN_JSON_BYTES} UTF-8 bytes."
+            )
+        )
+
+
+def _require_transaction_plan_json_depth(payload: object) -> None:
+    pending: list[tuple[object, int]] = [(payload, 1)]
+    while pending:
+        value, depth = pending.pop()
+        if not isinstance(value, (dict, list)):
+            continue
+        if depth > _MAX_TRANSACTION_PLAN_JSON_DEPTH:
+            raise PmxStructuralTransactionPlanDecodeError(
+                (
+                    "JSON nesting exceeds the safety limit of "
+                    f"{_MAX_TRANSACTION_PLAN_JSON_DEPTH} container levels."
+                )
+            )
+        children = value.values() if isinstance(value, dict) else value
+        pending.extend((child, depth + 1) for child in children)
+
+
+def _decode_pmx_structural_transaction_plan_json(
     text: str,
 ) -> PmxStructuralTransactionPlan:
-    """Parse strict JSON text into an immutable schema-one transaction plan."""
-
-    if type(text) is not str:
-        raise TypeError("text must be a string.")
     if not text.strip():
         raise PmxStructuralTransactionPlanDecodeError(
             "invalid JSON at line 1, column 1: document is empty."
@@ -2906,6 +3037,13 @@ def parse_pmx_structural_transaction_plan_json(
             object_pairs_hook=_strict_json_object,
             parse_constant=_reject_json_constant,
         )
+    except RecursionError as error:
+        raise PmxStructuralTransactionPlanDecodeError(
+            (
+                "JSON nesting exceeds the safety limit of "
+                f"{_MAX_TRANSACTION_PLAN_JSON_DEPTH} container levels."
+            )
+        ) from error
     except _DuplicateJsonMemberError as error:
         raise PmxStructuralTransactionPlanDecodeError(
             f"duplicate JSON member {error.member_name!r}."
@@ -2922,23 +3060,44 @@ def parse_pmx_structural_transaction_plan_json(
             )
         ) from error
 
+    _require_transaction_plan_json_depth(payload)
     return _parse_decoded_transaction_plan(payload)
+
+
+def parse_pmx_structural_transaction_plan_json(
+    text: str,
+) -> PmxStructuralTransactionPlan:
+    """Parse strict bounded JSON text into an immutable schema-one plan."""
+
+    if type(text) is not str:
+        raise TypeError("text must be a string.")
+    _require_transaction_plan_json_size(text)
+    return _decode_pmx_structural_transaction_plan_json(text)
 
 
 def load_pmx_structural_transaction_plan(
     path: str | Path,
 ) -> PmxStructuralTransactionPlan:
-    """Read one UTF-8 JSON file and parse a structural transaction plan."""
+    """Read one bounded UTF-8 JSON file and parse a transaction plan."""
 
     if not isinstance(path, (str, Path)):
         raise TypeError("path must be a string or pathlib.Path.")
+    with Path(path).open("rb") as stream:
+        raw = stream.read(_MAX_TRANSACTION_PLAN_JSON_BYTES + 1)
+    if len(raw) > _MAX_TRANSACTION_PLAN_JSON_BYTES:
+        raise PmxStructuralTransactionPlanDecodeError(
+            (
+                "transaction-plan file exceeds the safety limit of "
+                f"{_MAX_TRANSACTION_PLAN_JSON_BYTES} bytes."
+            )
+        )
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        text = raw.decode("utf-8")
     except UnicodeDecodeError as error:
         raise PmxStructuralTransactionPlanDecodeError(
             "transaction-plan file must be valid UTF-8."
         ) from error
-    return parse_pmx_structural_transaction_plan_json(text)
+    return _decode_pmx_structural_transaction_plan_json(text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2967,8 +3126,8 @@ class PmxStructuralTransactionPlan:
         PmxStructuralTransactionRequest(operations=self.operations)
 
         if self.expected_source_sha256 is not None:
-            if not isinstance(self.expected_source_sha256, str):
-                raise TypeError("expected_source_sha256 must be a string.")
+            if type(self.expected_source_sha256) is not str:
+                raise TypeError("expected_source_sha256 must be an exact string.")
             if _LOWERCASE_SHA256.fullmatch(self.expected_source_sha256) is None:
                 raise ValueError(
                     "expected_source_sha256 must be exactly 64 lowercase "

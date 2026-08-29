@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
+import hashlib
 import importlib
 import inspect
 import io
@@ -17,7 +19,11 @@ from unittest.mock import patch
 
 import mmd_registry.cli as cli
 import mmd_registry.services.structural_transaction_plan as service
+import mmd_registry.services.structural_transaction_plan_preview as preview_service
 import mmd_registry.transaction_plan_cli as transaction_plan_cli
+from mmd_registry.pmx.reader import load_pmx
+from mmd_registry.pmx.writer import serialize_pmx
+from tests.pmx_roundtrip_fixtures import build_pmx_roundtrip_fixture
 
 
 EXPECTED_LEGACY_COMMANDS = (
@@ -37,6 +43,7 @@ EXPECTED_TRANSACTION_PLAN_ACTIONS = (
     "template",
     "validate",
     "explain",
+    "preview",
 )
 EXPECTED_HASH = "a" * 64
 
@@ -77,8 +84,17 @@ def _valid_payload() -> dict[str, object]:
     }
 
 
+def _clean_source_bytes() -> bytes:
+    fixture = build_pmx_roundtrip_fixture(version=2.1, index_size=1)
+    document = replace(
+        load_pmx(io.BytesIO(fixture)),
+        trailing_data=b"",
+    )
+    return serialize_pmx(document)
+
+
 class V094TransactionPlanCliTests(unittest.TestCase):
-    """Keep CP16 additive, authoring-only, deterministic, and service-routed."""
+    """Keep transaction-plan CLI additive, deterministic, and service-routed."""
 
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -216,6 +232,211 @@ class V094TransactionPlanCliTests(unittest.TestCase):
         self.assertEqual(payload["operations"][0]["op"], "insert_texture")
         self.assertNotIn(EXPECTED_HASH, json_output)
         self.assertNotIn("textures/安全.png", json_output)
+
+    def test_preview_text_and_json_use_cp17_source_bound_service(self) -> None:
+        source_path = self.root / "source.pmx"
+        source_bytes = _clean_source_bytes()
+        source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        source_path.write_bytes(source_bytes)
+        self.plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "expected_source_sha256": source_sha256,
+                    "operations": [],
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(
+                transaction_plan_cli,
+                "load_structural_transaction_plan",
+                wraps=service.load_structural_transaction_plan,
+            ) as load_plan,
+            patch.object(
+                transaction_plan_cli,
+                "preview_structural_transaction_plan",
+                wraps=preview_service.preview_structural_transaction_plan,
+            ) as preview_plan,
+        ):
+            text_code, text_output, text_error = _capture_run(
+                [
+                    "transaction-plan",
+                    "preview",
+                    str(source_path),
+                    str(self.plan_path),
+                ]
+            )
+
+        self.assertEqual(text_code, 0)
+        self.assertEqual(text_error, "")
+        self.assertEqual(
+            text_output,
+            "\n".join(
+                (
+                    "STRUCTURAL TRANSACTION PLAN PREVIEW",
+                    "Status: no_changes",
+                    "Source identity: matched",
+                    "Changed targets: (none)",
+                    "Inserted: 0",
+                    "Deleted: 0",
+                    "Reordered targets: 0",
+                    "Output written: no",
+                    "",
+                )
+            ),
+        )
+        load_plan.assert_called_once_with(str(self.plan_path))
+        preview_plan.assert_called_once()
+        self.assertEqual(
+            preview_plan.call_args.args[0],
+            str(source_path),
+        )
+
+        json_code, json_output, json_error = _capture_run(
+            [
+                "transaction-plan",
+                "preview",
+                str(source_path),
+                str(self.plan_path),
+                "--json",
+            ]
+        )
+        self.assertEqual(json_code, 0)
+        self.assertEqual(json_error, "")
+        payload = json.loads(json_output)
+        self.assertEqual(
+            payload["source_identity"],
+            {
+                "algorithm": "sha256",
+                "expected_source_sha256_declared": True,
+                "status": "matched",
+            },
+        )
+        self.assertEqual(payload["status"], "no_changes")
+        self.assertTrue(payload["dry_run"])
+        self.assertFalse(payload["output"]["written"])
+        self.assertFalse(payload["output"]["source_touched"])
+        self.assertFalse(payload["output"]["destination_touched"])
+
+    def test_preview_identity_mismatch_is_exit_one_and_disclosure_safe(
+        self,
+    ) -> None:
+        source_path = self.root / "秘密-source.pmx"
+        source_bytes = _clean_source_bytes()
+        source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        source_path.write_bytes(source_bytes)
+        self.plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "expected_source_sha256": "0" * 64,
+                    "operations": [],
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+
+        exit_code, output, error_output = _capture_run(
+            [
+                "transaction-plan",
+                "preview",
+                str(source_path),
+                str(self.plan_path),
+                "--json",
+            ]
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(error_output, "")
+        payload = json.loads(output)
+        self.assertEqual(payload["action"], "preview")
+        self.assertEqual(payload["error_type"], "source_identity_mismatch")
+        self.assertEqual(
+            payload["error"]["code"],
+            "source_identity_mismatch",
+        )
+        self.assertNotIn("0" * 64, output)
+        self.assertNotIn(source_sha256, output)
+        self.assertNotIn(str(source_path), output)
+        self.assertNotIn(str(self.plan_path), output)
+
+    def test_preview_missing_source_maps_to_exit_two_without_path_leakage(
+        self,
+    ) -> None:
+        source_path = self.root / "秘密-missing.pmx"
+        self.plan_path.write_text(
+            '{"schema_version":1,"operations":[]}',
+            encoding="utf-8",
+        )
+
+        text_code, text_output, text_error = _capture_run(
+            [
+                "transaction-plan",
+                "preview",
+                str(source_path),
+                str(self.plan_path),
+            ]
+        )
+        json_code, json_output, json_error = _capture_run(
+            [
+                "transaction-plan",
+                "preview",
+                str(source_path),
+                str(self.plan_path),
+                "--json",
+            ]
+        )
+
+        self.assertEqual(text_code, 2)
+        self.assertEqual(text_output, "")
+        self.assertIn("[ERROR] transaction-plan preview:", text_error)
+        self.assertNotIn(str(source_path), text_error)
+
+        self.assertEqual(json_code, 2)
+        self.assertEqual(json_error, "")
+        payload = json.loads(json_output)
+        self.assertEqual(payload["error_type"], "io")
+        self.assertEqual(payload["error"]["code"], "service_io_failed")
+        self.assertNotIn(str(source_path), json_output)
+
+    def test_preview_rejects_invalid_plan_before_source_preview_service(
+        self,
+    ) -> None:
+        source_path = self.root / "must-not-be-read.pmx"
+        self.plan_path.write_text(
+            '{"schema_version":1,"operations":[],"unknown":true}',
+            encoding="utf-8",
+        )
+
+        with patch.object(
+            transaction_plan_cli,
+            "preview_structural_transaction_plan",
+        ) as preview_plan:
+            exit_code, output, error_output = _capture_run(
+                [
+                    "transaction-plan",
+                    "preview",
+                    str(source_path),
+                    str(self.plan_path),
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(error_output, "")
+        preview_plan.assert_not_called()
+        payload = json.loads(output)
+        self.assertEqual(payload["error_type"], "invalid_plan")
+        self.assertEqual(
+            payload["error"]["code"],
+            "transaction_plan_invalid",
+        )
+        self.assertNotIn(str(source_path), output)
 
     def test_invalid_plan_maps_to_exit_one_without_value_or_path_leakage(
         self,
@@ -359,18 +580,24 @@ class V094TransactionPlanCliTests(unittest.TestCase):
     ) -> None:
         source = inspect.getsource(transaction_plan_cli)
         for forbidden in (
-            "preview_structural_transaction",
+            "preview_structural_transaction(",
             "apply_structural_transaction",
             "structural_output",
             "write_pmx",
             "read_pmx",
             "load_pmx",
+            "load_document(",
             "PmxIndexRemap",
             "final_index",
             "hashlib",
+            ".open(",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, source)
+        self.assertIn(
+            "preview_structural_transaction_plan",
+            source,
+        )
 
     def test_transaction_plan_cli_import_does_not_load_writer_or_cli_cycle(
         self,

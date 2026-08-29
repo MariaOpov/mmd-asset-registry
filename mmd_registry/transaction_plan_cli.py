@@ -19,6 +19,12 @@ from mmd_registry.services.structural_transaction_plan import (
     explain_structural_transaction_plan,
     load_structural_transaction_plan,
 )
+from mmd_registry.services.structural_transaction_plan_preview import (
+    PmxStructuralTransactionPlanPreviewServiceDiagnosticCode,
+    PmxStructuralTransactionPlanPreviewServiceError,
+    PmxStructuralTransactionPlanPreviewResult,
+    preview_structural_transaction_plan,
+)
 
 
 TRANSACTION_PLAN_COMMAND_NAME: Final[str] = "transaction-plan"
@@ -26,6 +32,7 @@ _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "template",
     "validate",
     "explain",
+    "preview",
 )
 
 
@@ -45,7 +52,7 @@ def _top_level_subparsers(
 
 
 def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
-    """Add the CP16 runtime-only transaction-plan command."""
+    """Add the additive transaction-plan authoring and preview command."""
 
     subparsers = _top_level_subparsers(parser)
     if TRANSACTION_PLAN_COMMAND_NAME in subparsers.choices:
@@ -53,11 +60,11 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
 
     transaction_plan_parser = subparsers.add_parser(
         TRANSACTION_PLAN_COMMAND_NAME,
-        help="Author, validate, and explain structural transaction plans.",
+        help="Author, validate, explain, and preview structural transaction plans.",
         description=(
             "Generate a safe empty structural transaction-plan template, "
-            "validate one strict UTF-8 JSON plan through the authoring service, "
-            "or explain its value-free structural intent without PMX I/O."
+            "validate or explain one strict UTF-8 JSON plan, or preview it "
+            "against one source-bound PMX snapshot without publication."
         ),
     )
     action_subparsers = transaction_plan_parser.add_subparsers(
@@ -99,6 +106,26 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         "--json",
         action="store_true",
         help="Print the value-free explanation as stable Unicode-safe JSON.",
+    )
+
+    preview_parser = action_subparsers.add_parser(
+        "preview",
+        help="Preview one plan against one captured source PMX snapshot.",
+    )
+    preview_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="Path to the source PMX file captured once for preview.",
+    )
+    preview_parser.add_argument(
+        "plan",
+        metavar="PLAN",
+        help="Path to the strict UTF-8 JSON transaction plan.",
+    )
+    preview_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print source-bound released preview evidence as stable JSON.",
     )
 
 
@@ -162,6 +189,32 @@ def _render_explanation_text(
     return "\n".join(lines) + "\n"
 
 
+def _render_preview_text(
+    result: PmxStructuralTransactionPlanPreviewResult,
+) -> str:
+    payload = result.to_dict()
+    effects = payload["effects"]
+    if not isinstance(effects, dict):
+        raise RuntimeError("preview effects must be a dictionary.")
+    changed_targets = effects["changed_targets"]
+    if not isinstance(changed_targets, list):
+        raise RuntimeError("preview changed_targets must be a list.")
+    changed = ", ".join(changed_targets) if changed_targets else "(none)"
+    return "\n".join(
+        (
+            "STRUCTURAL TRANSACTION PLAN PREVIEW",
+            f"Status: {result.status}",
+            f"Source identity: {result.source_identity_status}",
+            f"Changed targets: {changed}",
+            f"Inserted: {effects['inserted_count']}",
+            f"Deleted: {effects['deleted_count']}",
+            f"Reordered targets: {effects['reordered_target_count']}",
+            "Output written: no",
+            "",
+        )
+    )
+
+
 def _service_failure_policy(
     error: PmxStructuralTransactionPlanServiceError,
 ) -> tuple[str, int]:
@@ -205,8 +258,77 @@ def _print_service_error(
     return exit_code
 
 
+def _preview_failure_policy(
+    error: PmxStructuralTransactionPlanPreviewServiceError,
+) -> tuple[str, int]:
+    code = error.diagnostic.code
+    if (
+        code
+        is PmxStructuralTransactionPlanPreviewServiceDiagnosticCode
+        .SOURCE_IDENTITY_MISMATCH
+    ):
+        return "source_identity_mismatch", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanPreviewServiceDiagnosticCode
+        .SOURCE_INVALID
+    ):
+        return "source_invalid", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanPreviewServiceDiagnosticCode
+        .PREVIEW_FAILED
+    ):
+        return "preview_failed", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanPreviewServiceDiagnosticCode
+        .SOURCE_IO_FAILED
+    ):
+        return "io", 2
+    if (
+        code
+        is PmxStructuralTransactionPlanPreviewServiceDiagnosticCode
+        .INVALID_ARGUMENT
+    ):
+        return "usage", 2
+    return "internal", 3
+
+
+def _print_preview_service_error(
+    *,
+    error: PmxStructuralTransactionPlanPreviewServiceError,
+    json_output: bool,
+) -> int:
+    error_type, exit_code = _preview_failure_policy(error)
+
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "preview",
+                    "error_type": error_type,
+                    "errors": [error.diagnostic.message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} preview: "
+                f"{error.diagnostic.message}"
+            ),
+            file=sys.stderr,
+        )
+
+    return exit_code
+
+
 def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
-    """Run one authoring-only structural transaction-plan CLI action."""
+    """Run one structural transaction-plan authoring or preview action."""
 
     action = arguments.transaction_plan_action
 
@@ -217,7 +339,7 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         )
         return 0
 
-    if action not in {"validate", "explain"}:
+    if action not in {"validate", "explain", "preview"}:
         raise RuntimeError(f"Unsupported transaction-plan action: {action}")
 
     try:
@@ -234,6 +356,23 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
             sys.stdout.write(_render_json(validated.to_dict()))
         else:
             sys.stdout.write(_render_validation_text(validated))
+        return 0
+
+    if action == "preview":
+        try:
+            result = preview_structural_transaction_plan(
+                arguments.source,
+                validated,
+            )
+        except PmxStructuralTransactionPlanPreviewServiceError as error:
+            return _print_preview_service_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        if arguments.json:
+            sys.stdout.write(_render_json(result.to_dict()))
+        else:
+            sys.stdout.write(_render_preview_text(result))
         return 0
 
     try:
@@ -257,7 +396,7 @@ def print_unexpected_transaction_plan_error(
     action: str | None,
     json_output: bool,
 ) -> None:
-    """Render one process-boundary CP16 failure without exception internals."""
+    """Render one process-boundary failure without exception internals."""
 
     action_label = action if action in _TRANSACTION_PLAN_ACTIONS else "unknown"
     message = "Unexpected internal transaction-plan failure."

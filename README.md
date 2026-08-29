@@ -5,14 +5,16 @@ creator credits, local source files, SHA-256 integrity, model metadata,
 PMX structure, texture dependencies, bone hierarchies, bone semantics,
 rig diagnostics, canonical bone maps, complete typed PMX documents, and known
 usage restrictions. It also provides bounded declarative editing for model
-metadata, indexed texture paths, and existing material properties.
+metadata, indexed texture paths, and existing material properties, plus
+schema-one structural transaction authoring for reviewed insert/reorder/delete
+operations.
 
 The project is designed as a validation and diagnostics gate before assets
 enter an automated MMD, Blender, or anime-video pipeline. All established
 inspection and analysis commands keep model and texture inputs read-only. The
-explicit `roundtrip` and `edit` commands can write verified PMX output to a
-distinct path; neither command writes in place, repairs data, or redistributes
-an asset.
+explicit `roundtrip`, `edit`, and `transaction-plan apply` workflows can write
+verified PMX output to a distinct path; none writes in place, repairs data, or
+redistributes an asset.
 
 ## Current version
 
@@ -32,6 +34,34 @@ writers, remap kernels, and index-width mutation private. Registry schema
 
 Schema `0.2` remains supported for backward compatibility. Integrity and model
 header inspection are applied only to schema `0.3` registry entries.
+
+## Upcoming v0.9.4 declarative structural transaction authoring
+
+The v0.9.4 feature branch adds a strict schema-one `transaction-plan` workflow
+on top of the released v0.9.3 structural transaction authority. Until the
+release-version closure gate is completed, the package version remains `0.9.3`.
+
+- `transaction-plan template` prints a safe empty canonical JSON plan.
+- `transaction-plan validate PLAN [--json]` validates strict UTF-8 JSON without
+  loading a PMX source.
+- `transaction-plan explain PLAN [--json]` reports operation order, types, and
+  intended fields without executing the plan or exposing authored values.
+- `transaction-plan preview SOURCE PLAN [--json]` binds an optional
+  `expected_source_sha256` to one captured source snapshot and delegates to the
+  released structural transaction preview authority.
+- `transaction-plan apply SOURCE PLAN OUTPUT [--overwrite] [--json]` reuses the
+  released verified structural transaction and atomic distinct-output
+  publication path; it never writes the source in place.
+- Schema one supports `transform_collection`, `insert_texture`,
+  `insert_material`, `insert_bone`, `insert_morph`, `insert_rigid_body`, and
+  `insert_vertex` in authored order.
+- Transaction-plan services remain in explicit submodules and do not create a
+  second planner, remapper, final-index allocator, writer, serializer, or
+  publication engine.
+
+The authoritative schema and compatibility details live in
+`docs/v094_transaction_plan_contract.md` and
+`docs/v094_compatibility_contract.md`.
 
 ## Version 0.9.3 safe structural transactions
 
@@ -502,6 +532,7 @@ scan      Structurally scan a PMX model
 roundtrip Write a verified PMX copy to a distinct output path
 edit      Preview or safely write a strict declarative PMX edit plan
 edit-plan Author or explain strict declarative PMX edit plans
+transaction-plan Author, validate, explain, preview, or atomically apply a structural transaction plan
 texture-portability Analyze texture portability and propose safe rewrites
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
@@ -520,6 +551,7 @@ validation.
 | Complete document load and write | Yes | Yes | No |
 | Verified round-trip copy | Yes | Yes | No |
 | Safe declarative metadata/material edit | Yes | Yes | No |
+| Structural transaction-plan preview/apply | Yes | Yes | No |
 | Texture dependency doctor | Yes | Yes | No |
 | Bone Explorer | Yes | Yes | No |
 | Rig Analyzer | Yes | Yes | No |
@@ -774,6 +806,78 @@ index, operation type, target identity, and intended field names. It does not
 show intended field values, the expected source SHA-256 value, before/after
 values, or execution/verification claims. Read, decode, and validation failures
 reuse the stable `plan_read`, `plan_decode`, and `plan_validate` diagnostics.
+
+## Author, validate, preview, and apply structural transaction plans
+
+The v0.9.4 `transaction-plan` namespace is separate from the older v0.8
+`edit-plan` schema. It authors structural transaction requests that reuse the
+released v0.9.3 transaction authority.
+
+Print a safe empty schema-one plan:
+
+```bash
+mmd-asset-registry transaction-plan template
+```
+
+The minimal executable shape is:
+
+```json
+{"schema_version":1,"operations":[]}
+```
+
+An optional lowercase SHA-256 source precondition may be added as
+`expected_source_sha256`. Validate or explain a completed plan without
+executing it:
+
+```bash
+mmd-asset-registry transaction-plan validate transaction.json
+mmd-asset-registry transaction-plan validate transaction.json --json
+mmd-asset-registry transaction-plan explain transaction.json
+mmd-asset-registry transaction-plan explain transaction.json --json
+```
+
+Preview against one captured source snapshot without writing an output:
+
+```bash
+mmd-asset-registry transaction-plan preview path/to/source.pmx transaction.json
+mmd-asset-registry transaction-plan preview path/to/source.pmx transaction.json --json
+```
+
+Apply through the existing verified structural transaction authority to a
+distinct output:
+
+```bash
+mmd-asset-registry transaction-plan apply path/to/source.pmx transaction.json path/to/output.pmx
+```
+
+Replacing an existing separate output requires explicit permission:
+
+```bash
+mmd-asset-registry transaction-plan apply path/to/source.pmx transaction.json path/to/output.pmx --overwrite
+```
+
+`apply` never mutates the source in place. When `expected_source_sha256` is
+present, the comparison is performed against the same raw source snapshot
+captured by the existing structural output transaction before PMX parsing.
+Publication still uses the released source re-verification and atomic commit
+path.
+
+Schema one accepts these top-level operations:
+
+```text
+transform_collection
+insert_texture
+insert_material
+insert_bone
+insert_morph
+insert_rigid_body
+insert_vertex
+```
+
+Arrays preserve authored order, unknown JSON members are rejected, duplicate
+JSON members are rejected, non-finite numbers are rejected, and JSON scalar
+types are not coerced. The complete field/reference rules are frozen in
+`docs/v094_transaction_plan_contract.md`.
 
 ## Analyze texture portability and propose safe rewrites
 
@@ -1100,6 +1204,10 @@ and is configured as UTF-8 even when redirected by Windows CMD. A successful
 `roundtrip` reports semantic equality and output integrity before returning
 exit code `0`. A successful `edit` preview or write reports the audit summary,
 source integrity, semantic verification, and whether output was written.
+Successful `transaction-plan preview` reports source-identity status plus the
+released preview evidence; successful `transaction-plan apply` reports bounded
+committed evidence without disclosing the source path, output path, or raw
+source/output SHA-256 values.
 
 ## Exit codes
 
@@ -1135,6 +1243,13 @@ Command examples:
 - `edit-plan explain` with invalid plan data: `1`
 - `edit-plan explain` when the plan file cannot be read: `2`
 - `edit-plan` with an unexpected internal failure: `3`
+- `transaction-plan template`, valid `validate`/`explain`, successful
+  `preview`, or verified `apply`: `0`
+- `transaction-plan` invalid plan data, source-identity mismatch, invalid PMX,
+  preview/execution blocker, or refused existing output: `1`
+- `transaction-plan` unreadable plan/source or other local I/O/argument
+  failure: `2`
+- `transaction-plan` unexpected internal failure: `3`
 - `texture-portability` with no referenced blocked dependency: `0`
 - `texture-portability` with invalid PMX data, a referenced blocker, or a source-change refusal: `1`
 - `texture-portability` with input/plan-output path or plan I/O refusal: `2`
@@ -1224,9 +1339,10 @@ policy.
 ## Safety and trust boundaries
 
 The tool keeps model and texture inputs read-only. Only the explicit
-`roundtrip` and `edit` commands write PMX output. Both require a distinct output
-path, validate before writing, refuse overwrite by default, reject aliases,
-and never write in place. The project does not:
+`roundtrip`, `edit`, and `transaction-plan apply` workflows write PMX output.
+They require a distinct output path, validate before publication, refuse
+overwrite by default, reject aliases, and never write in place. The project
+does not:
 
 - Modify or rewrite an input PMX/PMD file in place
 - Write any model from `validate`, `hash`, `inspect`, `scan`, `doctor`, `bones`,
@@ -1236,10 +1352,12 @@ and never write in place. The project does not:
 - Apply inferred roles, aliases, hierarchy changes, or bone maps to a model
 - Automatically translate Japanese, Chinese, or Korean bone names
 - Copy, rename, convert, or delete textures
-- Add, delete, or reorder texture or material records
+- Perform arbitrary structural CRUD outside the reviewed schema-one
+  transaction-plan vocabulary
 - Edit material surface partitions
-- Edit vertices, normals, UVs, weights, bones, IK, morphs, display frames, or
-  physics records
+- Perform free-form edits of existing vertex payloads, normals, UVs, weights,
+  existing bone fields/IK, existing morph payloads, display frames, or physics
+  fields outside the bounded structural transaction operations
 - Import assets into Blender or MMD
 - Integrate directly with `mmd_tools`
 - Download assets or scrape creator pages
@@ -1560,10 +1678,10 @@ v0.9.3 does not:
 
 - Structurally scan PMD beyond header inspection
 - Edit PMX/PMD input files in place
-- Expose the raw structural writer; bounded reorder/delete/insertion execution is
-  available only through the reviewed `apply_structural_edit()` service
-- Perform arbitrary structural CRUD outside the reviewed six-target insertion
-  vocabulary or automatically widen PMX index fields
+- Expose the raw structural writer; bounded structural execution remains behind
+  the reviewed structural edit/transaction service authorities
+- Perform arbitrary structural CRUD outside the reviewed schema-one structural
+  transaction vocabulary or automatically widen PMX index fields
 - Edit material surface partitions or perform free-form mesh topology editing
 - Provide unrestricted mesh/UV/weight, bone/IK, morph, display-frame, or
   physics authoring beyond the bounded structural insertion DTOs
@@ -1596,6 +1714,9 @@ Release progression after the completed v0.8 line:
 - `v0.9.3` / package `0.9.3` — Bounded multi-operation structural transactions,
   deterministic evidence, canonical semantic equality, race-safe atomic
   publication, and installed-wheel transaction verification
+- `v0.9.4` — Declarative schema-one structural transaction authoring with
+  canonical JSON, strict validation/explanation, source-bound preview, and
+  source-bound atomic apply through the v0.9.3 transaction authority
 - Later v0.9 releases — Separately reviewed, safety-bounded feature work
 - Later: multilingual PMX naming with external reviewable dictionaries,
   animation-pipeline integration, PMD structural scanning, registry/browser

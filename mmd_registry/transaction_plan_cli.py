@@ -25,6 +25,12 @@ from mmd_registry.services.structural_transaction_plan_preview import (
     PmxStructuralTransactionPlanPreviewResult,
     preview_structural_transaction_plan,
 )
+from mmd_registry.services.structural_transaction_plan_apply import (
+    PmxStructuralTransactionPlanApplyServiceDiagnosticCode,
+    PmxStructuralTransactionPlanApplyServiceError,
+    PmxStructuralTransactionPlanApplyResult,
+    apply_structural_transaction_plan,
+)
 
 
 TRANSACTION_PLAN_COMMAND_NAME: Final[str] = "transaction-plan"
@@ -33,6 +39,7 @@ _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "validate",
     "explain",
     "preview",
+    "apply",
 )
 
 
@@ -52,7 +59,7 @@ def _top_level_subparsers(
 
 
 def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
-    """Add the additive transaction-plan authoring and preview command."""
+    """Add the additive transaction-plan authoring, preview, and apply command."""
 
     subparsers = _top_level_subparsers(parser)
     if TRANSACTION_PLAN_COMMAND_NAME in subparsers.choices:
@@ -60,11 +67,15 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
 
     transaction_plan_parser = subparsers.add_parser(
         TRANSACTION_PLAN_COMMAND_NAME,
-        help="Author, validate, explain, and preview structural transaction plans.",
+        help=(
+            "Author, validate, explain, preview, and apply structural "
+            "transaction plans."
+        ),
         description=(
             "Generate a safe empty structural transaction-plan template, "
-            "validate or explain one strict UTF-8 JSON plan, or preview it "
-            "against one source-bound PMX snapshot without publication."
+            "validate or explain one strict UTF-8 JSON plan, preview it "
+            "against one source-bound PMX snapshot, or atomically apply it "
+            "through the released structural transaction authority."
         ),
     )
     action_subparsers = transaction_plan_parser.add_subparsers(
@@ -126,6 +137,36 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         "--json",
         action="store_true",
         help="Print source-bound released preview evidence as stable JSON.",
+    )
+
+    apply_parser = action_subparsers.add_parser(
+        "apply",
+        help="Atomically apply one source-bound structural transaction plan.",
+    )
+    apply_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="Path to the source PMX file captured by the atomic writer.",
+    )
+    apply_parser.add_argument(
+        "plan",
+        metavar="PLAN",
+        help="Path to the strict UTF-8 JSON transaction plan.",
+    )
+    apply_parser.add_argument(
+        "output",
+        metavar="OUTPUT",
+        help="Path to the distinct structural transaction output PMX.",
+    )
+    apply_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Atomically replace an existing separate output path.",
+    )
+    apply_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print bounded committed apply evidence as stable JSON.",
     )
 
 
@@ -210,6 +251,39 @@ def _render_preview_text(
             f"Deleted: {effects['deleted_count']}",
             f"Reordered targets: {effects['reordered_target_count']}",
             "Output written: no",
+            "",
+        )
+    )
+
+
+def _render_apply_text(
+    result: PmxStructuralTransactionPlanApplyResult,
+) -> str:
+    payload = result.to_dict()
+    output = payload["output"]
+    verification = payload["verification"]
+    if not isinstance(output, dict):
+        raise RuntimeError("apply output evidence must be a dictionary.")
+    if not isinstance(verification, dict):
+        raise RuntimeError("apply verification evidence must be a dictionary.")
+    return "\n".join(
+        (
+            "STRUCTURAL TRANSACTION PLAN APPLY",
+            f"Status: {result.status}",
+            f"Source identity: {result.source_identity_status}",
+            (
+                "Output written: "
+                + ("yes" if output.get("written") is True else "no")
+            ),
+            f"Output size bytes: {result.output_size_bytes}",
+            (
+                "Input unchanged: "
+                + (
+                    "yes"
+                    if verification.get("input_unchanged") is True
+                    else "unknown"
+                )
+            ),
             "",
         )
     )
@@ -327,8 +401,83 @@ def _print_preview_service_error(
     return exit_code
 
 
+def _apply_failure_policy(
+    error: PmxStructuralTransactionPlanApplyServiceError,
+) -> tuple[str, int]:
+    code = error.diagnostic.code
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .SOURCE_IDENTITY_MISMATCH
+    ):
+        return "source_identity_mismatch", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .SOURCE_INVALID
+    ):
+        return "source_invalid", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .OUTPUT_PATH_UNSAFE
+    ):
+        return "output_path_unsafe", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .EXECUTION_FAILED
+    ):
+        return "execution_failed", 1
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .IO_FAILED
+    ):
+        return "io", 2
+    if (
+        code
+        is PmxStructuralTransactionPlanApplyServiceDiagnosticCode
+        .INVALID_ARGUMENT
+    ):
+        return "usage", 2
+    return "internal", 3
+
+
+def _print_apply_service_error(
+    *,
+    error: PmxStructuralTransactionPlanApplyServiceError,
+    json_output: bool,
+) -> int:
+    error_type, exit_code = _apply_failure_policy(error)
+
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "apply",
+                    "error_type": error_type,
+                    "errors": [error.diagnostic.message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} apply: "
+                f"{error.diagnostic.message}"
+            ),
+            file=sys.stderr,
+        )
+
+    return exit_code
+
+
 def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
-    """Run one structural transaction-plan authoring or preview action."""
+    """Run one structural transaction-plan authoring, preview, or apply action."""
 
     action = arguments.transaction_plan_action
 
@@ -339,7 +488,7 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         )
         return 0
 
-    if action not in {"validate", "explain", "preview"}:
+    if action not in {"validate", "explain", "preview", "apply"}:
         raise RuntimeError(f"Unsupported transaction-plan action: {action}")
 
     try:
@@ -373,6 +522,25 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
             sys.stdout.write(_render_json(result.to_dict()))
         else:
             sys.stdout.write(_render_preview_text(result))
+        return 0
+
+    if action == "apply":
+        try:
+            result = apply_structural_transaction_plan(
+                arguments.source,
+                arguments.output,
+                validated,
+                overwrite=arguments.overwrite,
+            )
+        except PmxStructuralTransactionPlanApplyServiceError as error:
+            return _print_apply_service_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        if arguments.json:
+            sys.stdout.write(_render_json(result.to_dict()))
+        else:
+            sys.stdout.write(_render_apply_text(result))
         return 0
 
     try:

@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import mmd_registry.cli as cli
 import mmd_registry.services.structural_transaction_plan as service
+import mmd_registry.services.structural_transaction_plan_apply as apply_service
 import mmd_registry.services.structural_transaction_plan_preview as preview_service
 import mmd_registry.transaction_plan_cli as transaction_plan_cli
 from mmd_registry.pmx.reader import load_pmx
@@ -44,6 +45,7 @@ EXPECTED_TRANSACTION_PLAN_ACTIONS = (
     "validate",
     "explain",
     "preview",
+    "apply",
 )
 EXPECTED_HASH = "a" * 64
 
@@ -438,6 +440,222 @@ class V094TransactionPlanCliTests(unittest.TestCase):
         )
         self.assertNotIn(str(source_path), output)
 
+    def test_apply_text_and_json_use_cp18_source_bound_service(self) -> None:
+        source_path = self.root / "apply-source.pmx"
+        text_output_path = self.root / "apply-text-output.pmx"
+        json_output_path = self.root / "apply-json-output.pmx"
+        source_bytes = _clean_source_bytes()
+        source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        source_path.write_bytes(source_bytes)
+        self.plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "expected_source_sha256": source_sha256,
+                    "operations": [],
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(
+                transaction_plan_cli,
+                "load_structural_transaction_plan",
+                wraps=service.load_structural_transaction_plan,
+            ) as load_plan,
+            patch.object(
+                transaction_plan_cli,
+                "apply_structural_transaction_plan",
+                wraps=apply_service.apply_structural_transaction_plan,
+            ) as apply_plan,
+        ):
+            text_code, text_output, text_error = _capture_run(
+                [
+                    "transaction-plan",
+                    "apply",
+                    str(source_path),
+                    str(self.plan_path),
+                    str(text_output_path),
+                ]
+            )
+
+        self.assertEqual(text_code, 0)
+        self.assertEqual(text_error, "")
+        self.assertIn("STRUCTURAL TRANSACTION PLAN APPLY", text_output)
+        self.assertIn("Status: no_changes", text_output)
+        self.assertIn("Source identity: matched", text_output)
+        self.assertIn("Output written: yes", text_output)
+        self.assertIn("Input unchanged: yes", text_output)
+        self.assertNotIn(source_sha256, text_output)
+        self.assertNotIn(str(source_path), text_output)
+        self.assertNotIn(str(text_output_path), text_output)
+        self.assertTrue(text_output_path.exists())
+        load_plan.assert_called_once_with(str(self.plan_path))
+        apply_plan.assert_called_once()
+        self.assertEqual(
+            apply_plan.call_args.args[:2],
+            (str(source_path), str(text_output_path)),
+        )
+        self.assertIs(apply_plan.call_args.kwargs["overwrite"], False)
+
+        json_code, json_output, json_error = _capture_run(
+            [
+                "transaction-plan",
+                "apply",
+                str(source_path),
+                str(self.plan_path),
+                str(json_output_path),
+                "--json",
+            ]
+        )
+        self.assertEqual(json_code, 0)
+        self.assertEqual(json_error, "")
+        payload = json.loads(json_output)
+        self.assertEqual(
+            payload["source_identity"],
+            {
+                "algorithm": "sha256",
+                "expected_source_sha256_declared": True,
+                "status": "matched",
+            },
+        )
+        self.assertFalse(payload["dry_run"])
+        self.assertTrue(payload["output"]["written"])
+        self.assertNotIn("path", payload["output"])
+        self.assertNotIn("sha256", payload["output"])
+        self.assertNotIn("source", payload)
+        self.assertNotIn("semantic_sha256", payload["plan"]["source"])
+        self.assertNotIn(source_sha256, json_output)
+        self.assertNotIn(str(source_path), json_output)
+        self.assertNotIn(str(json_output_path), json_output)
+        self.assertTrue(json_output_path.exists())
+
+    def test_apply_identity_mismatch_is_exit_one_and_never_publishes(self) -> None:
+        source_path = self.root / "秘密-apply-source.pmx"
+        output_path = self.root / "秘密-apply-output.pmx"
+        source_bytes = _clean_source_bytes()
+        source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        source_path.write_bytes(source_bytes)
+        self.plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "expected_source_sha256": "0" * 64,
+                    "operations": [],
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+
+        text_code, text_output, text_error = _capture_run(
+            [
+                "transaction-plan",
+                "apply",
+                str(source_path),
+                str(self.plan_path),
+                str(output_path),
+            ]
+        )
+        json_code, json_output, json_error = _capture_run(
+            [
+                "transaction-plan",
+                "apply",
+                str(source_path),
+                str(self.plan_path),
+                str(output_path),
+                "--json",
+            ]
+        )
+
+        self.assertEqual(text_code, 1)
+        self.assertEqual(text_output, "")
+        self.assertIn("[ERROR] transaction-plan apply:", text_error)
+        self.assertFalse(output_path.exists())
+        self.assertNotIn("0" * 64, text_error)
+        self.assertNotIn(source_sha256, text_error)
+        self.assertNotIn(str(source_path), text_error)
+        self.assertNotIn(str(output_path), text_error)
+
+        self.assertEqual(json_code, 1)
+        self.assertEqual(json_error, "")
+        payload = json.loads(json_output)
+        self.assertEqual(payload["error_type"], "source_identity_mismatch")
+        self.assertEqual(
+            payload["error"]["code"],
+            "source_identity_mismatch",
+        )
+        self.assertFalse(output_path.exists())
+        self.assertNotIn("0" * 64, json_output)
+        self.assertNotIn(source_sha256, json_output)
+        self.assertNotIn(str(source_path), json_output)
+        self.assertNotIn(str(output_path), json_output)
+
+    def test_apply_existing_output_maps_to_exit_one_without_path_leakage(
+        self,
+    ) -> None:
+        source_path = self.root / "apply-source.pmx"
+        output_path = self.root / "秘密-existing-output.pmx"
+        source_path.write_bytes(_clean_source_bytes())
+        output_path.write_bytes(b"existing")
+        self.plan_path.write_text(
+            '{"schema_version":1,"operations":[]}',
+            encoding="utf-8",
+        )
+
+        code, output, error_output = _capture_run(
+            [
+                "transaction-plan",
+                "apply",
+                str(source_path),
+                str(self.plan_path),
+                str(output_path),
+                "--json",
+            ]
+        )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(error_output, "")
+        payload = json.loads(output)
+        self.assertEqual(payload["error_type"], "output_path_unsafe")
+        self.assertEqual(payload["error"]["code"], "output_path_unsafe")
+        self.assertNotIn(str(output_path), output)
+        self.assertEqual(output_path.read_bytes(), b"existing")
+
+    def test_apply_rejects_invalid_plan_before_execution_service(self) -> None:
+        source_path = self.root / "must-not-be-read-apply.pmx"
+        output_path = self.root / "must-not-be-created.pmx"
+        self.plan_path.write_text(
+            '{"schema_version":1,"operations":[],"unknown":true}',
+            encoding="utf-8",
+        )
+
+        with patch.object(
+            transaction_plan_cli,
+            "apply_structural_transaction_plan",
+        ) as apply_plan:
+            exit_code, output, error_output = _capture_run(
+                [
+                    "transaction-plan",
+                    "apply",
+                    str(source_path),
+                    str(self.plan_path),
+                    str(output_path),
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(error_output, "")
+        apply_plan.assert_not_called()
+        self.assertFalse(output_path.exists())
+        payload = json.loads(output)
+        self.assertEqual(payload["error_type"], "invalid_plan")
+        self.assertNotIn(str(source_path), output)
+        self.assertNotIn(str(output_path), output)
+
     def test_invalid_plan_maps_to_exit_one_without_value_or_path_leakage(
         self,
     ) -> None:
@@ -575,14 +793,15 @@ class V094TransactionPlanCliTests(unittest.TestCase):
         self.assertEqual(payload["error_type"], "internal")
         self.assertNotIn(secret, stdout.getvalue())
 
-    def test_transaction_plan_cli_adds_no_execution_or_source_pmx_authority(
+    def test_transaction_plan_cli_routes_execution_only_through_plan_services(
         self,
     ) -> None:
         source = inspect.getsource(transaction_plan_cli)
         for forbidden in (
             "preview_structural_transaction(",
-            "apply_structural_transaction",
+            "_write_structural_transaction",
             "structural_output",
+            "_commit_verified_bytes",
             "write_pmx",
             "read_pmx",
             "load_pmx",
@@ -596,6 +815,10 @@ class V094TransactionPlanCliTests(unittest.TestCase):
                 self.assertNotIn(forbidden, source)
         self.assertIn(
             "preview_structural_transaction_plan",
+            source,
+        )
+        self.assertIn(
+            "apply_structural_transaction_plan",
             source,
         )
 

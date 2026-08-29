@@ -1444,6 +1444,7 @@ def _write_verified_structural_transaction(
     *,
     overwrite: bool = False,
     _stage_callback: _StructuralStageCallback | None = None,
+    _source_sha256_validator: Callable[[str], None] | None = None,
 ) -> PmxStructuralWriteResult:
     """Run the one structural filesystem transaction around verified serialization."""
 
@@ -1453,6 +1454,13 @@ def _write_verified_structural_transaction(
         raise TypeError("overwrite must be a boolean.")
     if _stage_callback is not None and not callable(_stage_callback):
         raise TypeError("_stage_callback must be callable or None.")
+    if (
+        _source_sha256_validator is not None
+        and not callable(_source_sha256_validator)
+    ):
+        raise TypeError(
+            "_source_sha256_validator must be callable or None."
+        )
 
     _notify_structural_stage(_stage_callback, "path_resolution")
     try:
@@ -1469,6 +1477,8 @@ def _write_verified_structural_transaction(
     source_identity = _edit_output._file_identity(source)
     source_bytes = source.read_bytes()
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    if _source_sha256_validator is not None:
+        _source_sha256_validator(source_sha256)
 
     _notify_structural_stage(_stage_callback, "source_parse")
     source_document = load_pmx(io.BytesIO(source_bytes))

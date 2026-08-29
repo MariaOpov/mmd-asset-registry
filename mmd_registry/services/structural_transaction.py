@@ -1264,6 +1264,7 @@ def _write_structural_transaction_with_stage_callback(
     *,
     overwrite: bool,
     stage_callback: _TransactionStageCallback | None,
+    _source_sha256_validator: Callable[[str], None] | None = None,
 ) -> PmxStructuralWriteResult:
     """Run the private writer with optional transaction-stage translation."""
 
@@ -1275,6 +1276,13 @@ def _write_structural_transaction_with_stage_callback(
         raise TypeError("overwrite must be a boolean.")
     if stage_callback is not None and not callable(stage_callback):
         raise TypeError("stage_callback must be callable or None.")
+    if (
+        _source_sha256_validator is not None
+        and not callable(_source_sha256_validator)
+    ):
+        raise TypeError(
+            "_source_sha256_validator must be callable or None."
+        )
 
     from mmd_registry.pmx.structural_output import (
         PmxStructuralOutputVerificationError,
@@ -1289,6 +1297,7 @@ def _write_structural_transaction_with_stage_callback(
                 _verify_structural_transaction_serialization(document, request)
             ),
             overwrite=overwrite,
+            _source_sha256_validator=_source_sha256_validator,
         )
 
     last_stage: str | None = None
@@ -1323,6 +1332,7 @@ def _write_structural_transaction_with_stage_callback(
             serialize_transaction,
             overwrite=overwrite,
             _stage_callback=report_output_stage,
+            _source_sha256_validator=_source_sha256_validator,
         )
     except Exception as error:
         if last_stage == "source_reverify" and not isinstance(

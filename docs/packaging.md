@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.3` maps
-to the PEP 440 Python distribution version `0.9.3`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.4` maps
+to the PEP 440 Python distribution version `0.9.4`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -133,7 +133,7 @@ material, bone, morph, and rigid-body targets with request-local new references,
 reparse the written output, and prove the installed source bytes remain
 unchanged. This does not expose a new root service authority.
 
-For v0.9.3 the same external probe must additionally verify
+For v0.9.4 the same external probe must additionally verify
 `structural_transaction=True`, import
 `mmd_registry.services.structural_transaction` from the installed wheel,
 preview and execute one bounded transaction, prove the source bytes remain

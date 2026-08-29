@@ -10,6 +10,7 @@ from typing import Any, Sequence
 
 import yaml
 
+import mmd_registry.transaction_plan_cli as _transaction_plan_cli
 from mmd_registry import __version__
 from mmd_registry.binary_reader import BinaryParseError
 from mmd_registry.bone_cli import run_bones_command
@@ -585,6 +586,28 @@ def normalize_arguments(
         return arguments
 
     return ["validate", *arguments]
+
+
+_TRANSACTION_PLAN_COMMAND = "transaction-plan"
+
+
+def _normalize_runtime_arguments(
+    argv: Sequence[str] | None,
+) -> list[str]:
+    """Add CP16 runtime commands without changing legacy normalization."""
+
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == _TRANSACTION_PLAN_COMMAND:
+        return arguments
+    return normalize_arguments(arguments)
+
+
+def _build_runtime_argument_parser() -> argparse.ArgumentParser:
+    """Extend a fresh frozen legacy parser only for actual runtime use."""
+
+    parser = build_argument_parser()
+    _transaction_plan_cli.add_transaction_plan_parser(parser)
+    return parser
 
 
 def _resolve_output_path(
@@ -1946,8 +1969,8 @@ def _run_doctor(arguments: argparse.Namespace) -> int:
 def run(argv: Sequence[str] | None = None) -> int:
     """Run the registry command-line application."""
 
-    parser = build_argument_parser()
-    arguments = parser.parse_args(normalize_arguments(argv))
+    parser = _build_runtime_argument_parser()
+    arguments = parser.parse_args(_normalize_runtime_arguments(argv))
 
     if arguments.command == "validate":
         return _run_validate(arguments)
@@ -1969,6 +1992,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == "edit-plan":
         return _run_edit_plan(arguments)
+
+    if arguments.command == _TRANSACTION_PLAN_COMMAND:
+        return _transaction_plan_cli.run_transaction_plan_command(arguments)
 
     if arguments.command == "texture-portability":
         return run_texture_portability_command(
@@ -2077,7 +2103,7 @@ def main() -> None:
     try:
         exit_code = run()
     except Exception as error:
-        normalized_arguments = normalize_arguments(None)
+        normalized_arguments = _normalize_runtime_arguments(None)
         if normalized_arguments and normalized_arguments[0] == "edit":
             _print_unexpected_edit_error(
                 json_output="--json" in normalized_arguments,
@@ -2087,6 +2113,18 @@ def main() -> None:
             and normalized_arguments[0] == "edit-plan"
         ):
             _print_unexpected_edit_plan_error(
+                action=(
+                    normalized_arguments[1]
+                    if len(normalized_arguments) > 1
+                    else None
+                ),
+                json_output="--json" in normalized_arguments,
+            )
+        elif (
+            normalized_arguments
+            and normalized_arguments[0] == _TRANSACTION_PLAN_COMMAND
+        ):
+            _transaction_plan_cli.print_unexpected_transaction_plan_error(
                 action=(
                     normalized_arguments[1]
                     if len(normalized_arguments) > 1

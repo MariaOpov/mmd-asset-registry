@@ -2,6 +2,13 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.4 - 2026-08-29
+
+- Added strict schema-one declarative structural transaction-plan authoring.
+- Added deterministic template, validate, explain, source-bound preview, and atomic apply workflows.
+- Preserved the released v0.9.3 structural transaction layer as the execution authority.
+- Certified the private-PMX authoring seam for preview, apply, source identity, independent output reparse/reference validation, cleanup, and private path/digest privacy.
+
 ## 0.9.3 - 2026-08-25
 
 ### Added

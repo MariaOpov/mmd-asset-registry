@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.3. The release retains read-only reference analysis and the v0.9.1
+v0.9.4. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals

@@ -19,49 +19,28 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.3
-Release label: v0.9.3
+Tool version: 0.9.4
+Release label: v0.9.4
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.3` maps to the PEP 440 Python package version
-`0.9.3`. This release additively promotes the reviewed structural transaction
-service while keeping transaction symbols in their explicit submodule and raw
-writers, remap kernels, and index-width mutation private. Registry schema
-`0.3` remains unchanged.
+GitHub release label `v0.9.4` maps to the PEP 440 Python package version
+`0.9.4`. This release adds strict schema-one declarative structural
+transaction-plan authoring while preserving the released v0.9.3 structural
+transaction execution authority.
 
-Schema `0.2` remains supported for backward compatibility. Integrity and model
-header inspection are applied only to schema `0.3` registry entries.
+## Version 0.9.4 declarative structural transaction authoring
 
-## Upcoming v0.9.4 declarative structural transaction authoring
+Version 0.9.4 adds a strict schema-one `transaction-plan` workflow on top of
+the released v0.9.3 structural transaction authority. It provides
+deterministic template, validate, explain, preview, and atomic apply workflows
+without introducing a second execution engine.
 
-The v0.9.4 feature branch adds a strict schema-one `transaction-plan` workflow
-on top of the released v0.9.3 structural transaction authority. Until the
-release-version closure gate is completed, the package version remains `0.9.3`.
-
-- `transaction-plan template` prints a safe empty canonical JSON plan.
-- `transaction-plan validate PLAN [--json]` validates strict UTF-8 JSON without
-  loading a PMX source.
-- `transaction-plan explain PLAN [--json]` reports operation order, types, and
-  intended fields without executing the plan or exposing authored values.
-- `transaction-plan preview SOURCE PLAN [--json]` binds an optional
-  `expected_source_sha256` to one captured source snapshot and delegates to the
-  released structural transaction preview authority.
-- `transaction-plan apply SOURCE PLAN OUTPUT [--overwrite] [--json]` reuses the
-  released verified structural transaction and atomic distinct-output
-  publication path; it never writes the source in place.
-- Schema one supports `transform_collection`, `insert_texture`,
-  `insert_material`, `insert_bone`, `insert_morph`, `insert_rigid_body`, and
-  `insert_vertex` in authored order.
-- Transaction-plan services remain in explicit submodules and do not create a
-  second planner, remapper, final-index allocator, writer, serializer, or
-  publication engine.
-
-The authoritative schema and compatibility details live in
-`docs/v094_transaction_plan_contract.md` and
-`docs/v094_compatibility_contract.md`.
+Private-PMX final certification covers source-bound preview and apply, source
+byte-identity preservation, independent output reparse/reference validation,
+temporary-artifact cleanup, and private path/digest privacy.
 
 ## Version 0.9.3 safe structural transactions
 
@@ -1563,7 +1542,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.3` package-version assertion
+8. Exact `0.9.4` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands

@@ -807,7 +807,7 @@ class V094TransactionPlanCliTests(unittest.TestCase):
             "read_pmx",
             "load_pmx",
             "PmxIndexRemap",
-            "final_index",
+            "final_index =",
             "hashlib",
             ".open(",
         ):

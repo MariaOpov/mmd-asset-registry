@@ -26,6 +26,11 @@ from mmd_registry.services.structural_authoring_catalog import (
     inspect_structural_authoring_catalog,
     summarize_structural_authoring_catalog,
 )
+from mmd_registry.services.structural_authoring_diff import (
+    PmxStructuralAuthoringDiff,
+    PmxStructuralAuthoringDiffServiceError,
+    build_structural_authoring_diff,
+)
 from mmd_registry.services.structural_transaction_plan import (
     PmxStructuralTransactionPlanServiceDiagnosticCode,
     PmxStructuralTransactionPlanServiceError,
@@ -181,6 +186,14 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         "plan",
         metavar="PLAN",
         help="Path to the strict UTF-8 JSON transaction plan.",
+    )
+    preview_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help=(
+            "Project the single certified preview into bounded rich diff "
+            "evidence; never performs a second preview."
+        ),
     )
     preview_parser.add_argument(
         "--json",
@@ -418,6 +431,109 @@ def _render_preview_text(
             "",
         )
     )
+
+
+def _render_rich_diff_text(
+    result: PmxStructuralAuthoringDiff,
+) -> str:
+    changed = (
+        ", ".join(item.value for item in result.changed_targets)
+        if result.changed_targets
+        else "(none)"
+    )
+    lines = [
+        "STRUCTURAL TRANSACTION PLAN DIFF",
+        f"Status: {result.status}",
+        f"Source identity: {result.source_identity_status}",
+        f"Changed targets: {changed}",
+        f"Inserted: {result.inserted_count}",
+        f"Deleted: {result.deleted_count}",
+        f"Reordered targets: {result.reordered_target_count}",
+        "Collections:",
+    ]
+
+    changed_collections = tuple(
+        item for item in result.collections if item.changed
+    )
+    if not changed_collections:
+        lines.append("    (none)")
+    for collection in changed_collections:
+        delta = collection.count_delta
+        delta_label = f"+{delta}" if delta >= 0 else str(delta)
+        lines.append(
+            (
+                f"    {collection.target_kind.value}: "
+                f"{collection.captured_count} -> {collection.final_count} "
+                f"({delta_label}); inserted={collection.inserted_count}, "
+                f"deleted={collection.deleted_count}, "
+                f"reordered={'yes' if collection.reordered else 'no'}"
+            )
+        )
+        for insertion in collection.insertions:
+            lines.append(
+                (
+                    f"        request #{insertion.request_ordinal} "
+                    f"-> final #{insertion.final_index}"
+                )
+            )
+
+    dependency_order = (
+        ", ".join(
+            item.value for item in result.dependency_materialization_order
+        )
+        if result.dependency_materialization_order
+        else "(none)"
+    )
+    lines.extend(
+        (
+            (
+                "Resolved local references: "
+                f"{result.resolved_local_reference_count}"
+            ),
+            (
+                "Remapped existing references: "
+                f"{result.remapped_existing_reference_count}"
+            ),
+            f"Materialization order: {dependency_order}",
+            (
+                "Capacity representable: "
+                + ("yes" if result.capacity_all_representable else "no")
+            ),
+            "Output written: no",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _print_rich_diff_service_error(
+    *,
+    error: PmxStructuralAuthoringDiffServiceError,
+    json_output: bool,
+) -> int:
+    message = "Certified structural preview diff projection failed."
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "preview",
+                    "error_type": "diff_projection_failed",
+                    "errors": [message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} preview: "
+                f"{message}"
+            ),
+            file=sys.stderr,
+        )
+    return 3
 
 
 def _render_apply_text(
@@ -713,7 +829,19 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                 error=error,
                 json_output=arguments.json,
             )
-        if arguments.json:
+        if arguments.diff:
+            try:
+                rich_diff = build_structural_authoring_diff(result)
+            except PmxStructuralAuthoringDiffServiceError as error:
+                return _print_rich_diff_service_error(
+                    error=error,
+                    json_output=arguments.json,
+                )
+            if arguments.json:
+                sys.stdout.write(_render_json(rich_diff.to_dict()))
+            else:
+                sys.stdout.write(_render_rich_diff_text(rich_diff))
+        elif arguments.json:
             sys.stdout.write(_render_json(result.to_dict()))
         else:
             sys.stdout.write(_render_preview_text(result))

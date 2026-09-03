@@ -19,17 +19,55 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.4
-Release label: v0.9.4
+Tool version: 0.9.5
+Release label: v0.9.5
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.4` maps to the PEP 440 Python package version
-`0.9.4`. This release adds strict schema-one declarative structural
-transaction-plan authoring while preserving the released v0.9.3 structural
-transaction execution authority.
+GitHub release label `v0.9.5` maps to the PEP 440 Python package version
+`0.9.5`. This release adds human-friendly schema-one structural transaction
+authoring while preserving the released v0.9.3/v0.9.4 structural transaction
+execution and plan authorities.
+
+## Version 0.9.5 human-friendly structural authoring
+
+Version 0.9.5 makes schema-one structural transaction plans easier to author
+without weakening the existing safety boundaries.
+
+The `transaction-plan` workflow now includes:
+
+- `inspect` for deterministic, read-only source catalogs;
+- exact source-bound selectors that fail closed on ambiguity;
+- `build` helpers for `texture`, `material`, `morph`, `bone`, `rigid-body`,
+  and BDEF1 `vertex` insertions;
+- `format` for strict parse plus canonical schema-one JSON rendering;
+- `preview --diff` for a richer diff projected only from certified preview
+  evidence.
+
+Typical usage:
+
+```text
+mmd-asset-registry transaction-plan inspect model.pmx
+mmd-asset-registry transaction-plan build texture model.pmx --path textures/new.png
+mmd-asset-registry transaction-plan build material model.pmx --local-name "Body"
+mmd-asset-registry transaction-plan build morph model.pmx --local-name "Smile" --type vertex
+mmd-asset-registry transaction-plan build bone model.pmx --local-name "Center"
+mmd-asset-registry transaction-plan build rigid-body model.pmx --local-name "BodyRigid"
+mmd-asset-registry transaction-plan build vertex model.pmx --position 0 0 0 --normal 0 1 0 --uv 0 0 --bone-index 0
+mmd-asset-registry transaction-plan format transaction.json
+mmd-asset-registry transaction-plan preview model.pmx transaction.json --diff
+```
+
+`build` emits canonical schema-one JSON to stdout. Human-friendly names and
+paths are exact selectors rather than fuzzy matches; ambiguous selectors are
+rejected. The vertex helper is intentionally BDEF1-only in v0.9.5 and derives
+zero-valued additional-UV vectors from the source PMX header. More advanced
+deforms and advanced bone/rigid-body/material fields remain outside this
+release surface.
+
+The released `preview` and `apply` execution authority remains unchanged.
 
 ## Version 0.9.4 declarative structural transaction authoring
 
@@ -511,7 +549,7 @@ scan      Structurally scan a PMX model
 roundtrip Write a verified PMX copy to a distinct output path
 edit      Preview or safely write a strict declarative PMX edit plan
 edit-plan Author or explain strict declarative PMX edit plans
-transaction-plan Author, validate, explain, preview, or atomically apply a structural transaction plan
+transaction-plan Inspect, build, format, validate, explain, preview, or atomically apply a structural transaction plan
 texture-portability Analyze texture portability and propose safe rewrites
 doctor    Scan a PMX model and diagnose texture dependencies
 bones     Explore PMX bones as a table, tree, detail report, or JSON
@@ -1542,7 +1580,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.4` package-version assertion
+8. Exact `0.9.5` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands

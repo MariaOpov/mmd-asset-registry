@@ -40,13 +40,7 @@ EXPECTED_LEGACY_COMMANDS = (
     "bones",
     "rig",
 )
-EXPECTED_TRANSACTION_PLAN_ACTIONS = (
-    "template",
-    "validate",
-    "explain",
-    "preview",
-    "apply",
-)
+EXPECTED_TRANSACTION_PLAN_ACTIONS = ("template", "inspect", "build", "format", "validate", "explain", "preview", "apply")
 EXPECTED_HASH = "a" * 64
 
 
@@ -805,9 +799,8 @@ class V094TransactionPlanCliTests(unittest.TestCase):
             "write_pmx",
             "read_pmx",
             "load_pmx",
-            "load_document(",
             "PmxIndexRemap",
-            "final_index",
+            "final_index =",
             "hashlib",
             ".open(",
         ):

@@ -4,13 +4,69 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 from typing import Final
 
+from mmd_registry.diagnostics import (
+    PmxServiceDiagnosticCode,
+    PmxServiceError,
+)
+from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 from mmd_registry.pmx.transaction_plan import (
     PmxStructuralTransactionPlanExplanation,
     get_pmx_structural_transaction_plan_template,
     render_pmx_structural_transaction_plan_json,
+)
+from mmd_registry.services import load_document
+from mmd_registry.services.structural_authoring_catalog import (
+    PmxStructuralAuthoringCatalogPage,
+    PmxStructuralAuthoringCatalogServiceDiagnosticCode,
+    PmxStructuralAuthoringCatalogServiceError,
+    PmxStructuralAuthoringCatalogSummary,
+    inspect_structural_authoring_catalog,
+    summarize_structural_authoring_catalog,
+)
+from mmd_registry.services.structural_authoring_diff import (
+    PmxStructuralAuthoringDiff,
+    PmxStructuralAuthoringDiffServiceError,
+    build_structural_authoring_diff,
+)
+from mmd_registry.services.structural_authoring_builder import (
+    PmxStructuralAuthoringBuilderServiceError,
+    build_structural_authoring_plan,
+    compile_structural_authoring_insert_before,
+    render_structural_authoring_plan,
+)
+from mmd_registry.services.structural_authoring_selector import (
+    PmxStructuralAuthoringSelector,
+    PmxStructuralAuthoringSelectorField,
+    PmxStructuralAuthoringSelectorServiceError,
+    resolve_structural_authoring_selector,
+)
+from mmd_registry.services.structural_material import (
+    PmxStructuralMaterialInsertion,
+)
+from mmd_registry.services.structural_morph import (
+    PmxStructuralMorphInsertion,
+)
+from mmd_registry.services.structural_bone import (
+    PmxStructuralBoneInsertion,
+)
+from mmd_registry.services.structural_rigid_body import (
+    PmxStructuralRigidBodyInsertion,
+)
+from mmd_registry.services.structural_vertex import (
+    PmxStructuralVertexBdef1,
+    PmxStructuralVertexInsertion,
+)
+from mmd_registry.services.structural_texture import (
+    PmxStructuralTextureInsertion,
+)
+from mmd_registry.services.structural_authoring_formatter import (
+    PmxStructuralAuthoringFormatterServiceDiagnosticCode,
+    PmxStructuralAuthoringFormatterServiceError,
+    normalize_structural_authoring_plan_json,
 )
 from mmd_registry.services.structural_transaction_plan import (
     PmxStructuralTransactionPlanServiceDiagnosticCode,
@@ -36,6 +92,9 @@ from mmd_registry.services.structural_transaction_plan_apply import (
 TRANSACTION_PLAN_COMMAND_NAME: Final[str] = "transaction-plan"
 _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "template",
+    "inspect",
+    "build",
+    "format",
     "validate",
     "explain",
     "preview",
@@ -68,11 +127,12 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
     transaction_plan_parser = subparsers.add_parser(
         TRANSACTION_PLAN_COMMAND_NAME,
         help=(
-            "Author, validate, explain, preview, and apply structural "
-            "transaction plans."
+            "Inspect models and author, validate, explain, preview, and "
+            "apply structural transaction plans."
         ),
         description=(
-            "Generate a safe empty structural transaction-plan template, "
+            "Inspect one PMX through the bounded read-only authoring catalog, "
+            "generate a safe empty structural transaction-plan template, "
             "validate or explain one strict UTF-8 JSON plan, preview it "
             "against one source-bound PMX snapshot, or atomically apply it "
             "through the released structural transaction authority."
@@ -87,6 +147,536 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
     action_subparsers.add_parser(
         "template",
         help="Print a safe empty schema-one structural transaction-plan template.",
+    )
+
+    inspect_parser = action_subparsers.add_parser(
+        "inspect",
+        help="Inspect one PMX through the bounded structural authoring catalog.",
+    )
+    inspect_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="Path to the PMX source loaded through the stable document service.",
+    )
+    inspect_parser.add_argument(
+        "--kind",
+        choices=tuple(kind.value for kind in PmxReferenceTargetKind),
+        default=None,
+        help="Show one bounded target-kind page; omit for counts-only summary.",
+    )
+    inspect_parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Zero-based source-index offset for a detailed page.",
+    )
+    inspect_parser.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Detailed page size from 1 through 1000.",
+    )
+    inspect_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print deterministic Unicode-safe catalog JSON.",
+    )
+
+    build_parser = action_subparsers.add_parser(
+        "build",
+        help=(
+            "Build one canonical schema-one plan from bounded "
+            "human-friendly authoring input."
+        ),
+    )
+    build_kind_subparsers = build_parser.add_subparsers(
+        dest="transaction_plan_build_kind",
+        metavar="KIND",
+        required=True,
+    )
+    build_texture_parser = build_kind_subparsers.add_parser(
+        "texture",
+        help="Build one texture insertion plan.",
+    )
+    build_texture_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_texture_parser.add_argument(
+        "--path",
+        required=True,
+        help="Exact new texture path stored in the schema-one insertion.",
+    )
+    anchor_group = build_texture_parser.add_mutually_exclusive_group()
+    anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source texture index.",
+    )
+    anchor_group.add_argument(
+        "--before-path",
+        default=None,
+        help="Insert before one exact captured-source texture path.",
+    )
+    build_texture_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_texture_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_material_parser = build_kind_subparsers.add_parser(
+        "material",
+        help="Build one minimal material insertion plan.",
+    )
+    build_material_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_material_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new material.",
+    )
+    build_material_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new material; defaults to empty.",
+    )
+    build_material_parser.add_argument(
+        "--memo",
+        default="",
+        help="Material memo; defaults to empty.",
+    )
+    texture_reference_group = (
+        build_material_parser.add_mutually_exclusive_group()
+    )
+    texture_reference_group.add_argument(
+        "--texture-index",
+        type=int,
+        default=None,
+        help="Reference one exact captured-source texture index.",
+    )
+    texture_reference_group.add_argument(
+        "--texture-path",
+        default=None,
+        help="Reference one exact captured-source texture path.",
+    )
+    material_anchor_group = (
+        build_material_parser.add_mutually_exclusive_group()
+    )
+    material_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source material index.",
+    )
+    material_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source material local name.",
+    )
+    material_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source material universal name.",
+    )
+    build_material_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_material_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_morph_parser = build_kind_subparsers.add_parser(
+        "morph",
+        help="Build one empty-offset morph insertion plan.",
+    )
+    build_morph_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_morph_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new morph.",
+    )
+    build_morph_parser.add_argument(
+        "--type",
+        dest="morph_type",
+        required=True,
+        choices=(
+            "group",
+            "vertex",
+            "bone",
+            "uv",
+            "additional_uv_1",
+            "additional_uv_2",
+            "additional_uv_3",
+            "additional_uv_4",
+            "material",
+            "flip",
+            "impulse",
+        ),
+        help="Released schema-one morph type.",
+    )
+    build_morph_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new morph; defaults to empty.",
+    )
+    build_morph_parser.add_argument(
+        "--panel",
+        choices=("system", "eyebrow", "eye", "mouth", "other"),
+        default="other",
+        help="Morph display panel; defaults to other.",
+    )
+    morph_anchor_group = build_morph_parser.add_mutually_exclusive_group()
+    morph_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source morph index.",
+    )
+    morph_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source morph local name.",
+    )
+    morph_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source morph universal name.",
+    )
+    build_morph_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_morph_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_bone_parser = build_kind_subparsers.add_parser(
+        "bone",
+        help="Build one minimal bone insertion plan.",
+    )
+    build_bone_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_bone_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new bone.",
+    )
+    build_bone_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new bone; defaults to empty.",
+    )
+    build_bone_parser.add_argument(
+        "--position",
+        dest="bone_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Bone position as exactly three floating-point values.",
+    )
+    parent_group = build_bone_parser.add_mutually_exclusive_group()
+    parent_group.add_argument(
+        "--parent-index",
+        type=int,
+        default=None,
+        help="Use one exact captured-source parent bone index.",
+    )
+    parent_group.add_argument(
+        "--parent-local-name",
+        default=None,
+        help="Use one exact captured-source parent bone local name.",
+    )
+    parent_group.add_argument(
+        "--parent-universal-name",
+        default=None,
+        help="Use one exact captured-source parent bone universal name.",
+    )
+    bone_anchor_group = build_bone_parser.add_mutually_exclusive_group()
+    bone_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source bone index.",
+    )
+    bone_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source bone local name.",
+    )
+    bone_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source bone universal name.",
+    )
+    build_bone_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_bone_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_rigid_body_parser = build_kind_subparsers.add_parser(
+        "rigid-body",
+        help="Build one minimal rigid-body insertion plan.",
+    )
+    build_rigid_body_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_rigid_body_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new rigid body.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new rigid body; defaults to empty.",
+    )
+    rigid_bone_group = build_rigid_body_parser.add_mutually_exclusive_group()
+    rigid_bone_group.add_argument(
+        "--bone-index",
+        type=int,
+        default=None,
+        help="Reference one exact captured-source bone index.",
+    )
+    rigid_bone_group.add_argument(
+        "--bone-local-name",
+        default=None,
+        help="Reference one exact captured-source bone local name.",
+    )
+    rigid_bone_group.add_argument(
+        "--bone-universal-name",
+        default=None,
+        help="Reference one exact captured-source bone universal name.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--shape",
+        choices=("sphere", "box", "capsule"),
+        default="sphere",
+        help="Rigid-body shape; defaults to sphere.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--size",
+        dest="body_size",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body size as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--position",
+        dest="body_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body position as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--rotation",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body rotation as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--physics-mode",
+        choices=(
+            "bone_follow",
+            "physics",
+            "physics_with_bone_alignment",
+        ),
+        default="bone_follow",
+        help="Rigid-body physics mode; defaults to bone_follow.",
+    )
+    rigid_anchor_group = (
+        build_rigid_body_parser.add_mutually_exclusive_group()
+    )
+    rigid_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source rigid-body index.",
+    )
+    rigid_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source rigid-body local name.",
+    )
+    rigid_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help=(
+            "Insert before one exact captured-source rigid-body universal name."
+        ),
+    )
+    build_rigid_body_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_vertex_parser = build_kind_subparsers.add_parser(
+        "vertex",
+        help="Build one BDEF1 vertex insertion plan.",
+    )
+    build_vertex_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used for exact selector resolution and "
+            "source-derived additional-UV count."
+        ),
+    )
+    build_vertex_parser.add_argument(
+        "--position",
+        dest="vertex_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        required=True,
+        help="Vertex position as exactly three floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--normal",
+        nargs=3,
+        type=float,
+        metavar=("NX", "NY", "NZ"),
+        required=True,
+        help="Vertex normal as exactly three floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--uv",
+        nargs=2,
+        type=float,
+        metavar=("U", "V"),
+        required=True,
+        help="Vertex UV as exactly two floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--edge-scale",
+        type=float,
+        default=1.0,
+        help="Vertex edge scale; defaults to 1.0.",
+    )
+    vertex_bone_group = build_vertex_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    vertex_bone_group.add_argument(
+        "--bone-index",
+        type=int,
+        default=None,
+        help="Use one exact captured-source BDEF1 bone index.",
+    )
+    vertex_bone_group.add_argument(
+        "--bone-local-name",
+        default=None,
+        help="Use one exact captured-source BDEF1 bone local name.",
+    )
+    vertex_bone_group.add_argument(
+        "--bone-universal-name",
+        default=None,
+        help="Use one exact captured-source BDEF1 bone universal name.",
+    )
+    build_vertex_parser.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source vertex index.",
+    )
+    build_vertex_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_vertex_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    format_parser = action_subparsers.add_parser(
+        "format",
+        help=(
+            "Normalize one strict transaction-plan JSON file through the "
+            "released canonical schema-one formatter."
+        ),
+    )
+    format_parser.add_argument(
+        "plan",
+        metavar="PLAN",
+        help="Path to the strict UTF-8 JSON transaction plan.",
     )
 
     validate_parser = action_subparsers.add_parser(
@@ -132,6 +722,14 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         "plan",
         metavar="PLAN",
         help="Path to the strict UTF-8 JSON transaction plan.",
+    )
+    preview_parser.add_argument(
+        "--diff",
+        action="store_true",
+        help=(
+            "Project the single certified preview into bounded rich diff "
+            "evidence; never performs a second preview."
+        ),
     )
     preview_parser.add_argument(
         "--json",
@@ -180,6 +778,121 @@ def _render_json(payload: dict[str, object]) -> str:
         )
         + "\n"
     )
+
+
+def _render_catalog_summary_text(
+    result: PmxStructuralAuthoringCatalogSummary,
+) -> str:
+    counts = result.to_dict()["counts"]
+    if not isinstance(counts, dict):
+        raise RuntimeError("catalog summary counts must be a dictionary.")
+    return "\n".join(
+        (
+            "STRUCTURAL AUTHORING CATALOG",
+            f"Vertices: {counts['vertex']}",
+            f"Textures: {counts['texture']}",
+            f"Materials: {counts['material']}",
+            f"Bones: {counts['bone']}",
+            f"Morphs: {counts['morph']}",
+            f"Rigid bodies: {counts['rigid_body']}",
+            "Detailed entries: no",
+            "",
+        )
+    )
+
+
+def _render_catalog_entry_text(
+    target_kind: PmxReferenceTargetKind,
+    payload: dict[str, object],
+) -> str:
+    source_index = payload["source_index"]
+    if target_kind is PmxReferenceTargetKind.VERTEX:
+        return (
+            f"[{source_index}] position={payload['position']!r} "
+            f"deform_type={payload['deform_type']}"
+        )
+    if target_kind is PmxReferenceTargetKind.TEXTURE:
+        return f"[{source_index}] path={payload['path']!r}"
+    return (
+        f"[{source_index}] local_name={payload['local_name']!r} "
+        f"universal_name={payload['universal_name']!r}"
+    )
+
+
+def _render_catalog_page_text(
+    result: PmxStructuralAuthoringCatalogPage,
+) -> str:
+    lines = [
+        "STRUCTURAL AUTHORING CATALOG",
+        f"Target kind: {result.target_kind.value}",
+        f"Total: {result.total_count}",
+        f"Offset: {result.offset}",
+        f"Limit: {result.limit}",
+        f"Returned: {result.returned_count}",
+    ]
+    for entry in result.entries:
+        lines.append(
+            _render_catalog_entry_text(result.target_kind, entry.to_dict())
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _document_failure_policy(
+    error: PmxServiceError,
+) -> tuple[str, int]:
+    code = error.diagnostic.code
+    if code is PmxServiceDiagnosticCode.SOURCE_INVALID:
+        return "source_invalid", 1
+    if code is PmxServiceDiagnosticCode.IO_FAILED:
+        return "io", 2
+    if code is PmxServiceDiagnosticCode.INVALID_ARGUMENT:
+        return "usage", 2
+    return "internal", 3
+
+
+def _catalog_failure_policy(
+    error: PmxStructuralAuthoringCatalogServiceError,
+) -> tuple[str, int]:
+    if (
+        error.diagnostic.code
+        is PmxStructuralAuthoringCatalogServiceDiagnosticCode.INVALID_ARGUMENT
+    ):
+        return "usage", 2
+    return "internal", 3
+
+
+def _print_inspect_error(
+    *,
+    error: PmxServiceError | PmxStructuralAuthoringCatalogServiceError,
+    json_output: bool,
+) -> int:
+    if isinstance(error, PmxServiceError):
+        error_type, exit_code = _document_failure_policy(error)
+    else:
+        error_type, exit_code = _catalog_failure_policy(error)
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "inspect",
+                    "error_type": error_type,
+                    "errors": [error.diagnostic.message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} inspect: "
+                f"{error.diagnostic.message}"
+            ),
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 def _render_validation_text(
@@ -254,6 +967,169 @@ def _render_preview_text(
             "",
         )
     )
+
+
+def _render_rich_diff_text(
+    result: PmxStructuralAuthoringDiff,
+) -> str:
+    changed = (
+        ", ".join(item.value for item in result.changed_targets)
+        if result.changed_targets
+        else "(none)"
+    )
+    lines = [
+        "STRUCTURAL TRANSACTION PLAN DIFF",
+        f"Status: {result.status}",
+        f"Source identity: {result.source_identity_status}",
+        f"Changed targets: {changed}",
+        f"Inserted: {result.inserted_count}",
+        f"Deleted: {result.deleted_count}",
+        f"Reordered targets: {result.reordered_target_count}",
+        "Collections:",
+    ]
+
+    changed_collections = tuple(
+        item for item in result.collections if item.changed
+    )
+    if not changed_collections:
+        lines.append("    (none)")
+    for collection in changed_collections:
+        delta = collection.count_delta
+        delta_label = f"+{delta}" if delta >= 0 else str(delta)
+        lines.append(
+            (
+                f"    {collection.target_kind.value}: "
+                f"{collection.captured_count} -> {collection.final_count} "
+                f"({delta_label}); inserted={collection.inserted_count}, "
+                f"deleted={collection.deleted_count}, "
+                f"reordered={'yes' if collection.reordered else 'no'}"
+            )
+        )
+        for insertion in collection.insertions:
+            lines.append(
+                (
+                    f"        request #{insertion.request_ordinal} "
+                    f"-> final #{insertion.final_index}"
+                )
+            )
+
+    dependency_order = (
+        ", ".join(
+            item.value for item in result.dependency_materialization_order
+        )
+        if result.dependency_materialization_order
+        else "(none)"
+    )
+    lines.extend(
+        (
+            (
+                "Resolved local references: "
+                f"{result.resolved_local_reference_count}"
+            ),
+            (
+                "Remapped existing references: "
+                f"{result.remapped_existing_reference_count}"
+            ),
+            f"Materialization order: {dependency_order}",
+            (
+                "Capacity representable: "
+                + ("yes" if result.capacity_all_representable else "no")
+            ),
+            "Output written: no",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _print_rich_diff_service_error(
+    *,
+    error: PmxStructuralAuthoringDiffServiceError,
+    json_output: bool,
+) -> int:
+    message = "Certified structural preview diff projection failed."
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "preview",
+                    "error_type": "diff_projection_failed",
+                    "errors": [message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} preview: "
+                f"{message}"
+            ),
+            file=sys.stderr,
+        )
+    return 3
+
+
+def _print_format_error(
+    *,
+    error: PmxStructuralAuthoringFormatterServiceError | OSError | UnicodeError,
+) -> int:
+    if isinstance(error, PmxStructuralAuthoringFormatterServiceError):
+        code = error.diagnostic.code
+        if code in {
+            PmxStructuralAuthoringFormatterServiceDiagnosticCode.INVALID_ARGUMENT,
+            PmxStructuralAuthoringFormatterServiceDiagnosticCode.PLAN_INVALID,
+        }:
+            exit_code = 1
+            message = "Transaction plan is not valid strict schema-one JSON."
+        else:
+            exit_code = 3
+            message = "Canonical transaction-plan formatting failed."
+    else:
+        exit_code = 2
+        message = "Unable to read the transaction-plan file as strict UTF-8."
+
+    print(
+        f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} format: {message}",
+        file=sys.stderr,
+    )
+    return exit_code
+
+
+def _print_build_error(
+    *,
+    error: (
+        PmxServiceError
+        | PmxStructuralAuthoringSelectorServiceError
+        | PmxStructuralAuthoringBuilderServiceError
+        | TypeError
+        | ValueError
+    ),
+) -> int:
+    if isinstance(error, PmxServiceError):
+        error_type, exit_code = _document_failure_policy(error)
+        message = error.diagnostic.message
+    elif isinstance(error, PmxStructuralAuthoringSelectorServiceError):
+        code = error.diagnostic.code.value
+        exit_code = 2 if code == "invalid_argument" else 1
+        message = error.diagnostic.message
+    elif isinstance(error, PmxStructuralAuthoringBuilderServiceError):
+        exit_code = 1
+        message = error.diagnostic.message
+    else:
+        exit_code = 2
+        message = "Invalid structural authoring build input."
+
+    print(
+        (
+            f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} build: "
+            f"{message}"
+        ),
+        file=sys.stderr,
+    )
+    return exit_code
 
 
 def _render_apply_text(
@@ -488,6 +1364,517 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         )
         return 0
 
+    if action == "inspect":
+        try:
+            document = load_document(arguments.source)
+        except PmxServiceError as error:
+            return _print_inspect_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        try:
+            if arguments.kind is None:
+                result = summarize_structural_authoring_catalog(document)
+            else:
+                result = inspect_structural_authoring_catalog(
+                    document,
+                    PmxReferenceTargetKind(arguments.kind),
+                    offset=arguments.offset,
+                    limit=arguments.limit,
+                )
+        except PmxStructuralAuthoringCatalogServiceError as error:
+            return _print_inspect_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        if arguments.json:
+            sys.stdout.write(_render_json(result.to_dict()))
+        elif isinstance(result, PmxStructuralAuthoringCatalogSummary):
+            sys.stdout.write(_render_catalog_summary_text(result))
+        else:
+            sys.stdout.write(_render_catalog_page_text(result))
+        return 0
+
+    if action == "build":
+        try:
+            document = load_document(arguments.source)
+
+            if arguments.transaction_plan_build_kind == "texture":
+                insertion = PmxStructuralTextureInsertion(
+                    path=arguments.path,
+                    new_id=arguments.new_id,
+                )
+                if arguments.before_index is not None:
+                    selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                    resolution = resolve_structural_authoring_selector(
+                        document,
+                        selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        resolution,
+                    )
+                elif arguments.before_path is not None:
+                    selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=PmxStructuralAuthoringSelectorField.PATH,
+                        value=arguments.before_path,
+                    )
+                    resolution = resolve_structural_authoring_selector(
+                        document,
+                        selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "material":
+                texture_index = -1
+                if arguments.texture_index is not None:
+                    texture_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.texture_index,
+                    )
+                    texture_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            texture_selection,
+                        )
+                    )
+                    texture_index = texture_resolution.source_index
+                elif arguments.texture_path is not None:
+                    texture_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=PmxStructuralAuthoringSelectorField.PATH,
+                        value=arguments.texture_path,
+                    )
+                    texture_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            texture_selection,
+                        )
+                    )
+                    texture_index = texture_resolution.source_index
+
+                insertion = PmxStructuralMaterialInsertion(
+                    local_name=arguments.local_name,
+                    universal_name=arguments.universal_name,
+                    memo=arguments.memo,
+                    texture_index=texture_index,
+                    new_id=arguments.new_id,
+                )
+
+                material_selection = None
+                if arguments.before_index is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if material_selection is not None:
+                    material_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            material_selection,
+                        )
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        material_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "morph":
+                insertion = PmxStructuralMorphInsertion(
+                    local_name=arguments.local_name,
+                    morph_type=arguments.morph_type,
+                    universal_name=arguments.universal_name,
+                    panel=arguments.panel,
+                    new_id=arguments.new_id,
+                )
+
+                morph_selection = None
+                if arguments.before_index is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if morph_selection is not None:
+                    morph_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            morph_selection,
+                        )
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        morph_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "bone":
+                parent_bone_index = -1
+                parent_selection = None
+                if arguments.parent_index is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.parent_index,
+                    )
+                elif arguments.parent_local_name is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.parent_local_name,
+                    )
+                elif arguments.parent_universal_name is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.parent_universal_name,
+                    )
+
+                if parent_selection is not None:
+                    parent_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            parent_selection,
+                        )
+                    )
+                    parent_bone_index = parent_resolution.source_index
+
+                insertion_kwargs = {
+                    "local_name": arguments.local_name,
+                    "universal_name": arguments.universal_name,
+                    "parent_bone_index": parent_bone_index,
+                    "new_id": arguments.new_id,
+                }
+                if arguments.bone_position is not None:
+                    insertion_kwargs["bone_position"] = tuple(
+                        arguments.bone_position
+                    )
+                insertion = PmxStructuralBoneInsertion(**insertion_kwargs)
+
+                bone_selection = None
+                if arguments.before_index is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if bone_selection is not None:
+                    bone_resolution = resolve_structural_authoring_selector(
+                        document,
+                        bone_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        bone_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "rigid-body":
+                bone_index = -1
+                rigid_bone_selection = None
+                if arguments.bone_index is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.bone_index,
+                    )
+                elif arguments.bone_local_name is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.bone_local_name,
+                    )
+                elif arguments.bone_universal_name is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.bone_universal_name,
+                    )
+
+                if rigid_bone_selection is not None:
+                    rigid_bone_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            rigid_bone_selection,
+                        )
+                    )
+                    bone_index = rigid_bone_resolution.source_index
+
+                rigid_kwargs = {
+                    "local_name": arguments.local_name,
+                    "universal_name": arguments.universal_name,
+                    "bone_index": bone_index,
+                    "shape": arguments.shape,
+                    "physics_mode": arguments.physics_mode,
+                    "new_id": arguments.new_id,
+                }
+                if arguments.body_size is not None:
+                    rigid_kwargs["size"] = tuple(arguments.body_size)
+                if arguments.body_position is not None:
+                    rigid_kwargs["body_position"] = tuple(
+                        arguments.body_position
+                    )
+                if arguments.rotation is not None:
+                    rigid_kwargs["rotation"] = tuple(arguments.rotation)
+
+                insertion = PmxStructuralRigidBodyInsertion(**rigid_kwargs)
+
+                rigid_selection = None
+                if arguments.before_index is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if rigid_selection is not None:
+                    rigid_resolution = resolve_structural_authoring_selector(
+                        document,
+                        rigid_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        rigid_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "vertex":
+                additional_uv_count = document.header.additional_uv_count
+                if (
+                    type(additional_uv_count) is not int
+                    or additional_uv_count < 0
+                    or additional_uv_count > 4
+                ):
+                    raise ValueError(
+                        "Source PMX additional_uv_count must be an integer "
+                        "between 0 and 4."
+                    )
+
+                vertex_bone_selection = None
+                if arguments.bone_index is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.bone_index,
+                    )
+                elif arguments.bone_local_name is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.bone_local_name,
+                    )
+                elif arguments.bone_universal_name is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.bone_universal_name,
+                    )
+                else:
+                    raise ValueError(
+                        "Vertex BDEF1 requires one exact bone selector."
+                    )
+
+                vertex_bone_resolution = resolve_structural_authoring_selector(
+                    document,
+                    vertex_bone_selection,
+                )
+                deform = PmxStructuralVertexBdef1(
+                    bone_index=vertex_bone_resolution.source_index,
+                )
+
+                additional_uvs = tuple(
+                    (0.0, 0.0, 0.0, 0.0)
+                    for _ in range(additional_uv_count)
+                )
+                insertion = PmxStructuralVertexInsertion(
+                    vertex_position=tuple(arguments.vertex_position),
+                    normal=tuple(arguments.normal),
+                    uv=tuple(arguments.uv),
+                    additional_uvs=additional_uvs,
+                    deform=deform,
+                    edge_scale=arguments.edge_scale,
+                    new_id=arguments.new_id,
+                )
+
+                if arguments.before_index is not None:
+                    vertex_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.VERTEX,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                    vertex_resolution = resolve_structural_authoring_selector(
+                        document,
+                        vertex_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        vertex_resolution,
+                    )
+
+            else:
+                raise RuntimeError(
+                    "Unsupported transaction-plan build kind: "
+                    f"{arguments.transaction_plan_build_kind}"
+                )
+
+            plan = build_structural_authoring_plan(
+                (insertion,),
+                expected_source_sha256=arguments.expected_source_sha256,
+            )
+            sys.stdout.write(render_structural_authoring_plan(plan))
+            return 0
+        except (
+            PmxServiceError,
+            PmxStructuralAuthoringSelectorServiceError,
+            PmxStructuralAuthoringBuilderServiceError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return _print_build_error(error=error)
+
+    if action == "format":
+        try:
+            text = Path(arguments.plan).read_text(encoding="utf-8")
+            normalized = normalize_structural_authoring_plan_json(text)
+        except (
+            PmxStructuralAuthoringFormatterServiceError,
+            OSError,
+            UnicodeError,
+        ) as error:
+            return _print_format_error(error=error)
+        sys.stdout.write(normalized)
+        return 0
+
     if action not in {"validate", "explain", "preview", "apply"}:
         raise RuntimeError(f"Unsupported transaction-plan action: {action}")
 
@@ -518,7 +1905,19 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                 error=error,
                 json_output=arguments.json,
             )
-        if arguments.json:
+        if arguments.diff:
+            try:
+                rich_diff = build_structural_authoring_diff(result)
+            except PmxStructuralAuthoringDiffServiceError as error:
+                return _print_rich_diff_service_error(
+                    error=error,
+                    json_output=arguments.json,
+                )
+            if arguments.json:
+                sys.stdout.write(_render_json(rich_diff.to_dict()))
+            else:
+                sys.stdout.write(_render_rich_diff_text(rich_diff))
+        elif arguments.json:
             sys.stdout.write(_render_json(result.to_dict()))
         else:
             sys.stdout.write(_render_preview_text(result))

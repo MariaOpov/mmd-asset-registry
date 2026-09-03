@@ -1,7 +1,7 @@
-# MMD Asset Registry v0.9.4 Release Checklist
+# MMD Asset Registry v0.9.5 Release Checklist
 
-The Git/GitHub release label is `v0.9.4`; the PEP 440 runtime and
-distribution version is `0.9.4`. This is a normal GitHub Release, not a prerelease.
+The Git/GitHub release label is `v0.9.5`; the PEP 440 runtime and
+distribution version is `0.9.5`. This is a normal GitHub Release, not a prerelease.
 Never tag the feature branch, never create the release before merged-main verification,
 and never publish to PyPI without separate explicit Maintainer approval.
 
@@ -22,7 +22,7 @@ and never publish to PyPI without separate explicit Maintainer approval.
 
   ```bat
   python check_assets.py --version
-  python -c "from mmd_registry import __version__; from mmd_registry.constants import LATEST_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS; assert __version__ == '0.9.4'; assert LATEST_SCHEMA_VERSION == '0.3'; assert SUPPORTED_SCHEMA_VERSIONS == frozenset(('0.2', '0.3'))"
+  python -c "from mmd_registry import __version__; from mmd_registry.constants import LATEST_SCHEMA_VERSION, SUPPORTED_SCHEMA_VERSIONS; assert __version__ == '0.9.5'; assert LATEST_SCHEMA_VERSION == '0.3'; assert SUPPORTED_SCHEMA_VERSIONS == frozenset(('0.2', '0.3'))"
   ```
 
 - [ ] Confirm the public structural capability boundary authorizes only the reviewed bounded execution service:
@@ -44,7 +44,7 @@ and never publish to PyPI without separate explicit Maintainer approval.
   python -m coverage run -m unittest discover -s tests -q
   python -m coverage report
   python -m coverage json
-  rem Record the observed v0.9.4 full-suite count, skip count, and coverage from this run.
+  rem Record the observed v0.9.5 full-suite count, skip count, and coverage from this run.
   rem Re-run after the final commit and on merged main; do not reuse stale evidence.
   ```
 
@@ -59,7 +59,7 @@ and never publish to PyPI without separate explicit Maintainer approval.
   rem Clean-install probe must exercise one installed structural transaction,
   rem independently reparse its atomic output, use a separate destination, and
   rem prove unchanged source bytes.
-  rem Record the observed v0.9.4 wheel/sdist member counts from this fresh build.
+  rem Record the observed v0.9.5 wheel/sdist member counts from this fresh build.
   rem Recompute artifact SHA-256 after the final committed/merged-main build;
   rem pre-commit digests are not final release digests.
   ```
@@ -118,8 +118,8 @@ and never publish to PyPI without separate explicit Maintainer approval.
   git --no-pager log origin/main..HEAD --oneline --decorate
   ```
 
-- [ ] Push only after the final CP28 release-promotion commit and post-commit
-  gates pass, with separate explicit Maintainer authorization.
+- [ ] Push only after the final v0.9.5 release-certification checkpoint and
+  post-commit gates pass, with separate explicit Maintainer authorization.
 - [ ] Open the pull request to `main` and verify the exact reviewed head SHA.
 - [ ] Wait for pull-request checks:
 
@@ -157,25 +157,25 @@ and never publish to PyPI without separate explicit Maintainer approval.
 ## 6. Tag preflight and annotated tag
 
 - [ ] Confirm `main == origin/main`, tree clean, and no local/remote tag or
-  GitHub Release already uses `v0.9.4`:
+  GitHub Release already uses `v0.9.5`:
 
   ```bat
   git --no-pager branch --show-current
   git --no-pager status --short
   git --no-pager rev-parse HEAD
   git --no-pager rev-parse origin/main
-  git --no-pager tag --list v0.9.4
-  git ls-remote --tags origin refs/tags/v0.9.4 refs/tags/v0.9.4^{}
-  gh release view v0.9.4 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  git --no-pager tag --list v0.9.5
+  git ls-remote --tags origin refs/tags/v0.9.5 refs/tags/v0.9.5^{}
+  gh release view v0.9.5 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
 - [ ] On verified merged `main` only, and only after explicit Maintainer
   authorization, create and push the annotated tag:
 
   ```bat
-  git tag -a v0.9.4 -m "MMD Asset Registry v0.9.4"
-  git --no-pager show v0.9.4 --no-patch --format=fuller
-  git push origin v0.9.4
+  git tag -a v0.9.5 -m "MMD Asset Registry v0.9.5"
+  git --no-pager show v0.9.5 --no-patch --format=fuller
+  git push origin v0.9.5
   ```
 
 - [ ] Verify the remote annotated tag resolves to the intended merged-main
@@ -183,34 +183,34 @@ and never publish to PyPI without separate explicit Maintainer approval.
 
   ```bat
   git fetch --tags origin
-  git --no-pager rev-parse "v0.9.4^{}"
-  git ls-remote --tags origin refs/tags/v0.9.4 refs/tags/v0.9.4^{}
+  git --no-pager rev-parse "v0.9.5^{}"
+  git ls-remote --tags origin refs/tags/v0.9.5 refs/tags/v0.9.5^{}
   ```
 
 ## 7. Normal GitHub Release
 
-- [ ] Review `v0.9.4` release notes and create a normal GitHub Release from the
+- [ ] Review `v0.9.5` release notes and create a normal GitHub Release from the
   verified remote tag, only after explicit Maintainer authorization:
 
   ```bat
-  gh release create v0.9.4 --verify-tag --title "MMD Asset Registry v0.9.4" --notes-file "%USERPROFILE%\Downloads\v0.9.4-release-notes.md"
+  gh release create v0.9.5 --verify-tag --title "MMD Asset Registry v0.9.5" --notes-file "%USERPROFILE%\Downloads\v0.9.5-release-notes.md"
   ```
 
 - [ ] Verify publication state and target:
 
   ```bat
-  gh release view v0.9.4 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
+  gh release view v0.9.5 --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish
   ```
 
-- [ ] Confirm `isDraft` is `false`, `isPrerelease` is `false`, tag is `v0.9.4`,
+- [ ] Confirm `isDraft` is `false`, `isPrerelease` is `false`, tag is `v0.9.5`,
   and its dereferenced target is the verified merged-main commit.
 - [ ] Do not publish the wheel or sdist to PyPI in this workflow.
 
 ## 8. Final confirmation
 
-- [ ] Confirm local `main`, `origin/main`, dereferenced annotated tag `v0.9.4`,
+- [ ] Confirm local `main`, `origin/main`, dereferenced annotated tag `v0.9.5`,
   and the normal GitHub Release identify the same intended release commit.
-- [ ] Confirm release notes state package version `0.9.4`, both passing CI
+- [ ] Confirm release notes state package version `0.9.5`, both passing CI
   operating systems, retained v0.8/v0.9.0 compatibility/safety, bounded public
   structural execution/insertion with `structural_write=True`,
   `structural_insert=True`, `structural_transaction=True`,

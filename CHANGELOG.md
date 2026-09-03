@@ -2,6 +2,47 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5 - 2026-09-03
+
+### Added
+
+- Added a deterministic read-only structural authoring catalog and
+  `transaction-plan inspect`.
+- Added exact source-bound authoring selectors with fail-closed ambiguity
+  handling.
+- Added a structural authoring builder that compiles ergonomic input into the
+  existing schema-one transaction plan model.
+- Added certified structural authoring diff projection and
+  `transaction-plan preview --diff`.
+- Added strict canonical transaction-plan formatting through
+  `transaction-plan format`.
+- Added human-friendly `transaction-plan build` helpers for all six released
+  insertion targets: `texture`, `material`, `morph`, `bone`, `rigid-body`,
+  and BDEF1 `vertex`.
+
+### Changed
+
+- Bumped the package version from `0.9.4` to `0.9.5`.
+- Human-friendly builders resolve only exact source-bound identities and then
+  render the existing canonical schema-one plan.
+- The vertex builder derives zero-valued additional UV vectors from
+  `document.header.additional_uv_count` and supports BDEF1 only.
+
+### Verified
+
+- Certified the completed v0.9.5 feature branch with 2619 unit tests passing
+  and 2 skipped after the vertex builder integration.
+- Verified help surfaces for all six human-friendly build kinds.
+- Preserved the root package public surface as `('__version__',)`.
+
+### Safety and compatibility
+
+- No second transaction schema, execution engine, writer, remapper, or
+  publication path was introduced.
+- Existing v0.9.3/v0.9.4 preview/apply execution authority remains unchanged.
+- Fuzzy matching, case folding, silent first-match behavior, and generic
+  operation payloads remain forbidden in the human-friendly authoring layer.
+
 ## 0.9.4 - 2026-08-29
 
 - Added strict schema-one declarative structural transaction-plan authoring.

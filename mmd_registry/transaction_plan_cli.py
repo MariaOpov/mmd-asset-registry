@@ -44,6 +44,9 @@ from mmd_registry.services.structural_authoring_selector import (
     PmxStructuralAuthoringSelectorServiceError,
     resolve_structural_authoring_selector,
 )
+from mmd_registry.services.structural_material import (
+    PmxStructuralMaterialInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
@@ -213,6 +216,80 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         help="Optional request-local schema-one identity.",
     )
     build_texture_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_material_parser = build_kind_subparsers.add_parser(
+        "material",
+        help="Build one minimal material insertion plan.",
+    )
+    build_material_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_material_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new material.",
+    )
+    build_material_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new material; defaults to empty.",
+    )
+    build_material_parser.add_argument(
+        "--memo",
+        default="",
+        help="Material memo; defaults to empty.",
+    )
+    texture_reference_group = (
+        build_material_parser.add_mutually_exclusive_group()
+    )
+    texture_reference_group.add_argument(
+        "--texture-index",
+        type=int,
+        default=None,
+        help="Reference one exact captured-source texture index.",
+    )
+    texture_reference_group.add_argument(
+        "--texture-path",
+        default=None,
+        help="Reference one exact captured-source texture path.",
+    )
+    material_anchor_group = (
+        build_material_parser.add_mutually_exclusive_group()
+    )
+    material_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source material index.",
+    )
+    material_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source material local name.",
+    )
+    material_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source material universal name.",
+    )
+    build_material_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_material_parser.add_argument(
         "--expected-source-sha256",
         default=None,
         help=(
@@ -951,45 +1028,133 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         return 0
 
     if action == "build":
-        if arguments.transaction_plan_build_kind != "texture":
-            raise RuntimeError(
-                "Unsupported transaction-plan build kind: "
-                f"{arguments.transaction_plan_build_kind}"
-            )
         try:
             document = load_document(arguments.source)
-            insertion = PmxStructuralTextureInsertion(
-                path=arguments.path,
-                new_id=arguments.new_id,
-            )
-            if arguments.before_index is not None:
-                selection = PmxStructuralAuthoringSelector(
-                    target_kind=PmxReferenceTargetKind.TEXTURE,
-                    field=PmxStructuralAuthoringSelectorField.SOURCE_INDEX,
-                    value=arguments.before_index,
+
+            if arguments.transaction_plan_build_kind == "texture":
+                insertion = PmxStructuralTextureInsertion(
+                    path=arguments.path,
+                    new_id=arguments.new_id,
                 )
-                resolution = resolve_structural_authoring_selector(
-                    document,
-                    selection,
+                if arguments.before_index is not None:
+                    selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                    resolution = resolve_structural_authoring_selector(
+                        document,
+                        selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        resolution,
+                    )
+                elif arguments.before_path is not None:
+                    selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=PmxStructuralAuthoringSelectorField.PATH,
+                        value=arguments.before_path,
+                    )
+                    resolution = resolve_structural_authoring_selector(
+                        document,
+                        selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "material":
+                texture_index = -1
+                if arguments.texture_index is not None:
+                    texture_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.texture_index,
+                    )
+                    texture_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            texture_selection,
+                        )
+                    )
+                    texture_index = texture_resolution.source_index
+                elif arguments.texture_path is not None:
+                    texture_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.TEXTURE,
+                        field=PmxStructuralAuthoringSelectorField.PATH,
+                        value=arguments.texture_path,
+                    )
+                    texture_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            texture_selection,
+                        )
+                    )
+                    texture_index = texture_resolution.source_index
+
+                insertion = PmxStructuralMaterialInsertion(
+                    local_name=arguments.local_name,
+                    universal_name=arguments.universal_name,
+                    memo=arguments.memo,
+                    texture_index=texture_index,
+                    new_id=arguments.new_id,
                 )
-                insertion = compile_structural_authoring_insert_before(
-                    insertion,
-                    resolution,
+
+                material_selection = None
+                if arguments.before_index is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    material_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MATERIAL,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if material_selection is not None:
+                    material_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            material_selection,
+                        )
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        material_resolution,
+                    )
+
+            else:
+                raise RuntimeError(
+                    "Unsupported transaction-plan build kind: "
+                    f"{arguments.transaction_plan_build_kind}"
                 )
-            elif arguments.before_path is not None:
-                selection = PmxStructuralAuthoringSelector(
-                    target_kind=PmxReferenceTargetKind.TEXTURE,
-                    field=PmxStructuralAuthoringSelectorField.PATH,
-                    value=arguments.before_path,
-                )
-                resolution = resolve_structural_authoring_selector(
-                    document,
-                    selection,
-                )
-                insertion = compile_structural_authoring_insert_before(
-                    insertion,
-                    resolution,
-                )
+
             plan = build_structural_authoring_plan(
                 (insertion,),
                 expected_source_sha256=arguments.expected_source_sha256,

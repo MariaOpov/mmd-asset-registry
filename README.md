@@ -19,17 +19,40 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5
-Release label: v0.9.5
+Tool version: 0.9.5.1
+Release label: v0.9.5.1
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.5` maps to the PEP 440 Python package version
-`0.9.5`. This release adds human-friendly schema-one structural transaction
-authoring while preserving the released v0.9.3/v0.9.4 structural transaction
-execution and plan authorities.
+GitHub release label `v0.9.5.1` maps to the PEP 440 Python package version
+`0.9.5.1`. This patch adds the deterministic, read-only Smart Part
+domain/evidence foundation while preserving the released v0.9.3/v0.9.4
+structural transaction execution and plan authorities and the v0.9.5
+human-friendly structural authoring layer.
+
+## Version 0.9.5.1 Smart Part Foundation
+
+Version 0.9.5.1 introduces the deterministic, read-only domain model that later
+Smart Tool checkpoints can use for semantic PMX part detection.
+
+- `mmd_registry.smart_parts` exports `SmartPartKind`,
+  `SmartPartEvidenceKind`, `SmartPartEvidence`, and `SmartPart`.
+- Smart-part evidence is source-bound by PMX entity kind and non-negative
+  source index, with an exact human-readable reason.
+- `SmartPart` aggregates immutable cross-entity evidence with canonical
+  deterministic ordering, equality, and hashing.
+- The package root remains intentionally narrow: `mmd_registry.__all__` is
+  still exactly `('__version__',)`.
+
+This patch does not add semantic detection, aliases, fuzzy matching, confidence
+scoring, capabilities, AI, CLI commands, transaction-plan generation, preview,
+apply, remapping, writing, or PMX mutation. The released structural execution
+and schema-one transaction-plan authorities remain unchanged.
+
+The foundation adds 30 focused Smart Part tests; the promoted local full suite
+contains 2649 tests with 2 optional skips.
 
 ## Version 0.9.5 human-friendly structural authoring
 
@@ -1580,7 +1603,7 @@ requests across Ubuntu and Windows. It performs:
 5. The PMX safety, compatibility, public API, service, and cross-platform gate
 6. Full automated test discovery with branch coverage reports
 7. Fresh wheel/sdist build, archive inspection, and isolated wheel installation
-8. Exact `0.9.5` package-version assertion
+8. Exact `0.9.5.1` package-version assertion
 9. Top-level version plus `scan`, `roundtrip`, `edit`, `edit-plan`,
    `texture-portability`, `doctor`, `bones`, and `rig` help checks, including
    all `edit-plan` subcommands

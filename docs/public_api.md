@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.4. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.1. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -17,6 +17,10 @@ assuming the repository root is the current directory.
 The current public namespaces are:
 
 - `mmd_registry`, whose only root export is `__version__`;
+- `mmd_registry.smart_parts`, for the v0.9.5.1 deterministic read-only Smart
+  Part domain model. Its explicit `__all__` contains only `SmartPartKind`,
+  `SmartPartEvidenceKind`, `SmartPartEvidence`, and `SmartPart`; none is
+  promoted through the package root or the root service namespace;
 - `mmd_registry.capabilities`, for the immutable current-support manifest and
   canonical `get_capabilities()` entry point listed in its `__all__`;
 - `mmd_registry.diagnostics`, for immutable service operation, code,

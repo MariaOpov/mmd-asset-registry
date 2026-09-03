@@ -2,6 +2,40 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.1 - 2026-09-03
+
+### Added
+
+- Added the deterministic, immutable `mmd_registry.smart_parts` domain surface
+  with `SmartPartKind`, `SmartPartEvidenceKind`, `SmartPartEvidence`, and
+  `SmartPart`.
+- Added exact source-kind/source-index evidence suitable for future cross-entity
+  semantic-part detection without embedding mutable PMX document objects.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5` to `0.9.5.1`.
+- Updated release-facing documentation, CI assertions, and compatibility tests
+  for the four-segment PEP 440 patch version.
+- Extended the numeric release-version metadata contract to accept at least
+  three numeric release segments, including `0.9.5.1`.
+
+### Verified
+
+- The Smart Part foundation remains read-only and root-unpromoted.
+- The local promoted suite retains 2649 unit tests with 2 optional skips.
+- Registry schemas remain `0.2`/`0.3`; structural transaction-plan and
+  execution authorities are unchanged.
+
+### Safety and compatibility
+
+- No semantic detector, fuzzy matching, confidence scoring, capability
+  promotion, CLI, transaction schema, writer, remapper, preview/apply path, or
+  PMX mutation authority is introduced.
+- `mmd_registry.__all__` remains exactly `('__version__',)`.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates; PyPI is not authorized by this patch.
+
 ## 0.9.5 - 2026-09-03
 
 ### Added

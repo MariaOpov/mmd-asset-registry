@@ -47,6 +47,9 @@ from mmd_registry.services.structural_authoring_selector import (
 from mmd_registry.services.structural_material import (
     PmxStructuralMaterialInsertion,
 )
+from mmd_registry.services.structural_morph import (
+    PmxStructuralMorphInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
@@ -290,6 +293,84 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         help="Optional request-local schema-one identity.",
     )
     build_material_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_morph_parser = build_kind_subparsers.add_parser(
+        "morph",
+        help="Build one empty-offset morph insertion plan.",
+    )
+    build_morph_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_morph_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new morph.",
+    )
+    build_morph_parser.add_argument(
+        "--type",
+        dest="morph_type",
+        required=True,
+        choices=(
+            "group",
+            "vertex",
+            "bone",
+            "uv",
+            "additional_uv_1",
+            "additional_uv_2",
+            "additional_uv_3",
+            "additional_uv_4",
+            "material",
+            "flip",
+            "impulse",
+        ),
+        help="Released schema-one morph type.",
+    )
+    build_morph_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new morph; defaults to empty.",
+    )
+    build_morph_parser.add_argument(
+        "--panel",
+        choices=("system", "eyebrow", "eye", "mouth", "other"),
+        default="other",
+        help="Morph display panel; defaults to other.",
+    )
+    morph_anchor_group = build_morph_parser.add_mutually_exclusive_group()
+    morph_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source morph index.",
+    )
+    morph_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source morph local name.",
+    )
+    morph_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source morph universal name.",
+    )
+    build_morph_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_morph_parser.add_argument(
         "--expected-source-sha256",
         default=None,
         help=(
@@ -1147,6 +1228,56 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                     insertion = compile_structural_authoring_insert_before(
                         insertion,
                         material_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "morph":
+                insertion = PmxStructuralMorphInsertion(
+                    local_name=arguments.local_name,
+                    morph_type=arguments.morph_type,
+                    universal_name=arguments.universal_name,
+                    panel=arguments.panel,
+                    new_id=arguments.new_id,
+                )
+
+                morph_selection = None
+                if arguments.before_index is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    morph_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.MORPH,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if morph_selection is not None:
+                    morph_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            morph_selection,
+                        )
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        morph_resolution,
                     )
 
             else:

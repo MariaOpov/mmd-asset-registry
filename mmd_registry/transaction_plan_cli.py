@@ -50,6 +50,9 @@ from mmd_registry.services.structural_material import (
 from mmd_registry.services.structural_morph import (
     PmxStructuralMorphInsertion,
 )
+from mmd_registry.services.structural_bone import (
+    PmxStructuralBoneInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
@@ -371,6 +374,85 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         help="Optional request-local schema-one identity.",
     )
     build_morph_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_bone_parser = build_kind_subparsers.add_parser(
+        "bone",
+        help="Build one minimal bone insertion plan.",
+    )
+    build_bone_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_bone_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new bone.",
+    )
+    build_bone_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new bone; defaults to empty.",
+    )
+    build_bone_parser.add_argument(
+        "--position",
+        dest="bone_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Bone position as exactly three floating-point values.",
+    )
+    parent_group = build_bone_parser.add_mutually_exclusive_group()
+    parent_group.add_argument(
+        "--parent-index",
+        type=int,
+        default=None,
+        help="Use one exact captured-source parent bone index.",
+    )
+    parent_group.add_argument(
+        "--parent-local-name",
+        default=None,
+        help="Use one exact captured-source parent bone local name.",
+    )
+    parent_group.add_argument(
+        "--parent-universal-name",
+        default=None,
+        help="Use one exact captured-source parent bone universal name.",
+    )
+    bone_anchor_group = build_bone_parser.add_mutually_exclusive_group()
+    bone_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source bone index.",
+    )
+    bone_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source bone local name.",
+    )
+    bone_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help="Insert before one exact captured-source bone universal name.",
+    )
+    build_bone_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_bone_parser.add_argument(
         "--expected-source-sha256",
         default=None,
         help=(
@@ -1278,6 +1360,97 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                     insertion = compile_structural_authoring_insert_before(
                         insertion,
                         morph_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "bone":
+                parent_bone_index = -1
+                parent_selection = None
+                if arguments.parent_index is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.parent_index,
+                    )
+                elif arguments.parent_local_name is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.parent_local_name,
+                    )
+                elif arguments.parent_universal_name is not None:
+                    parent_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.parent_universal_name,
+                    )
+
+                if parent_selection is not None:
+                    parent_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            parent_selection,
+                        )
+                    )
+                    parent_bone_index = parent_resolution.source_index
+
+                insertion_kwargs = {
+                    "local_name": arguments.local_name,
+                    "universal_name": arguments.universal_name,
+                    "parent_bone_index": parent_bone_index,
+                    "new_id": arguments.new_id,
+                }
+                if arguments.bone_position is not None:
+                    insertion_kwargs["bone_position"] = tuple(
+                        arguments.bone_position
+                    )
+                insertion = PmxStructuralBoneInsertion(**insertion_kwargs)
+
+                bone_selection = None
+                if arguments.before_index is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if bone_selection is not None:
+                    bone_resolution = resolve_structural_authoring_selector(
+                        document,
+                        bone_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        bone_resolution,
                     )
 
             else:

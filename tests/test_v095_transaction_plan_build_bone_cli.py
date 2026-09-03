@@ -1,4 +1,4 @@
-"""v0.9.5 CLI integration for human-friendly material plan building."""
+"""v0.9.5 CLI integration for human-friendly bone plan building."""
 
 from __future__ import annotations
 
@@ -27,19 +27,15 @@ from tests.pmx_roundtrip_fixtures import build_pmx_roundtrip_fixture
 def _source_bytes() -> bytes:
     fixture = build_pmx_roundtrip_fixture(version=2.1, index_size=1)
     document = load_pmx(io.BytesIO(fixture))
-    materials = list(document.materials)
-    materials[0] = replace(
-        materials[0],
-        local_name="AnchorLocal",
-        universal_name="AnchorUniversal",
+    bones = list(document.bones)
+    bones[0] = replace(
+        bones[0],
+        local_name="AnchorBoneLocal",
+        universal_name="AnchorBoneUniversal",
     )
     document = replace(
         document,
-        texture_paths=(
-            "anchor.png",
-            *document.texture_paths[1:],
-        ),
-        materials=tuple(materials),
+        bones=tuple(bones),
         trailing_data=b"",
     )
     return serialize_pmx(document)
@@ -49,7 +45,7 @@ def _runtime_parser() -> argparse.ArgumentParser:
     return cli._build_runtime_argument_parser()
 
 
-class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
+class TransactionPlanBuildBoneCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
@@ -64,10 +60,10 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             [
                 "transaction-plan",
                 "build",
-                "material",
+                "bone",
                 str(self.source_path),
                 "--local-name",
-                "新しい材質",
+                "新しいボーン",
                 *extra,
             ]
         )
@@ -79,25 +75,26 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             )
         return exit_code, stdout.getvalue(), stderr.getvalue()
 
-    def test_parser_adds_material_as_second_build_kind(self) -> None:
+    def test_parser_adds_bone_as_fourth_build_kind(self) -> None:
         parser = _runtime_parser()
         arguments = parser.parse_args(
             [
                 "transaction-plan",
                 "build",
-                "material",
+                "bone",
                 "source.pmx",
                 "--local-name",
-                "Material",
+                "Bone",
             ]
         )
         self.assertEqual(arguments.transaction_plan_action, "build")
-        self.assertEqual(arguments.transaction_plan_build_kind, "material")
-        self.assertEqual(arguments.local_name, "Material")
+        self.assertEqual(arguments.transaction_plan_build_kind, "bone")
+        self.assertEqual(arguments.local_name, "Bone")
         self.assertEqual(arguments.universal_name, "")
-        self.assertEqual(arguments.memo, "")
-        self.assertIsNone(arguments.texture_index)
-        self.assertIsNone(arguments.texture_path)
+        self.assertIsNone(arguments.bone_position)
+        self.assertIsNone(arguments.parent_index)
+        self.assertIsNone(arguments.parent_local_name)
+        self.assertIsNone(arguments.parent_universal_name)
 
         top = [
             action
@@ -116,15 +113,18 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             for action in build._actions
             if isinstance(action, argparse._SubParsersAction)
         ][0]
-        self.assertEqual(tuple(kinds.choices), ("texture", "material", "morph", "bone"))
+        self.assertEqual(
+            tuple(kinds.choices),
+            ("texture", "material", "morph", "bone"),
+        )
 
-    def test_minimal_material_outputs_existing_canonical_schema_one_plan(self) -> None:
+    def test_minimal_bone_outputs_existing_canonical_schema_one_plan(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
             side_effect=AssertionError("minimal append must not resolve"),
         ) as resolve_selector:
-            exit_code, stdout, stderr = self._run("--new-id", "mat_added")
+            exit_code, stdout, stderr = self._run("--new-id", "bone_added")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
@@ -133,35 +133,71 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
         plan = parse_pmx_structural_transaction_plan_json(stdout)
         self.assertEqual(len(plan.operations), 1)
         operation = plan.operations[0]
-        self.assertEqual(operation.local_name, "新しい材質")
+        self.assertEqual(operation.local_name, "新しいボーン")
         self.assertEqual(operation.universal_name, "")
-        self.assertEqual(operation.memo, "")
-        self.assertEqual(operation.texture_index, -1)
+        self.assertEqual(operation.bone_position, (0.0, 0.0, 0.0))
+        self.assertEqual(operation.parent_bone_index, -1)
         self.assertEqual(operation.position, "append")
         self.assertIsNone(operation.source_index)
-        self.assertEqual(operation.new_id, "mat_added")
+        self.assertEqual(operation.new_id, "bone_added")
+        self.assertIsNone(operation.ik)
         self.assertEqual(stdout, builder.render_structural_authoring_plan(plan))
 
-    def test_texture_index_is_resolved_as_exact_source_texture_selector(self) -> None:
+    def test_position_is_exact_three_float_vector(self) -> None:
+        exit_code, stdout, stderr = self._run(
+            "--position",
+            "1.25",
+            "-2.5",
+            "3.75",
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        plan = parse_pmx_structural_transaction_plan_json(stdout)
+        self.assertEqual(
+            plan.operations[0].bone_position,
+            (1.25, -2.5, 3.75),
+        )
+
+    def test_parent_index_uses_exact_bone_selector(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
             wraps=selector.resolve_structural_authoring_selector,
         ) as resolve_selector:
-            exit_code, stdout, stderr = self._run("--texture-index", "0")
+            exit_code, stdout, stderr = self._run("--parent-index", "0")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         resolve_selector.assert_called_once()
         selection = resolve_selector.call_args.args[1]
-        self.assertEqual(selection.target_kind.value, "texture")
+        self.assertEqual(selection.target_kind.value, "bone")
         self.assertEqual(selection.field.value, "source_index")
         self.assertEqual(selection.value, 0)
 
         plan = parse_pmx_structural_transaction_plan_json(stdout)
-        self.assertEqual(plan.operations[0].texture_index, 0)
+        self.assertEqual(plan.operations[0].parent_bone_index, 0)
 
-    def test_texture_path_is_exact_and_material_local_name_anchor_compiles(self) -> None:
+    def test_parent_local_name_uses_exact_bone_selector(self) -> None:
+        with patch.object(
+            transaction_plan_cli,
+            "resolve_structural_authoring_selector",
+            wraps=selector.resolve_structural_authoring_selector,
+        ) as resolve_selector:
+            exit_code, stdout, stderr = self._run(
+                "--parent-local-name",
+                "AnchorBoneLocal",
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        selection = resolve_selector.call_args.args[1]
+        self.assertEqual(selection.target_kind.value, "bone")
+        self.assertEqual(selection.field.value, "local_name")
+        self.assertEqual(selection.value, "AnchorBoneLocal")
+        plan = parse_pmx_structural_transaction_plan_json(stdout)
+        self.assertEqual(plan.operations[0].parent_bone_index, 0)
+
+    def test_parent_universal_name_and_before_local_name_use_two_exact_selectors(self) -> None:
         with (
             patch.object(
                 transaction_plan_cli,
@@ -175,38 +211,36 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             ) as compile_before,
         ):
             exit_code, stdout, stderr = self._run(
-                "--texture-path",
-                "anchor.png",
+                "--parent-universal-name",
+                "AnchorBoneUniversal",
                 "--before-local-name",
-                "AnchorLocal",
+                "AnchorBoneLocal",
                 "--universal-name",
                 "NewUniversal",
-                "--memo",
-                "memo",
             )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         self.assertEqual(resolve_selector.call_count, 2)
-        texture_selection = resolve_selector.call_args_list[0].args[1]
-        material_selection = resolve_selector.call_args_list[1].args[1]
-        self.assertEqual(texture_selection.target_kind.value, "texture")
-        self.assertEqual(texture_selection.field.value, "path")
-        self.assertEqual(texture_selection.value, "anchor.png")
-        self.assertEqual(material_selection.target_kind.value, "material")
-        self.assertEqual(material_selection.field.value, "local_name")
-        self.assertEqual(material_selection.value, "AnchorLocal")
+
+        parent_selection = resolve_selector.call_args_list[0].args[1]
+        before_selection = resolve_selector.call_args_list[1].args[1]
+        self.assertEqual(parent_selection.target_kind.value, "bone")
+        self.assertEqual(parent_selection.field.value, "universal_name")
+        self.assertEqual(parent_selection.value, "AnchorBoneUniversal")
+        self.assertEqual(before_selection.target_kind.value, "bone")
+        self.assertEqual(before_selection.field.value, "local_name")
+        self.assertEqual(before_selection.value, "AnchorBoneLocal")
         compile_before.assert_called_once()
 
         plan = parse_pmx_structural_transaction_plan_json(stdout)
         operation = plan.operations[0]
-        self.assertEqual(operation.texture_index, 0)
+        self.assertEqual(operation.parent_bone_index, 0)
         self.assertEqual(operation.position, "insert_before")
         self.assertEqual(operation.source_index, 0)
         self.assertEqual(operation.universal_name, "NewUniversal")
-        self.assertEqual(operation.memo, "memo")
 
-    def test_material_universal_name_anchor_is_exact(self) -> None:
+    def test_before_universal_name_is_exact(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
@@ -214,57 +248,53 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
         ) as resolve_selector:
             exit_code, stdout, stderr = self._run(
                 "--before-universal-name",
-                "AnchorUniversal",
+                "AnchorBoneUniversal",
             )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         selection = resolve_selector.call_args.args[1]
-        self.assertEqual(selection.target_kind.value, "material")
+        self.assertEqual(selection.target_kind.value, "bone")
         self.assertEqual(selection.field.value, "universal_name")
-        self.assertEqual(selection.value, "AnchorUniversal")
-
+        self.assertEqual(selection.value, "AnchorBoneUniversal")
         plan = parse_pmx_structural_transaction_plan_json(stdout)
         self.assertEqual(plan.operations[0].source_index, 0)
 
-    def test_texture_reference_options_are_mutually_exclusive(self) -> None:
+    def test_parent_and_placement_selector_groups_are_independently_exclusive(self) -> None:
         parser = _runtime_parser()
-        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parser.parse_args(
-                [
-                    "transaction-plan",
-                    "build",
-                    "material",
-                    "source.pmx",
-                    "--local-name",
-                    "Material",
-                    "--texture-index",
-                    "0",
-                    "--texture-path",
-                    "anchor.png",
-                ]
-            )
-
-    def test_material_placement_options_are_mutually_exclusive(self) -> None:
-        parser = _runtime_parser()
-        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parser.parse_args(
-                [
-                    "transaction-plan",
-                    "build",
-                    "material",
-                    "source.pmx",
-                    "--local-name",
-                    "Material",
-                    "--before-index",
-                    "0",
-                    "--before-local-name",
-                    "AnchorLocal",
-                ]
-            )
+        invalid_cases = (
+            [
+                "transaction-plan",
+                "build",
+                "bone",
+                "source.pmx",
+                "--local-name",
+                "Bone",
+                "--parent-index",
+                "0",
+                "--parent-local-name",
+                "AnchorBoneLocal",
+            ],
+            [
+                "transaction-plan",
+                "build",
+                "bone",
+                "source.pmx",
+                "--local-name",
+                "Bone",
+                "--before-index",
+                "0",
+                "--before-universal-name",
+                "AnchorBoneUniversal",
+            ],
+        )
+        for arguments in invalid_cases:
+            with self.subTest(arguments=arguments):
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    parser.parse_args(arguments)
 
     def test_expected_source_sha256_is_passed_through_not_computed(self) -> None:
-        digest = "b" * 64
+        digest = "d" * 64
         exit_code, stdout, stderr = self._run(
             "--expected-source-sha256",
             digest,
@@ -281,7 +311,7 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
         self.assertNotIn("hashlib", build_block)
         self.assertNotIn("sha256(", build_block)
 
-    def test_material_build_has_no_execution_or_generic_payload_authority(self) -> None:
+    def test_bone_build_has_no_deferred_or_execution_authority(self) -> None:
         with (
             patch.object(
                 transaction_plan_cli,
@@ -308,7 +338,6 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             "preview_structural_transaction_plan",
             "apply_structural_transaction_plan",
             "PmxIndexRemap",
-            "structural_output",
             "write_pmx",
             "serialize_pmx",
             "final_index =",
@@ -316,6 +345,12 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             "--operation-file",
             "--fields-json",
             "--payload",
+            "--ik",
+            "--tail-index",
+            "--inherit-weight",
+            "--fixed-axis",
+            "--local-axis-x",
+            "--external-parent-key",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, block)

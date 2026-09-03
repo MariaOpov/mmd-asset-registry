@@ -116,7 +116,7 @@ class TransactionPlanBuildMaterialCliTests(unittest.TestCase):
             for action in build._actions
             if isinstance(action, argparse._SubParsersAction)
         ][0]
-        self.assertEqual(tuple(kinds.choices), ("texture", "material", "morph", "bone"))
+        self.assertEqual(tuple(kinds.choices), ("texture", "material", "morph", "bone", "rigid-body"))
 
     def test_minimal_material_outputs_existing_canonical_schema_one_plan(self) -> None:
         with patch.object(

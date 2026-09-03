@@ -53,6 +53,9 @@ from mmd_registry.services.structural_morph import (
 from mmd_registry.services.structural_bone import (
     PmxStructuralBoneInsertion,
 )
+from mmd_registry.services.structural_rigid_body import (
+    PmxStructuralRigidBodyInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
@@ -453,6 +456,122 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         help="Optional request-local schema-one identity.",
     )
     build_bone_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_rigid_body_parser = build_kind_subparsers.add_parser(
+        "rigid-body",
+        help="Build one minimal rigid-body insertion plan.",
+    )
+    build_rigid_body_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_rigid_body_parser.add_argument(
+        "--local-name",
+        required=True,
+        help="Exact local name for the new rigid body.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--universal-name",
+        default="",
+        help="Universal name for the new rigid body; defaults to empty.",
+    )
+    rigid_bone_group = build_rigid_body_parser.add_mutually_exclusive_group()
+    rigid_bone_group.add_argument(
+        "--bone-index",
+        type=int,
+        default=None,
+        help="Reference one exact captured-source bone index.",
+    )
+    rigid_bone_group.add_argument(
+        "--bone-local-name",
+        default=None,
+        help="Reference one exact captured-source bone local name.",
+    )
+    rigid_bone_group.add_argument(
+        "--bone-universal-name",
+        default=None,
+        help="Reference one exact captured-source bone universal name.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--shape",
+        choices=("sphere", "box", "capsule"),
+        default="sphere",
+        help="Rigid-body shape; defaults to sphere.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--size",
+        dest="body_size",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body size as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--position",
+        dest="body_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body position as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--rotation",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Rigid-body rotation as exactly three floating-point values.",
+    )
+    build_rigid_body_parser.add_argument(
+        "--physics-mode",
+        choices=(
+            "bone_follow",
+            "physics",
+            "physics_with_bone_alignment",
+        ),
+        default="bone_follow",
+        help="Rigid-body physics mode; defaults to bone_follow.",
+    )
+    rigid_anchor_group = (
+        build_rigid_body_parser.add_mutually_exclusive_group()
+    )
+    rigid_anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source rigid-body index.",
+    )
+    rigid_anchor_group.add_argument(
+        "--before-local-name",
+        default=None,
+        help="Insert before one exact captured-source rigid-body local name.",
+    )
+    rigid_anchor_group.add_argument(
+        "--before-universal-name",
+        default=None,
+        help=(
+            "Insert before one exact captured-source rigid-body universal name."
+        ),
+    )
+    build_rigid_body_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_rigid_body_parser.add_argument(
         "--expected-source-sha256",
         default=None,
         help=(
@@ -1451,6 +1570,104 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                     insertion = compile_structural_authoring_insert_before(
                         insertion,
                         bone_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "rigid-body":
+                bone_index = -1
+                rigid_bone_selection = None
+                if arguments.bone_index is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.bone_index,
+                    )
+                elif arguments.bone_local_name is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.bone_local_name,
+                    )
+                elif arguments.bone_universal_name is not None:
+                    rigid_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.bone_universal_name,
+                    )
+
+                if rigid_bone_selection is not None:
+                    rigid_bone_resolution = (
+                        resolve_structural_authoring_selector(
+                            document,
+                            rigid_bone_selection,
+                        )
+                    )
+                    bone_index = rigid_bone_resolution.source_index
+
+                rigid_kwargs = {
+                    "local_name": arguments.local_name,
+                    "universal_name": arguments.universal_name,
+                    "bone_index": bone_index,
+                    "shape": arguments.shape,
+                    "physics_mode": arguments.physics_mode,
+                    "new_id": arguments.new_id,
+                }
+                if arguments.body_size is not None:
+                    rigid_kwargs["size"] = tuple(arguments.body_size)
+                if arguments.body_position is not None:
+                    rigid_kwargs["body_position"] = tuple(
+                        arguments.body_position
+                    )
+                if arguments.rotation is not None:
+                    rigid_kwargs["rotation"] = tuple(arguments.rotation)
+
+                insertion = PmxStructuralRigidBodyInsertion(**rigid_kwargs)
+
+                rigid_selection = None
+                if arguments.before_index is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                elif arguments.before_local_name is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.before_local_name,
+                    )
+                elif arguments.before_universal_name is not None:
+                    rigid_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.RIGID_BODY,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.before_universal_name,
+                    )
+
+                if rigid_selection is not None:
+                    rigid_resolution = resolve_structural_authoring_selector(
+                        document,
+                        rigid_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        rigid_resolution,
                     )
 
             else:

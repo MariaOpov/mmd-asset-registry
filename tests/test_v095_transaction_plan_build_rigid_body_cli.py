@@ -1,4 +1,4 @@
-"""v0.9.5 CLI integration for human-friendly bone plan building."""
+"""v0.9.5 CLI integration for human-friendly rigid-body plan building."""
 
 from __future__ import annotations
 
@@ -27,15 +27,25 @@ from tests.pmx_roundtrip_fixtures import build_pmx_roundtrip_fixture
 def _source_bytes() -> bytes:
     fixture = build_pmx_roundtrip_fixture(version=2.1, index_size=1)
     document = load_pmx(io.BytesIO(fixture))
+
     bones = list(document.bones)
     bones[0] = replace(
         bones[0],
         local_name="AnchorBoneLocal",
         universal_name="AnchorBoneUniversal",
     )
+
+    rigid_bodies = list(document.rigid_bodies)
+    rigid_bodies[0] = replace(
+        rigid_bodies[0],
+        local_name="AnchorRigidLocal",
+        universal_name="AnchorRigidUniversal",
+    )
+
     document = replace(
         document,
         bones=tuple(bones),
+        rigid_bodies=tuple(rigid_bodies),
         trailing_data=b"",
     )
     return serialize_pmx(document)
@@ -45,7 +55,7 @@ def _runtime_parser() -> argparse.ArgumentParser:
     return cli._build_runtime_argument_parser()
 
 
-class TransactionPlanBuildBoneCliTests(unittest.TestCase):
+class TransactionPlanBuildRigidBodyCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
@@ -60,10 +70,10 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
             [
                 "transaction-plan",
                 "build",
-                "bone",
+                "rigid-body",
                 str(self.source_path),
                 "--local-name",
-                "新しいボーン",
+                "新しい剛体",
                 *extra,
             ]
         )
@@ -75,26 +85,31 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
             )
         return exit_code, stdout.getvalue(), stderr.getvalue()
 
-    def test_parser_adds_bone_as_fourth_build_kind(self) -> None:
+    def test_parser_adds_rigid_body_as_fifth_build_kind(self) -> None:
         parser = _runtime_parser()
         arguments = parser.parse_args(
             [
                 "transaction-plan",
                 "build",
-                "bone",
+                "rigid-body",
                 "source.pmx",
                 "--local-name",
-                "Bone",
+                "Rigid",
             ]
         )
         self.assertEqual(arguments.transaction_plan_action, "build")
-        self.assertEqual(arguments.transaction_plan_build_kind, "bone")
-        self.assertEqual(arguments.local_name, "Bone")
+        self.assertEqual(
+            arguments.transaction_plan_build_kind,
+            "rigid-body",
+        )
+        self.assertEqual(arguments.local_name, "Rigid")
         self.assertEqual(arguments.universal_name, "")
-        self.assertIsNone(arguments.bone_position)
-        self.assertIsNone(arguments.parent_index)
-        self.assertIsNone(arguments.parent_local_name)
-        self.assertIsNone(arguments.parent_universal_name)
+        self.assertIsNone(arguments.bone_index)
+        self.assertIsNone(arguments.body_size)
+        self.assertIsNone(arguments.body_position)
+        self.assertIsNone(arguments.rotation)
+        self.assertEqual(arguments.shape, "sphere")
+        self.assertEqual(arguments.physics_mode, "bone_follow")
 
         top = [
             action
@@ -118,13 +133,13 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
             ("texture", "material", "morph", "bone", "rigid-body"),
         )
 
-    def test_minimal_bone_outputs_existing_canonical_schema_one_plan(self) -> None:
+    def test_minimal_rigid_body_outputs_existing_canonical_schema_one_plan(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
             side_effect=AssertionError("minimal append must not resolve"),
         ) as resolve_selector:
-            exit_code, stdout, stderr = self._run("--new-id", "bone_added")
+            exit_code, stdout, stderr = self._run("--new-id", "rigid_added")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
@@ -133,38 +148,62 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
         plan = parse_pmx_structural_transaction_plan_json(stdout)
         self.assertEqual(len(plan.operations), 1)
         operation = plan.operations[0]
-        self.assertEqual(operation.local_name, "新しいボーン")
+        self.assertEqual(operation.local_name, "新しい剛体")
         self.assertEqual(operation.universal_name, "")
-        self.assertEqual(operation.bone_position, (0.0, 0.0, 0.0))
-        self.assertEqual(operation.parent_bone_index, -1)
+        self.assertEqual(operation.bone_index, -1)
+        self.assertEqual(operation.shape, "sphere")
+        self.assertEqual(operation.size, (1.0, 1.0, 1.0))
+        self.assertEqual(operation.body_position, (0.0, 0.0, 0.0))
+        self.assertEqual(operation.rotation, (0.0, 0.0, 0.0))
+        self.assertEqual(operation.physics_mode, "bone_follow")
         self.assertEqual(operation.position, "append")
         self.assertIsNone(operation.source_index)
-        self.assertEqual(operation.new_id, "bone_added")
-        self.assertIsNone(operation.ik)
+        self.assertEqual(operation.new_id, "rigid_added")
         self.assertEqual(stdout, builder.render_structural_authoring_plan(plan))
 
-    def test_position_is_exact_three_float_vector(self) -> None:
+    def test_shape_vectors_and_physics_mode_use_released_fields(self) -> None:
         exit_code, stdout, stderr = self._run(
-            "--position",
+            "--shape",
+            "capsule",
+            "--size",
             "1.25",
-            "-2.5",
+            "2.5",
             "3.75",
+            "--position",
+            "-1.0",
+            "2.0",
+            "-3.0",
+            "--rotation",
+            "0.1",
+            "0.2",
+            "0.3",
+            "--physics-mode",
+            "physics_with_bone_alignment",
+            "--universal-name",
+            "RigidUniversal",
         )
+
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         plan = parse_pmx_structural_transaction_plan_json(stdout)
+        operation = plan.operations[0]
+        self.assertEqual(operation.shape, "capsule")
+        self.assertEqual(operation.size, (1.25, 2.5, 3.75))
+        self.assertEqual(operation.body_position, (-1.0, 2.0, -3.0))
+        self.assertEqual(operation.rotation, (0.1, 0.2, 0.3))
         self.assertEqual(
-            plan.operations[0].bone_position,
-            (1.25, -2.5, 3.75),
+            operation.physics_mode,
+            "physics_with_bone_alignment",
         )
+        self.assertEqual(operation.universal_name, "RigidUniversal")
 
-    def test_parent_index_uses_exact_bone_selector(self) -> None:
+    def test_bone_index_uses_exact_bone_selector(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
             wraps=selector.resolve_structural_authoring_selector,
         ) as resolve_selector:
-            exit_code, stdout, stderr = self._run("--parent-index", "0")
+            exit_code, stdout, stderr = self._run("--bone-index", "0")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
@@ -175,16 +214,16 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
         self.assertEqual(selection.value, 0)
 
         plan = parse_pmx_structural_transaction_plan_json(stdout)
-        self.assertEqual(plan.operations[0].parent_bone_index, 0)
+        self.assertEqual(plan.operations[0].bone_index, 0)
 
-    def test_parent_local_name_uses_exact_bone_selector(self) -> None:
+    def test_bone_local_name_uses_exact_bone_selector(self) -> None:
         with patch.object(
             transaction_plan_cli,
             "resolve_structural_authoring_selector",
             wraps=selector.resolve_structural_authoring_selector,
         ) as resolve_selector:
             exit_code, stdout, stderr = self._run(
-                "--parent-local-name",
+                "--bone-local-name",
                 "AnchorBoneLocal",
             )
 
@@ -194,10 +233,11 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
         self.assertEqual(selection.target_kind.value, "bone")
         self.assertEqual(selection.field.value, "local_name")
         self.assertEqual(selection.value, "AnchorBoneLocal")
-        plan = parse_pmx_structural_transaction_plan_json(stdout)
-        self.assertEqual(plan.operations[0].parent_bone_index, 0)
 
-    def test_parent_universal_name_and_before_local_name_use_two_exact_selectors(self) -> None:
+        plan = parse_pmx_structural_transaction_plan_json(stdout)
+        self.assertEqual(plan.operations[0].bone_index, 0)
+
+    def test_bone_universal_name_and_before_local_name_use_two_exact_selectors(self) -> None:
         with (
             patch.object(
                 transaction_plan_cli,
@@ -211,81 +251,106 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
             ) as compile_before,
         ):
             exit_code, stdout, stderr = self._run(
-                "--parent-universal-name",
+                "--bone-universal-name",
                 "AnchorBoneUniversal",
                 "--before-local-name",
-                "AnchorBoneLocal",
-                "--universal-name",
-                "NewUniversal",
+                "AnchorRigidLocal",
             )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         self.assertEqual(resolve_selector.call_count, 2)
 
-        parent_selection = resolve_selector.call_args_list[0].args[1]
+        bone_selection = resolve_selector.call_args_list[0].args[1]
         before_selection = resolve_selector.call_args_list[1].args[1]
-        self.assertEqual(parent_selection.target_kind.value, "bone")
-        self.assertEqual(parent_selection.field.value, "universal_name")
-        self.assertEqual(parent_selection.value, "AnchorBoneUniversal")
-        self.assertEqual(before_selection.target_kind.value, "bone")
+        self.assertEqual(bone_selection.target_kind.value, "bone")
+        self.assertEqual(bone_selection.field.value, "universal_name")
+        self.assertEqual(bone_selection.value, "AnchorBoneUniversal")
+        self.assertEqual(before_selection.target_kind.value, "rigid_body")
         self.assertEqual(before_selection.field.value, "local_name")
-        self.assertEqual(before_selection.value, "AnchorBoneLocal")
+        self.assertEqual(before_selection.value, "AnchorRigidLocal")
         compile_before.assert_called_once()
 
         plan = parse_pmx_structural_transaction_plan_json(stdout)
         operation = plan.operations[0]
-        self.assertEqual(operation.parent_bone_index, 0)
+        self.assertEqual(operation.bone_index, 0)
         self.assertEqual(operation.position, "insert_before")
         self.assertEqual(operation.source_index, 0)
-        self.assertEqual(operation.universal_name, "NewUniversal")
 
-    def test_before_universal_name_is_exact(self) -> None:
-        with patch.object(
-            transaction_plan_cli,
-            "resolve_structural_authoring_selector",
-            wraps=selector.resolve_structural_authoring_selector,
-        ) as resolve_selector:
-            exit_code, stdout, stderr = self._run(
+    def test_before_index_and_universal_name_are_exact_rigid_body_selectors(self) -> None:
+        cases = (
+            ("--before-index", "0", "source_index", 0),
+            (
                 "--before-universal-name",
-                "AnchorBoneUniversal",
-            )
+                "AnchorRigidUniversal",
+                "universal_name",
+                "AnchorRigidUniversal",
+            ),
+        )
+        for option, value, expected_field, expected_value in cases:
+            with self.subTest(option=option):
+                with patch.object(
+                    transaction_plan_cli,
+                    "resolve_structural_authoring_selector",
+                    wraps=selector.resolve_structural_authoring_selector,
+                ) as resolve_selector:
+                    exit_code, stdout, stderr = self._run(option, value)
 
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(stderr, "")
-        selection = resolve_selector.call_args.args[1]
-        self.assertEqual(selection.target_kind.value, "bone")
-        self.assertEqual(selection.field.value, "universal_name")
-        self.assertEqual(selection.value, "AnchorBoneUniversal")
-        plan = parse_pmx_structural_transaction_plan_json(stdout)
-        self.assertEqual(plan.operations[0].source_index, 0)
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(stderr, "")
+                selection = resolve_selector.call_args.args[1]
+                self.assertEqual(selection.target_kind.value, "rigid_body")
+                self.assertEqual(selection.field.value, expected_field)
+                self.assertEqual(selection.value, expected_value)
+                plan = parse_pmx_structural_transaction_plan_json(stdout)
+                self.assertEqual(plan.operations[0].source_index, 0)
 
-    def test_parent_and_placement_selector_groups_are_independently_exclusive(self) -> None:
+    def test_parser_rejects_invalid_choices_and_conflicting_selectors(self) -> None:
         parser = _runtime_parser()
         invalid_cases = (
             [
                 "transaction-plan",
                 "build",
-                "bone",
+                "rigid-body",
                 "source.pmx",
                 "--local-name",
-                "Bone",
-                "--parent-index",
+                "Rigid",
+                "--shape",
+                "cylinder",
+            ],
+            [
+                "transaction-plan",
+                "build",
+                "rigid-body",
+                "source.pmx",
+                "--local-name",
+                "Rigid",
+                "--physics-mode",
+                "invalid",
+            ],
+            [
+                "transaction-plan",
+                "build",
+                "rigid-body",
+                "source.pmx",
+                "--local-name",
+                "Rigid",
+                "--bone-index",
                 "0",
-                "--parent-local-name",
+                "--bone-local-name",
                 "AnchorBoneLocal",
             ],
             [
                 "transaction-plan",
                 "build",
-                "bone",
+                "rigid-body",
                 "source.pmx",
                 "--local-name",
-                "Bone",
+                "Rigid",
                 "--before-index",
                 "0",
-                "--before-universal-name",
-                "AnchorBoneUniversal",
+                "--before-local-name",
+                "AnchorRigidLocal",
             ],
         )
         for arguments in invalid_cases:
@@ -294,7 +359,7 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
                     parser.parse_args(arguments)
 
     def test_expected_source_sha256_is_passed_through_not_computed(self) -> None:
-        digest = "d" * 64
+        digest = "e" * 64
         exit_code, stdout, stderr = self._run(
             "--expected-source-sha256",
             digest,
@@ -307,11 +372,11 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
         source = inspect.getsource(transaction_plan_cli)
         start = source.index('    if action == "build":')
         end = source.index('    if action == "format":', start)
-        build_block = source[start:end]
-        self.assertNotIn("hashlib", build_block)
-        self.assertNotIn("sha256(", build_block)
+        block = source[start:end]
+        self.assertNotIn("hashlib", block)
+        self.assertNotIn("sha256(", block)
 
-    def test_bone_build_has_no_deferred_or_execution_authority(self) -> None:
+    def test_rigid_body_build_has_no_deferred_or_execution_authority(self) -> None:
         with (
             patch.object(
                 transaction_plan_cli,
@@ -345,12 +410,13 @@ class TransactionPlanBuildBoneCliTests(unittest.TestCase):
             "--operation-file",
             "--fields-json",
             "--payload",
-            "--ik",
-            "--tail-index",
-            "--inherit-weight",
-            "--fixed-axis",
-            "--local-axis-x",
-            "--external-parent-key",
+            "--collision-group",
+            "--collision-mask",
+            "--mass",
+            "--linear-damping",
+            "--angular-damping",
+            "--restitution",
+            "--friction",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, block)

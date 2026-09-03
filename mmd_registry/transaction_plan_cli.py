@@ -31,6 +31,21 @@ from mmd_registry.services.structural_authoring_diff import (
     PmxStructuralAuthoringDiffServiceError,
     build_structural_authoring_diff,
 )
+from mmd_registry.services.structural_authoring_builder import (
+    PmxStructuralAuthoringBuilderServiceError,
+    build_structural_authoring_plan,
+    compile_structural_authoring_insert_before,
+    render_structural_authoring_plan,
+)
+from mmd_registry.services.structural_authoring_selector import (
+    PmxStructuralAuthoringSelector,
+    PmxStructuralAuthoringSelectorField,
+    PmxStructuralAuthoringSelectorServiceError,
+    resolve_structural_authoring_selector,
+)
+from mmd_registry.services.structural_texture import (
+    PmxStructuralTextureInsertion,
+)
 from mmd_registry.services.structural_transaction_plan import (
     PmxStructuralTransactionPlanServiceDiagnosticCode,
     PmxStructuralTransactionPlanServiceError,
@@ -56,6 +71,7 @@ TRANSACTION_PLAN_COMMAND_NAME: Final[str] = "transaction-plan"
 _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "template",
     "inspect",
+    "build",
     "validate",
     "explain",
     "preview",
@@ -141,6 +157,61 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         "--json",
         action="store_true",
         help="Print deterministic Unicode-safe catalog JSON.",
+    )
+
+    build_parser = action_subparsers.add_parser(
+        "build",
+        help=(
+            "Build one canonical schema-one plan from bounded "
+            "human-friendly authoring input."
+        ),
+    )
+    build_kind_subparsers = build_parser.add_subparsers(
+        dest="transaction_plan_build_kind",
+        metavar="KIND",
+        required=True,
+    )
+    build_texture_parser = build_kind_subparsers.add_parser(
+        "texture",
+        help="Build one texture insertion plan.",
+    )
+    build_texture_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used only for exact selector resolution "
+            "and source validation."
+        ),
+    )
+    build_texture_parser.add_argument(
+        "--path",
+        required=True,
+        help="Exact new texture path stored in the schema-one insertion.",
+    )
+    anchor_group = build_texture_parser.add_mutually_exclusive_group()
+    anchor_group.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source texture index.",
+    )
+    anchor_group.add_argument(
+        "--before-path",
+        default=None,
+        help="Insert before one exact captured-source texture path.",
+    )
+    build_texture_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_texture_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
     )
 
     validate_parser = action_subparsers.add_parser(
@@ -536,6 +607,40 @@ def _print_rich_diff_service_error(
     return 3
 
 
+def _print_build_error(
+    *,
+    error: (
+        PmxServiceError
+        | PmxStructuralAuthoringSelectorServiceError
+        | PmxStructuralAuthoringBuilderServiceError
+        | TypeError
+        | ValueError
+    ),
+) -> int:
+    if isinstance(error, PmxServiceError):
+        error_type, exit_code = _document_failure_policy(error)
+        message = error.diagnostic.message
+    elif isinstance(error, PmxStructuralAuthoringSelectorServiceError):
+        code = error.diagnostic.code.value
+        exit_code = 2 if code == "invalid_argument" else 1
+        message = error.diagnostic.message
+    elif isinstance(error, PmxStructuralAuthoringBuilderServiceError):
+        exit_code = 1
+        message = error.diagnostic.message
+    else:
+        exit_code = 2
+        message = "Invalid structural authoring build input."
+
+    print(
+        (
+            f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} build: "
+            f"{message}"
+        ),
+        file=sys.stderr,
+    )
+    return exit_code
+
+
 def _render_apply_text(
     result: PmxStructuralTransactionPlanApplyResult,
 ) -> str:
@@ -798,6 +903,61 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         else:
             sys.stdout.write(_render_catalog_page_text(result))
         return 0
+
+    if action == "build":
+        if arguments.transaction_plan_build_kind != "texture":
+            raise RuntimeError(
+                "Unsupported transaction-plan build kind: "
+                f"{arguments.transaction_plan_build_kind}"
+            )
+        try:
+            document = load_document(arguments.source)
+            insertion = PmxStructuralTextureInsertion(
+                path=arguments.path,
+                new_id=arguments.new_id,
+            )
+            if arguments.before_index is not None:
+                selection = PmxStructuralAuthoringSelector(
+                    target_kind=PmxReferenceTargetKind.TEXTURE,
+                    field=PmxStructuralAuthoringSelectorField.SOURCE_INDEX,
+                    value=arguments.before_index,
+                )
+                resolution = resolve_structural_authoring_selector(
+                    document,
+                    selection,
+                )
+                insertion = compile_structural_authoring_insert_before(
+                    insertion,
+                    resolution,
+                )
+            elif arguments.before_path is not None:
+                selection = PmxStructuralAuthoringSelector(
+                    target_kind=PmxReferenceTargetKind.TEXTURE,
+                    field=PmxStructuralAuthoringSelectorField.PATH,
+                    value=arguments.before_path,
+                )
+                resolution = resolve_structural_authoring_selector(
+                    document,
+                    selection,
+                )
+                insertion = compile_structural_authoring_insert_before(
+                    insertion,
+                    resolution,
+                )
+            plan = build_structural_authoring_plan(
+                (insertion,),
+                expected_source_sha256=arguments.expected_source_sha256,
+            )
+            sys.stdout.write(render_structural_authoring_plan(plan))
+            return 0
+        except (
+            PmxServiceError,
+            PmxStructuralAuthoringSelectorServiceError,
+            PmxStructuralAuthoringBuilderServiceError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return _print_build_error(error=error)
 
     if action not in {"validate", "explain", "preview", "apply"}:
         raise RuntimeError(f"Unsupported transaction-plan action: {action}")

@@ -110,7 +110,7 @@ class TransactionPlanRichDiffCliTests(unittest.TestCase):
         ][0]
         self.assertEqual(
             tuple(actions.choices),
-            ("template", "inspect", "validate", "explain", "preview", "apply"),
+            ("template", "inspect", "build", "validate", "explain", "preview", "apply"),
         )
 
     def test_default_preview_output_and_service_route_remain_unchanged(self) -> None:

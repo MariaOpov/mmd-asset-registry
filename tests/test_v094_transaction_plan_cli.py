@@ -43,6 +43,7 @@ EXPECTED_LEGACY_COMMANDS = (
 EXPECTED_TRANSACTION_PLAN_ACTIONS = (
     "template",
     "inspect",
+    "build",
     "validate",
     "explain",
     "preview",

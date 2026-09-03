@@ -25,14 +25,7 @@ from tests.mmd_fixtures import (
 )
 
 
-EXPECTED_TRANSACTION_PLAN_ACTIONS = (
-    "template",
-    "inspect",
-    "validate",
-    "explain",
-    "preview",
-    "apply",
-)
+EXPECTED_TRANSACTION_PLAN_ACTIONS = ("template", "inspect", "build", "validate", "explain", "preview", "apply")
 
 
 def _subparser_choices(parser: argparse.ArgumentParser):

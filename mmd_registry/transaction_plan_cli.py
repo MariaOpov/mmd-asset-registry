@@ -7,10 +7,24 @@ import json
 import sys
 from typing import Final
 
+from mmd_registry.diagnostics import (
+    PmxServiceDiagnosticCode,
+    PmxServiceError,
+)
+from mmd_registry.pmx.reference_model import PmxReferenceTargetKind
 from mmd_registry.pmx.transaction_plan import (
     PmxStructuralTransactionPlanExplanation,
     get_pmx_structural_transaction_plan_template,
     render_pmx_structural_transaction_plan_json,
+)
+from mmd_registry.services import load_document
+from mmd_registry.services.structural_authoring_catalog import (
+    PmxStructuralAuthoringCatalogPage,
+    PmxStructuralAuthoringCatalogServiceDiagnosticCode,
+    PmxStructuralAuthoringCatalogServiceError,
+    PmxStructuralAuthoringCatalogSummary,
+    inspect_structural_authoring_catalog,
+    summarize_structural_authoring_catalog,
 )
 from mmd_registry.services.structural_transaction_plan import (
     PmxStructuralTransactionPlanServiceDiagnosticCode,
@@ -36,6 +50,7 @@ from mmd_registry.services.structural_transaction_plan_apply import (
 TRANSACTION_PLAN_COMMAND_NAME: Final[str] = "transaction-plan"
 _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "template",
+    "inspect",
     "validate",
     "explain",
     "preview",
@@ -68,11 +83,12 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
     transaction_plan_parser = subparsers.add_parser(
         TRANSACTION_PLAN_COMMAND_NAME,
         help=(
-            "Author, validate, explain, preview, and apply structural "
-            "transaction plans."
+            "Inspect models and author, validate, explain, preview, and "
+            "apply structural transaction plans."
         ),
         description=(
-            "Generate a safe empty structural transaction-plan template, "
+            "Inspect one PMX through the bounded read-only authoring catalog, "
+            "generate a safe empty structural transaction-plan template, "
             "validate or explain one strict UTF-8 JSON plan, preview it "
             "against one source-bound PMX snapshot, or atomically apply it "
             "through the released structural transaction authority."
@@ -87,6 +103,39 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
     action_subparsers.add_parser(
         "template",
         help="Print a safe empty schema-one structural transaction-plan template.",
+    )
+
+    inspect_parser = action_subparsers.add_parser(
+        "inspect",
+        help="Inspect one PMX through the bounded structural authoring catalog.",
+    )
+    inspect_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="Path to the PMX source loaded through the stable document service.",
+    )
+    inspect_parser.add_argument(
+        "--kind",
+        choices=tuple(kind.value for kind in PmxReferenceTargetKind),
+        default=None,
+        help="Show one bounded target-kind page; omit for counts-only summary.",
+    )
+    inspect_parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Zero-based source-index offset for a detailed page.",
+    )
+    inspect_parser.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Detailed page size from 1 through 1000.",
+    )
+    inspect_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print deterministic Unicode-safe catalog JSON.",
     )
 
     validate_parser = action_subparsers.add_parser(
@@ -180,6 +229,121 @@ def _render_json(payload: dict[str, object]) -> str:
         )
         + "\n"
     )
+
+
+def _render_catalog_summary_text(
+    result: PmxStructuralAuthoringCatalogSummary,
+) -> str:
+    counts = result.to_dict()["counts"]
+    if not isinstance(counts, dict):
+        raise RuntimeError("catalog summary counts must be a dictionary.")
+    return "\n".join(
+        (
+            "STRUCTURAL AUTHORING CATALOG",
+            f"Vertices: {counts['vertex']}",
+            f"Textures: {counts['texture']}",
+            f"Materials: {counts['material']}",
+            f"Bones: {counts['bone']}",
+            f"Morphs: {counts['morph']}",
+            f"Rigid bodies: {counts['rigid_body']}",
+            "Detailed entries: no",
+            "",
+        )
+    )
+
+
+def _render_catalog_entry_text(
+    target_kind: PmxReferenceTargetKind,
+    payload: dict[str, object],
+) -> str:
+    source_index = payload["source_index"]
+    if target_kind is PmxReferenceTargetKind.VERTEX:
+        return (
+            f"[{source_index}] position={payload['position']!r} "
+            f"deform_type={payload['deform_type']}"
+        )
+    if target_kind is PmxReferenceTargetKind.TEXTURE:
+        return f"[{source_index}] path={payload['path']!r}"
+    return (
+        f"[{source_index}] local_name={payload['local_name']!r} "
+        f"universal_name={payload['universal_name']!r}"
+    )
+
+
+def _render_catalog_page_text(
+    result: PmxStructuralAuthoringCatalogPage,
+) -> str:
+    lines = [
+        "STRUCTURAL AUTHORING CATALOG",
+        f"Target kind: {result.target_kind.value}",
+        f"Total: {result.total_count}",
+        f"Offset: {result.offset}",
+        f"Limit: {result.limit}",
+        f"Returned: {result.returned_count}",
+    ]
+    for entry in result.entries:
+        lines.append(
+            _render_catalog_entry_text(result.target_kind, entry.to_dict())
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _document_failure_policy(
+    error: PmxServiceError,
+) -> tuple[str, int]:
+    code = error.diagnostic.code
+    if code is PmxServiceDiagnosticCode.SOURCE_INVALID:
+        return "source_invalid", 1
+    if code is PmxServiceDiagnosticCode.IO_FAILED:
+        return "io", 2
+    if code is PmxServiceDiagnosticCode.INVALID_ARGUMENT:
+        return "usage", 2
+    return "internal", 3
+
+
+def _catalog_failure_policy(
+    error: PmxStructuralAuthoringCatalogServiceError,
+) -> tuple[str, int]:
+    if (
+        error.diagnostic.code
+        is PmxStructuralAuthoringCatalogServiceDiagnosticCode.INVALID_ARGUMENT
+    ):
+        return "usage", 2
+    return "internal", 3
+
+
+def _print_inspect_error(
+    *,
+    error: PmxServiceError | PmxStructuralAuthoringCatalogServiceError,
+    json_output: bool,
+) -> int:
+    if isinstance(error, PmxServiceError):
+        error_type, exit_code = _document_failure_policy(error)
+    else:
+        error_type, exit_code = _catalog_failure_policy(error)
+    if json_output:
+        sys.stdout.write(
+            _render_json(
+                {
+                    "status": "error",
+                    "command": TRANSACTION_PLAN_COMMAND_NAME,
+                    "action": "inspect",
+                    "error_type": error_type,
+                    "errors": [error.diagnostic.message],
+                    "error": error.to_dict(),
+                }
+            )
+        )
+    else:
+        print(
+            (
+                f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} inspect: "
+                f"{error.diagnostic.message}"
+            ),
+            file=sys.stderr,
+        )
+    return exit_code
 
 
 def _render_validation_text(
@@ -486,6 +650,37 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
         sys.stdout.write(
             render_pmx_structural_transaction_plan_json(template)
         )
+        return 0
+
+    if action == "inspect":
+        try:
+            document = load_document(arguments.source)
+        except PmxServiceError as error:
+            return _print_inspect_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        try:
+            if arguments.kind is None:
+                result = summarize_structural_authoring_catalog(document)
+            else:
+                result = inspect_structural_authoring_catalog(
+                    document,
+                    PmxReferenceTargetKind(arguments.kind),
+                    offset=arguments.offset,
+                    limit=arguments.limit,
+                )
+        except PmxStructuralAuthoringCatalogServiceError as error:
+            return _print_inspect_error(
+                error=error,
+                json_output=arguments.json,
+            )
+        if arguments.json:
+            sys.stdout.write(_render_json(result.to_dict()))
+        elif isinstance(result, PmxStructuralAuthoringCatalogSummary):
+            sys.stdout.write(_render_catalog_summary_text(result))
+        else:
+            sys.stdout.write(_render_catalog_page_text(result))
         return 0
 
     if action not in {"validate", "explain", "preview", "apply"}:

@@ -42,6 +42,7 @@ EXPECTED_LEGACY_COMMANDS = (
 )
 EXPECTED_TRANSACTION_PLAN_ACTIONS = (
     "template",
+    "inspect",
     "validate",
     "explain",
     "preview",
@@ -805,7 +806,6 @@ class V094TransactionPlanCliTests(unittest.TestCase):
             "write_pmx",
             "read_pmx",
             "load_pmx",
-            "load_document(",
             "PmxIndexRemap",
             "final_index",
             "hashlib",

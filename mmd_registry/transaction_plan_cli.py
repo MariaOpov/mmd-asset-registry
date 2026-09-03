@@ -56,6 +56,10 @@ from mmd_registry.services.structural_bone import (
 from mmd_registry.services.structural_rigid_body import (
     PmxStructuralRigidBodyInsertion,
 )
+from mmd_registry.services.structural_vertex import (
+    PmxStructuralVertexBdef1,
+    PmxStructuralVertexInsertion,
+)
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
@@ -572,6 +576,88 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
         help="Optional request-local schema-one identity.",
     )
     build_rigid_body_parser.add_argument(
+        "--expected-source-sha256",
+        default=None,
+        help=(
+            "Optional lowercase SHA-256 declaration passed through to the "
+            "schema-one plan; the CLI never computes it."
+        ),
+    )
+
+    build_vertex_parser = build_kind_subparsers.add_parser(
+        "vertex",
+        help="Build one BDEF1 vertex insertion plan.",
+    )
+    build_vertex_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Path to the PMX source used for exact selector resolution and "
+            "source-derived additional-UV count."
+        ),
+    )
+    build_vertex_parser.add_argument(
+        "--position",
+        dest="vertex_position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        required=True,
+        help="Vertex position as exactly three floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--normal",
+        nargs=3,
+        type=float,
+        metavar=("NX", "NY", "NZ"),
+        required=True,
+        help="Vertex normal as exactly three floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--uv",
+        nargs=2,
+        type=float,
+        metavar=("U", "V"),
+        required=True,
+        help="Vertex UV as exactly two floating-point values.",
+    )
+    build_vertex_parser.add_argument(
+        "--edge-scale",
+        type=float,
+        default=1.0,
+        help="Vertex edge scale; defaults to 1.0.",
+    )
+    vertex_bone_group = build_vertex_parser.add_mutually_exclusive_group(
+        required=True
+    )
+    vertex_bone_group.add_argument(
+        "--bone-index",
+        type=int,
+        default=None,
+        help="Use one exact captured-source BDEF1 bone index.",
+    )
+    vertex_bone_group.add_argument(
+        "--bone-local-name",
+        default=None,
+        help="Use one exact captured-source BDEF1 bone local name.",
+    )
+    vertex_bone_group.add_argument(
+        "--bone-universal-name",
+        default=None,
+        help="Use one exact captured-source BDEF1 bone universal name.",
+    )
+    build_vertex_parser.add_argument(
+        "--before-index",
+        type=int,
+        default=None,
+        help="Insert before one exact captured-source vertex index.",
+    )
+    build_vertex_parser.add_argument(
+        "--new-id",
+        default=None,
+        help="Optional request-local schema-one identity.",
+    )
+    build_vertex_parser.add_argument(
         "--expected-source-sha256",
         default=None,
         help=(
@@ -1668,6 +1754,91 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
                     insertion = compile_structural_authoring_insert_before(
                         insertion,
                         rigid_resolution,
+                    )
+
+            elif arguments.transaction_plan_build_kind == "vertex":
+                additional_uv_count = document.header.additional_uv_count
+                if (
+                    type(additional_uv_count) is not int
+                    or additional_uv_count < 0
+                    or additional_uv_count > 4
+                ):
+                    raise ValueError(
+                        "Source PMX additional_uv_count must be an integer "
+                        "between 0 and 4."
+                    )
+
+                vertex_bone_selection = None
+                if arguments.bone_index is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.bone_index,
+                    )
+                elif arguments.bone_local_name is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .LOCAL_NAME
+                        ),
+                        value=arguments.bone_local_name,
+                    )
+                elif arguments.bone_universal_name is not None:
+                    vertex_bone_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.BONE,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .UNIVERSAL_NAME
+                        ),
+                        value=arguments.bone_universal_name,
+                    )
+                else:
+                    raise ValueError(
+                        "Vertex BDEF1 requires one exact bone selector."
+                    )
+
+                vertex_bone_resolution = resolve_structural_authoring_selector(
+                    document,
+                    vertex_bone_selection,
+                )
+                deform = PmxStructuralVertexBdef1(
+                    bone_index=vertex_bone_resolution.source_index,
+                )
+
+                additional_uvs = tuple(
+                    (0.0, 0.0, 0.0, 0.0)
+                    for _ in range(additional_uv_count)
+                )
+                insertion = PmxStructuralVertexInsertion(
+                    vertex_position=tuple(arguments.vertex_position),
+                    normal=tuple(arguments.normal),
+                    uv=tuple(arguments.uv),
+                    additional_uvs=additional_uvs,
+                    deform=deform,
+                    edge_scale=arguments.edge_scale,
+                    new_id=arguments.new_id,
+                )
+
+                if arguments.before_index is not None:
+                    vertex_selection = PmxStructuralAuthoringSelector(
+                        target_kind=PmxReferenceTargetKind.VERTEX,
+                        field=(
+                            PmxStructuralAuthoringSelectorField
+                            .SOURCE_INDEX
+                        ),
+                        value=arguments.before_index,
+                    )
+                    vertex_resolution = resolve_structural_authoring_selector(
+                        document,
+                        vertex_selection,
+                    )
+                    insertion = compile_structural_authoring_insert_before(
+                        insertion,
+                        vertex_resolution,
                     )
 
             else:

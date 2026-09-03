@@ -133,7 +133,7 @@ class TransactionPlanBuildMorphCliTests(unittest.TestCase):
         ][0]
         self.assertEqual(
             tuple(kinds.choices),
-            ("texture", "material", "morph", "bone", "rigid-body"),
+            ("texture", "material", "morph", "bone", "rigid-body", "vertex"),
         )
 
     def test_minimal_morph_outputs_existing_canonical_schema_one_plan(self) -> None:

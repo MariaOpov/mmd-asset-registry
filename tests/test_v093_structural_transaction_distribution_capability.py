@@ -104,7 +104,7 @@ class V093StructuralTransactionDistributionCapabilityTests(unittest.TestCase):
         self.assertNotIn("structural_transaction", services.__all__)
 
     def test_final_version_promotion_keeps_schemas_frozen(self) -> None:
-        self.assertEqual(mmd_registry.__version__, "0.9.5")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.1")
         self.assertEqual(LATEST_SCHEMA_VERSION, "0.3")
         self.assertEqual(SUPPORTED_SCHEMA_VERSIONS, frozenset(("0.2", "0.3")))
         self.assertEqual(PMX_EDIT_PLAN_SCHEMA_VERSION, 1)

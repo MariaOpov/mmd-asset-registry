@@ -40,15 +40,7 @@ EXPECTED_LEGACY_COMMANDS = (
     "bones",
     "rig",
 )
-EXPECTED_TRANSACTION_PLAN_ACTIONS = (
-    "template",
-    "inspect",
-    "build",
-    "validate",
-    "explain",
-    "preview",
-    "apply",
-)
+EXPECTED_TRANSACTION_PLAN_ACTIONS = ("template", "inspect", "build", "format", "validate", "explain", "preview", "apply")
 EXPECTED_HASH = "a" * 64
 
 

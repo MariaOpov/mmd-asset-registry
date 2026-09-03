@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 from typing import Final
 
@@ -46,6 +47,11 @@ from mmd_registry.services.structural_authoring_selector import (
 from mmd_registry.services.structural_texture import (
     PmxStructuralTextureInsertion,
 )
+from mmd_registry.services.structural_authoring_formatter import (
+    PmxStructuralAuthoringFormatterServiceDiagnosticCode,
+    PmxStructuralAuthoringFormatterServiceError,
+    normalize_structural_authoring_plan_json,
+)
 from mmd_registry.services.structural_transaction_plan import (
     PmxStructuralTransactionPlanServiceDiagnosticCode,
     PmxStructuralTransactionPlanServiceError,
@@ -72,6 +78,7 @@ _TRANSACTION_PLAN_ACTIONS: Final[tuple[str, ...]] = (
     "template",
     "inspect",
     "build",
+    "format",
     "validate",
     "explain",
     "preview",
@@ -212,6 +219,19 @@ def add_transaction_plan_parser(parser: argparse.ArgumentParser) -> None:
             "Optional lowercase SHA-256 declaration passed through to the "
             "schema-one plan; the CLI never computes it."
         ),
+    )
+
+    format_parser = action_subparsers.add_parser(
+        "format",
+        help=(
+            "Normalize one strict transaction-plan JSON file through the "
+            "released canonical schema-one formatter."
+        ),
+    )
+    format_parser.add_argument(
+        "plan",
+        metavar="PLAN",
+        help="Path to the strict UTF-8 JSON transaction plan.",
     )
 
     validate_parser = action_subparsers.add_parser(
@@ -607,6 +627,32 @@ def _print_rich_diff_service_error(
     return 3
 
 
+def _print_format_error(
+    *,
+    error: PmxStructuralAuthoringFormatterServiceError | OSError | UnicodeError,
+) -> int:
+    if isinstance(error, PmxStructuralAuthoringFormatterServiceError):
+        code = error.diagnostic.code
+        if code in {
+            PmxStructuralAuthoringFormatterServiceDiagnosticCode.INVALID_ARGUMENT,
+            PmxStructuralAuthoringFormatterServiceDiagnosticCode.PLAN_INVALID,
+        }:
+            exit_code = 1
+            message = "Transaction plan is not valid strict schema-one JSON."
+        else:
+            exit_code = 3
+            message = "Canonical transaction-plan formatting failed."
+    else:
+        exit_code = 2
+        message = "Unable to read the transaction-plan file as strict UTF-8."
+
+    print(
+        f"[ERROR] {TRANSACTION_PLAN_COMMAND_NAME} format: {message}",
+        file=sys.stderr,
+    )
+    return exit_code
+
+
 def _print_build_error(
     *,
     error: (
@@ -958,6 +1004,19 @@ def run_transaction_plan_command(arguments: argparse.Namespace) -> int:
             ValueError,
         ) as error:
             return _print_build_error(error=error)
+
+    if action == "format":
+        try:
+            text = Path(arguments.plan).read_text(encoding="utf-8")
+            normalized = normalize_structural_authoring_plan_json(text)
+        except (
+            PmxStructuralAuthoringFormatterServiceError,
+            OSError,
+            UnicodeError,
+        ) as error:
+            return _print_format_error(error=error)
+        sys.stdout.write(normalized)
+        return 0
 
     if action not in {"validate", "explain", "preview", "apply"}:
         raise RuntimeError(f"Unsupported transaction-plan action: {action}")

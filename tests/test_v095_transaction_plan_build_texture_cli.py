@@ -104,15 +104,7 @@ class TransactionPlanBuildTextureCliTests(unittest.TestCase):
         ][0]
         self.assertEqual(
             tuple(actions.choices),
-            (
-                "template",
-                "inspect",
-                "build",
-                "validate",
-                "explain",
-                "preview",
-                "apply",
-            ),
+            ("template", "inspect", "build", "format", "validate", "explain", "preview", "apply"),
         )
 
     def test_append_build_outputs_existing_canonical_schema_one_plan(self) -> None:

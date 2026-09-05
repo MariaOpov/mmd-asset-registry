@@ -19,18 +19,48 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.1
-Release label: v0.9.5.1
+Tool version: 0.9.5.2
+Release label: v0.9.5.2
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.5.1` maps to the PEP 440 Python package version
-`0.9.5.1`. This patch adds the deterministic, read-only Smart Part
-domain/evidence foundation while preserving the released v0.9.3/v0.9.4
-structural transaction execution and plan authorities and the v0.9.5
-human-friendly structural authoring layer.
+GitHub release label `v0.9.5.2` maps to the PEP 440 Python package version
+`0.9.5.2`. This patch adds deterministic, read-only Smart Part detection on top
+of the v0.9.5.1 immutable domain/evidence foundation while preserving the
+released v0.9.3/v0.9.4 structural transaction execution and plan authorities
+and the v0.9.5 human-friendly structural authoring layer.
+
+## Version 0.9.5.2 deterministic Smart Part detection
+
+Version 0.9.5.2 adds the first deterministic semantic detector on top of the
+v0.9.5.1 immutable Smart Part vocabulary.
+
+- `mmd_registry.smart_part_detection` explicitly exports only
+  `detect_smart_parts`; it is not promoted through the package root.
+- The detector consumes immutable structural-authoring catalog DTOs and returns
+  existing `SmartPart` values without parsing or writing a PMX file.
+- Material, bone, morph, and texture entries can contribute normalized-exact
+  lexical evidence. Texture matching uses basename stems only.
+- Same-source recognized-name conflicts contribute zero evidence; unknown names
+  do not block one unique exact recognized kind.
+- Evidence from multiple source entities is additive, exact duplicates are
+  removed, and part/evidence ordering remains canonical and deterministic.
+- Matching uses NFKC normalization, Unicode whitespace collapse, and case
+  folding only. There is no fuzzy matching, edit distance, scoring, confidence,
+  statistical model, or AI classifier.
+
+The detector has no transaction-plan generation, preview/apply, writer, remap,
+filesystem-publication, CLI, capability-manifest, or PMX mutation authority.
+The structural execution authorities remain unchanged.
+
+Local v0.9.5.2 validation passes 2,755 tests with 2 optional skips, reports
+86.85% combined project statement/branch coverage and 93.12% detector coverage,
+passes Ruff 0.16.3, and passes isolated build/artifact inspection/clean-install
+verification.
+
+See `docs/v0952_smart_part_detection.md` for the complete detector contract.
 
 ## Version 0.9.5.1 Smart Part Foundation
 

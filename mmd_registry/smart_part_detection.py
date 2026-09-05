@@ -32,6 +32,7 @@ universal-name priority, scoring, confidence, or heuristic winner exists.
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass
 from typing import Final, TypeAlias
 
 from mmd_registry.services.structural_authoring_catalog import (
@@ -58,6 +59,20 @@ _ExactAliasTable: TypeAlias = tuple[
 ]
 _NormalizedAliasIndex: TypeAlias = tuple[tuple[str, SmartPartKind], ...]
 
+
+@dataclass(frozen=True, slots=True)
+class _SmartPartMatchTrace:
+    kind: SmartPartKind
+    evidence: SmartPartEvidence
+    source_field: str
+    source_value: str
+    comparison_value: str
+    normalized_value: str
+    matched_alias: str
+    match_rule: str
+    derivation: tuple[tuple[str, str], ...]
+
+
 _SUPPORTED_ENTRY_TYPES: Final[tuple[type[object], ...]] = (
     PmxStructuralAuthoringVertexCatalogEntry,
     PmxStructuralAuthoringTextureCatalogEntry,
@@ -71,6 +86,7 @@ _SMART_PART_ORDER: Final[tuple[SmartPartKind, ...]] = tuple(SmartPartKind)
 
 _NORMALIZATION_CONTRACT: Final[str] = "NFKC+unicode-whitespace-collapse+casefold"
 _MATCH_CONTRACT: Final[str] = "normalized-exact-alias-only"
+_MATCH_RULE_EXACT: Final[str] = "exact_alias"
 _TEXTURE_LEXICAL_SCOPE: Final[str] = "basename-stem-only"
 _EMPTY_NAME_POLICY: Final[str] = "ignore"
 _UNKNOWN_NAME_POLICY: Final[str] = "does-not-block-known-exact-match"
@@ -274,32 +290,48 @@ _TEXTURE_ALIAS_INDEX: Final[_NormalizedAliasIndex] = (
 )
 
 
-def _exact_alias_kind_from_index(
+def _exact_alias_match_from_index(
     value: str,
     index: _NormalizedAliasIndex,
-) -> SmartPartKind | None:
+) -> tuple[SmartPartKind, str, str] | None:
     normalized = _normalize_semantic_text(value)
     if not normalized:
         return None
 
     for alias, kind in index:
         if normalized == alias:
-            return kind
+            return kind, normalized, alias
     return None
+
+
+def _exact_alias_kind_from_index(
+    value: str,
+    index: _NormalizedAliasIndex,
+) -> SmartPartKind | None:
+    match = _exact_alias_match_from_index(value, index)
+    if match is None:
+        return None
+    kind, _, _ = match
+    return kind
 
 
 def _exact_alias_kind(value: str) -> SmartPartKind | None:
     return _exact_alias_kind_from_index(value, _NORMALIZED_ALIAS_INDEX)
 
 
-def _texture_basename_stem(path: str) -> str:
+def _texture_basename_and_stem(path: str) -> tuple[str, str]:
     if type(path) is not str:
         raise TypeError("texture path must be a string.")
     normalized_separators = path.replace("\\", "/")
     basename = normalized_separators.rsplit("/", 1)[-1]
     if "." in basename:
-        return basename.rsplit(".", 1)[0]
-    return basename
+        return basename, basename.rsplit(".", 1)[0]
+    return basename, basename
+
+
+def _texture_basename_stem(path: str) -> str:
+    _, stem = _texture_basename_and_stem(path)
+    return stem
 
 
 def _reason(
@@ -332,6 +364,55 @@ def _resolve_named_field_matches(
     return next(iter(matched_kinds))
 
 
+def _trace_named_entry(
+    *,
+    source_kind: SmartPartEvidenceKind,
+    source_index: int,
+    local_name: str,
+    universal_name: str,
+    alias_index: _NormalizedAliasIndex,
+) -> tuple[_SmartPartMatchTrace, ...]:
+    matches: list[tuple[str, str, SmartPartKind, str, str]] = []
+    for field_name, value in (
+        ("local_name", local_name),
+        ("universal_name", universal_name),
+    ):
+        match = _exact_alias_match_from_index(value, alias_index)
+        if match is not None:
+            kind, normalized, alias = match
+            matches.append((field_name, value, kind, normalized, alias))
+
+    frozen_matches = tuple(matches)
+    kind = _resolve_named_field_matches(
+        tuple(
+            (field_name, matched_kind)
+            for field_name, _, matched_kind, _, _ in frozen_matches
+        )
+    )
+    if kind is None:
+        return ()
+
+    return tuple(
+        _SmartPartMatchTrace(
+            kind=kind,
+            evidence=SmartPartEvidence(
+                source_kind=source_kind,
+                source_index=source_index,
+                reason=_reason(source_kind, field_name, kind),
+            ),
+            source_field=field_name,
+            source_value=value,
+            comparison_value=value,
+            normalized_value=normalized,
+            matched_alias=alias,
+            match_rule=_MATCH_RULE_EXACT,
+            derivation=(),
+        )
+        for field_name, value, matched_kind, normalized, alias in frozen_matches
+        if matched_kind is kind
+    )
+
+
 def _detect_named_entry(
     *,
     source_kind: SmartPartEvidenceKind,
@@ -340,43 +421,33 @@ def _detect_named_entry(
     universal_name: str,
     alias_index: _NormalizedAliasIndex,
 ) -> SmartPart | None:
-    matches: list[tuple[str, SmartPartKind]] = []
-    for field_name, value in (
-        ("local_name", local_name),
-        ("universal_name", universal_name),
-    ):
-        kind = _exact_alias_kind_from_index(value, alias_index)
-        if kind is not None:
-            matches.append((field_name, kind))
-
-    frozen_matches = tuple(matches)
-    kind = _resolve_named_field_matches(frozen_matches)
-    if kind is None:
-        return None
-
-    evidence = tuple(
-        SmartPartEvidence(
-            source_kind=source_kind,
-            source_index=source_index,
-            reason=_reason(source_kind, field_name, kind),
-        )
-        for field_name, matched_kind in frozen_matches
-        if matched_kind is kind
+    traces = _trace_named_entry(
+        source_kind=source_kind,
+        source_index=source_index,
+        local_name=local_name,
+        universal_name=universal_name,
+        alias_index=alias_index,
     )
-    return SmartPart(kind=kind, evidence=evidence)
-
-
-def _detect_texture_entry(
-    entry: PmxStructuralAuthoringTextureCatalogEntry,
-) -> SmartPart | None:
-    stem = _texture_basename_stem(entry.path)
-    kind = _exact_alias_kind_from_index(stem, _TEXTURE_ALIAS_INDEX)
-    if kind is None:
+    if not traces:
         return None
     return SmartPart(
-        kind=kind,
-        evidence=(
-            SmartPartEvidence(
+        kind=traces[0].kind,
+        evidence=tuple(trace.evidence for trace in traces),
+    )
+
+
+def _trace_texture_entry(
+    entry: PmxStructuralAuthoringTextureCatalogEntry,
+) -> tuple[_SmartPartMatchTrace, ...]:
+    basename, stem = _texture_basename_and_stem(entry.path)
+    match = _exact_alias_match_from_index(stem, _TEXTURE_ALIAS_INDEX)
+    if match is None:
+        return ()
+    kind, normalized, alias = match
+    return (
+        _SmartPartMatchTrace(
+            kind=kind,
+            evidence=SmartPartEvidence(
                 source_kind=SmartPartEvidenceKind.TEXTURE,
                 source_index=entry.source_index,
                 reason=_reason(
@@ -385,17 +456,37 @@ def _detect_texture_entry(
                     kind,
                 ),
             ),
+            source_field="path",
+            source_value=entry.path,
+            comparison_value=stem,
+            normalized_value=normalized,
+            matched_alias=alias,
+            match_rule=_MATCH_RULE_EXACT,
+            derivation=(
+                ("basename", basename),
+                ("basename_stem", stem),
+            ),
         ),
     )
 
 
-def _detect_single_entry(
-    entry: SmartPartDetectionEntry,
+def _detect_texture_entry(
+    entry: PmxStructuralAuthoringTextureCatalogEntry,
 ) -> SmartPart | None:
+    traces = _trace_texture_entry(entry)
+    if not traces:
+        return None
+    trace = traces[0]
+    return SmartPart(kind=trace.kind, evidence=(trace.evidence,))
+
+
+def _match_single_entry(
+    entry: SmartPartDetectionEntry,
+) -> tuple[_SmartPartMatchTrace, ...]:
     if isinstance(entry, PmxStructuralAuthoringTextureCatalogEntry):
-        return _detect_texture_entry(entry)
+        return _trace_texture_entry(entry)
     if isinstance(entry, PmxStructuralAuthoringMaterialCatalogEntry):
-        return _detect_named_entry(
+        return _trace_named_entry(
             source_kind=SmartPartEvidenceKind.MATERIAL,
             source_index=entry.source_index,
             local_name=entry.local_name,
@@ -403,7 +494,7 @@ def _detect_single_entry(
             alias_index=_MATERIAL_ALIAS_INDEX,
         )
     if isinstance(entry, PmxStructuralAuthoringBoneCatalogEntry):
-        return _detect_named_entry(
+        return _trace_named_entry(
             source_kind=SmartPartEvidenceKind.BONE,
             source_index=entry.source_index,
             local_name=entry.local_name,
@@ -411,7 +502,7 @@ def _detect_single_entry(
             alias_index=_BONE_ALIAS_INDEX,
         )
     if isinstance(entry, PmxStructuralAuthoringMorphCatalogEntry):
-        return _detect_named_entry(
+        return _trace_named_entry(
             source_kind=SmartPartEvidenceKind.MORPH,
             source_index=entry.source_index,
             local_name=entry.local_name,
@@ -425,8 +516,20 @@ def _detect_single_entry(
             PmxStructuralAuthoringRigidBodyCatalogEntry,
         ),
     ):
-        return None
+        return ()
     raise TypeError("entry must be a structural-authoring catalog entry.")
+
+
+def _detect_single_entry(
+    entry: SmartPartDetectionEntry,
+) -> SmartPart | None:
+    traces = _match_single_entry(entry)
+    if not traces:
+        return None
+    return SmartPart(
+        kind=traces[0].kind,
+        evidence=tuple(trace.evidence for trace in traces),
+    )
 
 
 def _smart_part_sort_key(part: SmartPart) -> int:
@@ -463,6 +566,48 @@ def _validated_entries(
     return entries
 
 
+def _match_trace_sort_key(
+    trace: _SmartPartMatchTrace,
+) -> tuple[
+    int,
+    str,
+    int,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    tuple[tuple[str, str], ...],
+]:
+    return (
+        _SMART_PART_ORDER.index(trace.kind),
+        trace.evidence.source_kind.value,
+        trace.evidence.source_index,
+        trace.evidence.reason,
+        trace.source_field,
+        trace.source_value,
+        trace.comparison_value,
+        trace.normalized_value,
+        trace.matched_alias,
+        trace.match_rule,
+        trace.derivation,
+    )
+
+
+def _match_smart_part_traces(
+    entries: tuple[SmartPartDetectionEntry, ...],
+) -> tuple[_SmartPartMatchTrace, ...]:
+    validated = _validated_entries(entries)
+    traces = tuple(
+        trace
+        for entry in validated
+        for trace in _match_single_entry(entry)
+    )
+    return tuple(sorted(traces, key=_match_trace_sort_key))
+
+
 def _aggregate_parts(
     parts: tuple[SmartPart, ...],
 ) -> tuple[SmartPart, ...]:
@@ -490,13 +635,15 @@ def detect_smart_parts(
 ) -> tuple[SmartPart, ...]:
     """Return canonical Smart Parts aggregated across source entities."""
 
-    validated = _validated_entries(entries)
-    per_entity_parts = tuple(
-        part
-        for part in (_detect_single_entry(entry) for entry in validated)
-        if part is not None
+    traces = _match_smart_part_traces(entries)
+    projected_parts = tuple(
+        SmartPart(
+            kind=trace.kind,
+            evidence=(trace.evidence,),
+        )
+        for trace in traces
     )
-    return _aggregate_parts(per_entity_parts)
+    return _aggregate_parts(projected_parts)
 
 
 __all__ = ("detect_smart_parts",)

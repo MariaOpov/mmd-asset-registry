@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.2. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.3. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -26,6 +26,11 @@ The current public namespaces are:
   `detect_smart_parts`; it consumes immutable structural-authoring catalog DTOs
   and returns existing `SmartPart` values without root promotion or mutation
   authority;
+- `mmd_registry.smart_part_explainability`, for the v0.9.5.3 deterministic,
+  read-only explanation projection. Its explicit `__all__` contains only
+  `SmartPartEvidenceExplanation`, `SmartPartExplanation`, and
+  `explain_smart_parts`; none is promoted through the package root and the
+  module owns no mutation authority;
 - `mmd_registry.capabilities`, for the immutable current-support manifest and
   canonical `get_capabilities()` entry point listed in its `__all__`;
 - `mmd_registry.diagnostics`, for immutable service operation, code,
@@ -73,6 +78,41 @@ mutate a `PmxDocument`, guess mutable PMX indices, generate or execute
 transaction plans, call preview/apply, remap references, access writers, publish
 filesystem output, add a CLI command, or change the capability manifest.
 Released execution authorities remain unchanged.
+
+## Smart Part explainability surface (v0.9.5.3)
+
+`mmd_registry.smart_part_explainability.explain_smart_parts()` accepts the same
+immutable structural-authoring catalog tuple boundary as the v0.9.5.2 detector.
+It returns canonical `SmartPartExplanation` values whose kind/evidence
+projection is required to equal `detect_smart_parts()` exactly.
+
+The explainer does not own a second classifier. Detector and explainer consume
+one shared private deterministic match trace. `SmartPartEvidenceExplanation`
+wraps one existing `SmartPartEvidence` and records `source_field`,
+`source_value`, `comparison_value`, `normalized_value`, `matched_alias`,
+`match_rule`, and deterministic `derivation`. `match_rule` is exactly
+`exact_alias`.
+
+For material, bone, and morph names, `source_field` is `local_name` or
+`universal_name`, source/comparison provenance preserves the original field
+value, and `derivation` is empty. Texture provenance uses `source_field="path"`,
+preserves the raw path as `source_value`, compares the final basename stem, and
+records `(("basename", basename), ("basename_stem", stem))` before the same
+normalization used by the detector.
+
+Outer explanation ordering follows `SmartPartKind` declaration order. Inner
+evidence ordering uses canonical `SmartPartEvidence` ordering. Duplicate
+evidence is deduplicated exactly as detector output is deduplicated. Repeated
+calls, reversed input, permutations, duplicate entries, and supported hash-seed
+changes must not alter equality, representation, evidence projection, or
+provenance.
+
+This surface does not add confidence, ambiguity scoring, fuzzy matching,
+substring matching, edit distance, statistical inference, or AI. Confidence is
+not part of v0.9.5.3; ambiguity presentation remains deferred to v0.9.5.4 and
+the Smart CLI remains deferred to v0.9.5.5. The explainer performs no
+filesystem writes, PMX mutation, transaction planning, preview/apply, remapping,
+writer access, publication, CLI expansion, or capability-manifest promotion.
 
 ## Capability surface
 

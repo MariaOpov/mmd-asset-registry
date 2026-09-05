@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.1. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.2. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -21,6 +21,11 @@ The current public namespaces are:
   Part domain model. Its explicit `__all__` contains only `SmartPartKind`,
   `SmartPartEvidenceKind`, `SmartPartEvidence`, and `SmartPart`; none is
   promoted through the package root or the root service namespace;
+- `mmd_registry.smart_part_detection`, for the v0.9.5.2 deterministic,
+  read-only exact-alias detector. Its explicit `__all__` contains only
+  `detect_smart_parts`; it consumes immutable structural-authoring catalog DTOs
+  and returns existing `SmartPart` values without root promotion or mutation
+  authority;
 - `mmd_registry.capabilities`, for the immutable current-support manifest and
   canonical `get_capabilities()` entry point listed in its `__all__`;
 - `mmd_registry.diagnostics`, for immutable service operation, code,
@@ -42,6 +47,32 @@ Future public entry points must be exposed through an intentional documented
 namespace and an explicit `__all__`; importing a module from the package does
 not by itself make that module public. The service namespace delegates to the
 existing v0.8 safety pipeline and does not expand editing authority.
+
+## Smart Part detection surface (v0.9.5.2)
+
+`mmd_registry.smart_part_detection.detect_smart_parts()` accepts a tuple of
+immutable structural-authoring catalog DTOs and returns canonical existing
+`SmartPart` values. Material, bone, morph, and texture entries may contribute
+normalized-exact lexical evidence. Texture detection is basename-stem-only;
+vertex and rigid-body catalog entries remain accepted inputs without lexical
+classification authority in this patch.
+
+Normalization is limited to Unicode NFKC, whitespace collapse, and case
+folding. Matching is exact after normalization. No fuzzy matching, token score,
+substring heuristic, edit distance, confidence value, statistical model, or AI
+classifier is part of the contract.
+
+If recognized local and universal names on one source entity resolve to
+different `SmartPartKind` values, that entity contributes zero evidence. Unknown
+fields do not block one unique recognized kind and no local/universal field has
+priority. Independently classified evidence is additive across source entities;
+exact duplicate evidence is removed and output remains canonically ordered.
+
+The detector is an understanding layer only. It does not parse or write files,
+mutate a `PmxDocument`, guess mutable PMX indices, generate or execute
+transaction plans, call preview/apply, remap references, access writers, publish
+filesystem output, add a CLI command, or change the capability manifest.
+Released execution authorities remain unchanged.
 
 ## Capability surface
 

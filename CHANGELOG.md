@@ -2,6 +2,51 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.2 - 2026-09-05
+
+### Added
+
+- Added deterministic, read-only Smart Part detection through
+  `mmd_registry.smart_part_detection.detect_smart_parts`.
+- Added conservative exact-alias lexical evidence for material, bone, morph,
+  and texture catalog entries using NFKC normalization, whitespace collapse,
+  and case folding.
+- Added deterministic cross-entity evidence aggregation, duplicate-evidence
+  elimination, same-source conflict suppression, and order-independent output.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.1` to `0.9.5.2`.
+- Extended the public API documentation with the explicit detector submodule
+  while keeping the package root unchanged.
+- Synchronized release-facing README, packaging policy, release checklist, and
+  version assertions with `v0.9.5.2` / `0.9.5.2`.
+
+### Verified
+
+- Full local discovery passes 2,755 tests with 2 optional skips.
+- Coverage measurement reports 86.85% combined project statement/branch
+  coverage and 93.12% for `mmd_registry.smart_part_detection`.
+- Ruff 0.16.3 passes the repository's current E9/F63/F7/F82 gate.
+- Isolated feature-branch wheel/sdist build, canonical artifact inspection,
+  clean-install verification, and installed detector execution pass.
+
+### Safety and compatibility
+
+- Matching remains normalized-exact only: no fuzzy matching, substring
+  heuristics, edit distance, scoring, confidence, statistical model, or AI
+  classifier is introduced.
+- Conflicting recognized names on one source entity contribute zero evidence;
+  unknown names do not override a unique exact recognized kind.
+- The detector has no PMX mutation, transaction-plan generation, preview/apply,
+  writer, remap, filesystem-publication, CLI, or capability-manifest authority.
+- Existing structural transaction, preview, apply, serialization, remap, and
+  writer authorities remain unchanged.
+- `mmd_registry.__all__` remains exactly `('__version__',)`; the detector stays
+  submodule-only.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.1 - 2026-09-03
 
 ### Added

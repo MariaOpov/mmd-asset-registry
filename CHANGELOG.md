@@ -2,6 +2,54 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.3 - 2026-09-06
+
+### Added
+
+- Added deterministic, read-only Smart Part evidence explanations through
+  `mmd_registry.smart_part_explainability.explain_smart_parts`.
+- Added frozen `SmartPartEvidenceExplanation` and `SmartPartExplanation` DTOs
+  with concrete field/value provenance, normalized comparison evidence,
+  canonical matched aliases, exact match-rule identity, and deterministic
+  derivation metadata.
+- Added shared private match-trace authority so detector and explainer are two
+  projections of the same exact semantic decision rather than parallel
+  classifiers.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.2` to `0.9.5.3`.
+- Extended public API and packaging documentation with the explicit
+  explainability submodule while preserving the package-root surface.
+- Added v0.9.5.3 targeted regressions to the cross-platform validation workflow
+  and synchronized release-facing version assertions.
+
+### Verified
+
+- Detector/explainer parity is certified across all exact aliases, input
+  permutations, duplicate entries, mixed Japanese/English names, and
+  `PYTHONHASHSEED=0/1/42`.
+- The behavior-frozen full suite passes 2,820 tests with 2 optional skips.
+- Coverage measurement reports 86.76% combined statement/branch coverage,
+  87.45% for `mmd_registry.smart_part_detection`, and 72.09% for
+  `mmd_registry.smart_part_explainability`.
+- Ruff 0.16.3, compileall, isolated wheel/sdist generation, canonical artifact
+  inspection, clean-install verification, and an installed detector/explainer
+  parity probe pass before version promotion.
+
+### Safety and compatibility
+
+- Matching remains the v0.9.5.2 normalized-exact detector contract; no fuzzy
+  matching, substring heuristics, scoring, confidence, statistical model, or
+  AI classifier is introduced.
+- Confidence is not part of v0.9.5.3; ambiguity presentation remains deferred
+  to v0.9.5.4 and the Smart CLI remains deferred to v0.9.5.5.
+- No PMX mutation, transaction, preview/apply, writer, remapper, schema,
+  capability-manifest, or publication authority is added or changed.
+- `mmd_registry.__all__` remains exactly `('__version__',)`.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.2 - 2026-09-05
 
 ### Added

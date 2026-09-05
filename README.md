@@ -19,18 +19,58 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.2
-Release label: v0.9.5.2
+Tool version: 0.9.5.3
+Release label: v0.9.5.3
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.5.2` maps to the PEP 440 Python package version
-`0.9.5.2`. This patch adds deterministic, read-only Smart Part detection on top
-of the v0.9.5.1 immutable domain/evidence foundation while preserving the
-released v0.9.3/v0.9.4 structural transaction execution and plan authorities
-and the v0.9.5 human-friendly structural authoring layer.
+GitHub release label `v0.9.5.3` maps to the PEP 440 Python package version
+`0.9.5.3`. This patch adds deterministic, read-only detection evidence and
+explainability on top of the v0.9.5.2 exact-match detector. Detector and
+explainer share one matching authority; v0.9.5.3 does not make matching smarter,
+add confidence or ambiguity scoring, add a Smart CLI, or expand PMX mutation
+authority.
+
+## Version 0.9.5.3 Detection Evidence / Explainability
+
+Version 0.9.5.3 adds a deterministic explanation projection for the exact
+Smart Part decisions introduced in v0.9.5.2.
+
+- `mmd_registry.smart_part_explainability` explicitly exports
+  `SmartPartEvidenceExplanation`, `SmartPartExplanation`, and
+  `explain_smart_parts`; none is promoted through the package root.
+- The detector and explainer project from one shared private deterministic
+  match trace. The explainer does not independently classify PMX catalog data.
+- Every explanation record links one existing `SmartPartEvidence` value to the
+  concrete source field/value, comparison value, normalized value, matched
+  exact alias, match rule, and deterministic derivation metadata.
+- Named material, bone, and morph evidence records preserve the original
+  `local_name` or `universal_name`. Texture evidence preserves the raw `path`
+  and records basename plus basename-stem derivation.
+- The match rule remains exactly `exact_alias`. Normalization remains NFKC,
+  Unicode whitespace collapse, and case folding. Same-source recognized-name
+  conflicts still contribute zero evidence.
+- Explanation kind/evidence projections are exactly parity-checked against
+  `detect_smart_parts()`, including permutations, duplicate entries, mixed
+  Japanese/English names, and `PYTHONHASHSEED=0/1/42`.
+- Explanation is read-only: it performs no filesystem writes, environment-based
+  classification, PMX mutation, transaction planning, preview/apply, remapping,
+  writer access, CLI publication, or capability-manifest promotion.
+
+Confidence is **not** part of v0.9.5.3. Ambiguity presentation remains deferred
+to v0.9.5.4, and the Smart CLI remains deferred to v0.9.5.5.
+
+The behavior-frozen local suite passes 2,820 tests with 2 optional skips.
+Coverage measurement reports 86.76% combined project statement/branch coverage,
+87.45% for `mmd_registry.smart_part_detection`, and 72.09% for
+`mmd_registry.smart_part_explainability`. Ruff 0.16.3 and the isolated
+wheel/sdist, canonical artifact-inspection, clean-install, and installed
+detector/explainer probes pass before version promotion. Final v0.9.5.3 release
+artifact digests are recomputed only from the final reviewed source tree.
+
+See `docs/v0953_smart_part_explainability.md` for the complete contract.
 
 ## Version 0.9.5.2 deterministic Smart Part detection
 

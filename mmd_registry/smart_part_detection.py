@@ -61,6 +61,21 @@ _NormalizedAliasIndex: TypeAlias = tuple[tuple[str, SmartPartKind], ...]
 
 
 @dataclass(frozen=True, slots=True)
+class _SmartPartCandidateTrace:
+    """One exact semantic candidate before same-source conflict filtering."""
+
+    kind: SmartPartKind
+    evidence: SmartPartEvidence
+    source_field: str
+    source_value: str
+    comparison_value: str
+    normalized_value: str
+    matched_alias: str
+    match_rule: str
+    derivation: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class _SmartPartMatchTrace:
     kind: SmartPartKind
     evidence: SmartPartEvidence
@@ -71,6 +86,24 @@ class _SmartPartMatchTrace:
     matched_alias: str
     match_rule: str
     derivation: tuple[tuple[str, str], ...]
+
+
+def _match_trace_from_candidate(
+    trace: _SmartPartCandidateTrace,
+) -> _SmartPartMatchTrace:
+    if not isinstance(trace, _SmartPartCandidateTrace):
+        raise TypeError("trace must be a _SmartPartCandidateTrace value.")
+    return _SmartPartMatchTrace(
+        kind=trace.kind,
+        evidence=trace.evidence,
+        source_field=trace.source_field,
+        source_value=trace.source_value,
+        comparison_value=trace.comparison_value,
+        normalized_value=trace.normalized_value,
+        matched_alias=trace.matched_alias,
+        match_rule=trace.match_rule,
+        derivation=trace.derivation,
+    )
 
 
 _SUPPORTED_ENTRY_TYPES: Final[tuple[type[object], ...]] = (
@@ -364,6 +397,43 @@ def _resolve_named_field_matches(
     return next(iter(matched_kinds))
 
 
+def _trace_named_entry_candidates(
+    *,
+    source_kind: SmartPartEvidenceKind,
+    source_index: int,
+    local_name: str,
+    universal_name: str,
+    alias_index: _NormalizedAliasIndex,
+) -> tuple[_SmartPartCandidateTrace, ...]:
+    candidates: list[_SmartPartCandidateTrace] = []
+    for field_name, value in (
+        ("local_name", local_name),
+        ("universal_name", universal_name),
+    ):
+        match = _exact_alias_match_from_index(value, alias_index)
+        if match is None:
+            continue
+        kind, normalized, alias = match
+        candidates.append(
+            _SmartPartCandidateTrace(
+                kind=kind,
+                evidence=SmartPartEvidence(
+                    source_kind=source_kind,
+                    source_index=source_index,
+                    reason=_reason(source_kind, field_name, kind),
+                ),
+                source_field=field_name,
+                source_value=value,
+                comparison_value=value,
+                normalized_value=normalized,
+                matched_alias=alias,
+                match_rule=_MATCH_RULE_EXACT,
+                derivation=(),
+            )
+        )
+    return tuple(candidates)
+
+
 def _trace_named_entry(
     *,
     source_kind: SmartPartEvidenceKind,
@@ -372,44 +442,25 @@ def _trace_named_entry(
     universal_name: str,
     alias_index: _NormalizedAliasIndex,
 ) -> tuple[_SmartPartMatchTrace, ...]:
-    matches: list[tuple[str, str, SmartPartKind, str, str]] = []
-    for field_name, value in (
-        ("local_name", local_name),
-        ("universal_name", universal_name),
-    ):
-        match = _exact_alias_match_from_index(value, alias_index)
-        if match is not None:
-            kind, normalized, alias = match
-            matches.append((field_name, value, kind, normalized, alias))
-
-    frozen_matches = tuple(matches)
+    candidates = _trace_named_entry_candidates(
+        source_kind=source_kind,
+        source_index=source_index,
+        local_name=local_name,
+        universal_name=universal_name,
+        alias_index=alias_index,
+    )
     kind = _resolve_named_field_matches(
         tuple(
-            (field_name, matched_kind)
-            for field_name, _, matched_kind, _, _ in frozen_matches
+            (candidate.source_field, candidate.kind)
+            for candidate in candidates
         )
     )
     if kind is None:
         return ()
-
     return tuple(
-        _SmartPartMatchTrace(
-            kind=kind,
-            evidence=SmartPartEvidence(
-                source_kind=source_kind,
-                source_index=source_index,
-                reason=_reason(source_kind, field_name, kind),
-            ),
-            source_field=field_name,
-            source_value=value,
-            comparison_value=value,
-            normalized_value=normalized,
-            matched_alias=alias,
-            match_rule=_MATCH_RULE_EXACT,
-            derivation=(),
-        )
-        for field_name, value, matched_kind, normalized, alias in frozen_matches
-        if matched_kind is kind
+        _match_trace_from_candidate(candidate)
+        for candidate in candidates
+        if candidate.kind is kind
     )
 
 
@@ -436,16 +487,16 @@ def _detect_named_entry(
     )
 
 
-def _trace_texture_entry(
+def _trace_texture_entry_candidates(
     entry: PmxStructuralAuthoringTextureCatalogEntry,
-) -> tuple[_SmartPartMatchTrace, ...]:
+) -> tuple[_SmartPartCandidateTrace, ...]:
     basename, stem = _texture_basename_and_stem(entry.path)
     match = _exact_alias_match_from_index(stem, _TEXTURE_ALIAS_INDEX)
     if match is None:
         return ()
     kind, normalized, alias = match
     return (
-        _SmartPartMatchTrace(
+        _SmartPartCandidateTrace(
             kind=kind,
             evidence=SmartPartEvidence(
                 source_kind=SmartPartEvidenceKind.TEXTURE,
@@ -470,6 +521,15 @@ def _trace_texture_entry(
     )
 
 
+def _trace_texture_entry(
+    entry: PmxStructuralAuthoringTextureCatalogEntry,
+) -> tuple[_SmartPartMatchTrace, ...]:
+    return tuple(
+        _match_trace_from_candidate(candidate)
+        for candidate in _trace_texture_entry_candidates(entry)
+    )
+
+
 def _detect_texture_entry(
     entry: PmxStructuralAuthoringTextureCatalogEntry,
 ) -> SmartPart | None:
@@ -478,6 +538,46 @@ def _detect_texture_entry(
         return None
     trace = traces[0]
     return SmartPart(kind=trace.kind, evidence=(trace.evidence,))
+
+
+def _match_single_entry_candidates(
+    entry: SmartPartDetectionEntry,
+) -> tuple[_SmartPartCandidateTrace, ...]:
+    if isinstance(entry, PmxStructuralAuthoringTextureCatalogEntry):
+        return _trace_texture_entry_candidates(entry)
+    if isinstance(entry, PmxStructuralAuthoringMaterialCatalogEntry):
+        return _trace_named_entry_candidates(
+            source_kind=SmartPartEvidenceKind.MATERIAL,
+            source_index=entry.source_index,
+            local_name=entry.local_name,
+            universal_name=entry.universal_name,
+            alias_index=_MATERIAL_ALIAS_INDEX,
+        )
+    if isinstance(entry, PmxStructuralAuthoringBoneCatalogEntry):
+        return _trace_named_entry_candidates(
+            source_kind=SmartPartEvidenceKind.BONE,
+            source_index=entry.source_index,
+            local_name=entry.local_name,
+            universal_name=entry.universal_name,
+            alias_index=_BONE_ALIAS_INDEX,
+        )
+    if isinstance(entry, PmxStructuralAuthoringMorphCatalogEntry):
+        return _trace_named_entry_candidates(
+            source_kind=SmartPartEvidenceKind.MORPH,
+            source_index=entry.source_index,
+            local_name=entry.local_name,
+            universal_name=entry.universal_name,
+            alias_index=_MORPH_ALIAS_INDEX,
+        )
+    if isinstance(
+        entry,
+        (
+            PmxStructuralAuthoringVertexCatalogEntry,
+            PmxStructuralAuthoringRigidBodyCatalogEntry,
+        ),
+    ):
+        return ()
+    raise TypeError("entry must be a structural-authoring catalog entry.")
 
 
 def _match_single_entry(
@@ -564,6 +664,50 @@ def _validated_entries(
             "entries must contain only structural-authoring catalog entries."
         )
     return entries
+
+
+def _candidate_trace_sort_key(
+    trace: _SmartPartCandidateTrace,
+) -> tuple[
+    int,
+    str,
+    int,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    str,
+    tuple[tuple[str, str], ...],
+]:
+    return (
+        _SMART_PART_ORDER.index(trace.kind),
+        trace.evidence.source_kind.value,
+        trace.evidence.source_index,
+        trace.evidence.reason,
+        trace.source_field,
+        trace.source_value,
+        trace.comparison_value,
+        trace.normalized_value,
+        trace.matched_alias,
+        trace.match_rule,
+        trace.derivation,
+    )
+
+
+def _match_smart_part_candidate_traces(
+    entries: tuple[SmartPartDetectionEntry, ...],
+) -> tuple[_SmartPartCandidateTrace, ...]:
+    """Return all exact candidates before released same-source conflict filtering."""
+
+    validated = _validated_entries(entries)
+    traces = tuple(
+        trace
+        for entry in validated
+        for trace in _match_single_entry_candidates(entry)
+    )
+    return tuple(sorted(traces, key=_candidate_trace_sort_key))
 
 
 def _match_trace_sort_key(

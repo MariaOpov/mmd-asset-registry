@@ -89,7 +89,7 @@ class ReportingTests(unittest.TestCase):
             generated_at="2026-08-05T21:00:00+07:00",
         )
 
-        self.assertEqual(report["tool_version"], "0.9.5.3")
+        self.assertEqual(report["tool_version"], "0.9.5.4")
         self.assertEqual(report["registry_file"], "assets.yaml")
         self.assertEqual(report["status"], "passed")
 

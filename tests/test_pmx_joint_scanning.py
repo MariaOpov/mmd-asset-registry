@@ -12,6 +12,7 @@ from mmd_registry.model_scanning import (
     MAX_PMX_JOINT_COUNT,
     scan_pmx_structure,
 )
+from mmd_registry.pmx.reader import load_pmx
 from tests.mmd_fixtures import (
     build_pmx_joint,
     build_pmx_rigid_body,
@@ -357,53 +358,53 @@ class PmxJointScanningTests(unittest.TestCase):
                     )
                 )
 
-    def test_rejects_reversed_translation_limits(self) -> None:
+    def test_accepts_free_translation_axis_and_preserves_limits(self) -> None:
+        minimum = (2.0, -1.0, -1.0)
+        maximum = (1.0, 1.0, 1.0)
         fixture = self.write_fixture(
-            "reversed_translation_limits.pmx",
+            "free_translation_axis.pmx",
             build_pmx_structure(
                 joints=(
                     build_pmx_joint(
-                        translation_limit_minimum=(2.0, -1.0, -1.0),
-                        translation_limit_maximum=(1.0, 1.0, 1.0),
+                        translation_limit_minimum=minimum,
+                        translation_limit_maximum=maximum,
                     ),
                 ),
             ),
         )
 
         result = scan_pmx_structure(fixture)
+        document = load_pmx(fixture)
 
-        self.assertEqual(result.status, "error")
-        self.assertTrue(
-            any(
-                "joint translation limit minimum x value" in error
-                and "exceeds maximum" in error
-                for error in result.errors
-            )
-        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.joints[0].translation_limit_minimum, minimum)
+        self.assertEqual(result.joints[0].translation_limit_maximum, maximum)
+        self.assertEqual(document.joints[0].translation_limit_minimum, minimum)
+        self.assertEqual(document.joints[0].translation_limit_maximum, maximum)
 
-    def test_rejects_reversed_rotation_limits(self) -> None:
+    def test_accepts_free_rotation_axis_and_preserves_limits(self) -> None:
+        minimum = (-1.0, 2.0, -1.0)
+        maximum = (1.0, 1.0, 1.0)
         fixture = self.write_fixture(
-            "reversed_rotation_limits.pmx",
+            "free_rotation_axis.pmx",
             build_pmx_structure(
                 joints=(
                     build_pmx_joint(
-                        rotation_limit_minimum=(-1.0, 2.0, -1.0),
-                        rotation_limit_maximum=(1.0, 1.0, 1.0),
+                        rotation_limit_minimum=minimum,
+                        rotation_limit_maximum=maximum,
                     ),
                 ),
             ),
         )
 
         result = scan_pmx_structure(fixture)
+        document = load_pmx(fixture)
 
-        self.assertEqual(result.status, "error")
-        self.assertTrue(
-            any(
-                "joint rotation limit minimum y value" in error
-                and "exceeds maximum" in error
-                for error in result.errors
-            )
-        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.joints[0].rotation_limit_minimum, minimum)
+        self.assertEqual(result.joints[0].rotation_limit_maximum, maximum)
+        self.assertEqual(document.joints[0].rotation_limit_minimum, minimum)
+        self.assertEqual(document.joints[0].rotation_limit_maximum, maximum)
 
     def test_accepts_equal_limit_boundaries(self) -> None:
         fixture = self.write_fixture(

@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.3. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.4. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -31,6 +31,11 @@ The current public namespaces are:
   `SmartPartEvidenceExplanation`, `SmartPartExplanation`, and
   `explain_smart_parts`; none is promoted through the package root and the
   module owns no mutation authority;
+- `mmd_registry.smart_part_confidence`, for the v0.9.5.4 deterministic,
+  read-only confidence/ambiguity projection. Its explicit `__all__` contains
+  only `SmartPartConfidence`, `SmartPartConfidenceCandidate`,
+  `SmartPartConfidenceAssessment`, and `assess_smart_parts`; none is promoted
+  through the package root and the module owns no mutation authority;
 - `mmd_registry.capabilities`, for the immutable current-support manifest and
   canonical `get_capabilities()` entry point listed in its `__all__`;
 - `mmd_registry.diagnostics`, for immutable service operation, code,
@@ -113,6 +118,33 @@ not part of v0.9.5.3; ambiguity presentation remains deferred to v0.9.5.4 and
 the Smart CLI remains deferred to v0.9.5.5. The explainer performs no
 filesystem writes, PMX mutation, transaction planning, preview/apply, remapping,
 writer access, publication, CLI expansion, or capability-manifest promotion.
+
+## Smart Part confidence surface (v0.9.5.4)
+
+`mmd_registry.smart_part_confidence.assess_smart_parts()` consumes the same
+immutable structural-authoring catalog tuple used by detection and
+explainability. It projects deterministic presentation state from the shared
+private exact-match trace; it does not classify independently.
+
+The public submodule exports exactly `SmartPartConfidence`,
+`SmartPartConfidenceCandidate`, `SmartPartConfidenceAssessment`, and
+`assess_smart_parts`. None is promoted through the package root.
+
+HIGH means multiple independent direct exact source identities support one kind.
+MEDIUM means direct exact support exists but fewer than two independent direct
+identities exist. LOW means recognized exact texture-basename evidence exists
+without direct named support. AMBIGUOUS preserves incompatible exact candidates
+attached to one source identity. No evidence returns no assessment.
+
+Source identity is exactly `(source_kind, source_index)`. Material, bone, and
+morph are direct named sources; texture is derived; vertex and rigid-body inputs
+have no semantic classification authority. Texture cannot independently upgrade
+confidence, including a material plus its referenced texture.
+
+Confidence is not a probability, score, edit permission, or mutation authority.
+The surface performs no filesystem write, PMX mutation, transaction planning,
+preview/apply, remapping, writer access, CLI expansion, schema change, or
+capability promotion. The Smart CLI remains deferred to v0.9.5.5.
 
 ## Capability surface
 

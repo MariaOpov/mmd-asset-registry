@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.5.3` maps
-to the PEP 440 Python distribution version `0.9.5.3`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.5.4` maps
+to the PEP 440 Python distribution version `0.9.5.4`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -56,11 +56,13 @@ test sources, test helpers, and artifact-inspection tool so its source boundary
 is explicit rather than the partial implicit test selection produced by
 setuptools.
 
-For v0.9.5.3 the runtime wheel must include
-`mmd_registry/smart_part_explainability.py` with bytes matching the reviewed
-source. Smart Part tests remain excluded from the wheel and included in the
-sdist through the existing `MANIFEST.in` Python-test rule. Release documentation
-is not required in the sdist because `MANIFEST.in` does not include `docs/`.
+For v0.9.5.4 the runtime wheel must include
+`mmd_registry/smart_part_explainability.py`,
+`mmd_registry/_smart_part_confidence.py`, and
+`mmd_registry/smart_part_confidence.py` with bytes matching the reviewed source.
+Smart Part tests remain excluded from the wheel and included in the sdist through
+the existing `MANIFEST.in` Python-test rule. Release documentation is not required
+in the sdist because `MANIFEST.in` does not include `docs/`.
 
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
@@ -155,6 +157,13 @@ from that wheel, keeps the root package surface unchanged, preserves exact
 detector/explainer parity, and matches the reviewed detector/explainer source
 bytes. This remains a verification step rather than a new runtime dependency or
 publication path.
+
+For v0.9.5.4 the installed-package gate additionally imports the public and
+private confidence modules from the wheel, verifies the root export remains only
+`__version__`, executes a deterministic MEDIUM assessment from one direct exact
+material source, and verifies reviewed source-byte parity for the confidence
+modules. The joint parser compatibility repair is exercised by the full suite;
+this gate adds no publication authority.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

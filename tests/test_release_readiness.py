@@ -1,4 +1,4 @@
-"""Release-readiness checks for v0.9.5.3."""
+"""Release-readiness checks for v0.9.5.4."""
 
 from __future__ import annotations
 
@@ -21,28 +21,32 @@ RELEASE_CHECKLIST_PATH = PROJECT_ROOT / "RELEASE_CHECKLIST.md"
 PUBLIC_API_PATH = PROJECT_ROOT / "docs" / "public_api.md"
 PACKAGING_PATH = PROJECT_ROOT / "docs" / "packaging.md"
 EXPLAINABILITY_DOC_PATH = PROJECT_ROOT / "docs" / "v0953_smart_part_explainability.md"
+CONFIDENCE_DOC_PATH = PROJECT_ROOT / "docs" / "v0954_smart_part_confidence.md"
 
 
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_9_5_3(self) -> None:
-        self.assertEqual(__version__, "0.9.5.3")
+    def test_package_version_is_0_9_5_4(self) -> None:
+        self.assertEqual(__version__, "0.9.5.4")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.9.5.3", readme)
-        self.assertIn("Release label: v0.9.5.3", readme)
+        self.assertIn("Tool version: 0.9.5.4", readme)
+        self.assertIn("Release label: v0.9.5.4", readme)
         self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
-        self.assertIn("## Version 0.9.5.3 Detection Evidence / Explainability", readme)
+        self.assertIn("## Version 0.9.5.4 Confidence / Ambiguity", readme)
         self.assertIn("mmd_registry.smart_part_explainability", readme)
-        self.assertIn("Confidence is **not** part of v0.9.5.3", readme)
-        self.assertIn("2,820 tests", readme)
-        self.assertIn("86.76%", readme)
-        self.assertIn("87.45%", readme)
+        self.assertIn("mmd_registry.smart_part_confidence", readme)
+        self.assertIn("98.83%", readme)
+        self.assertIn("100.00%", readme)
+        self.assertIn("Confidence is a presentation state", readme)
+        self.assertIn("3,022 tests", readme)
+        self.assertIn("87.01%", readme)
+        self.assertIn("91.28%", readme)
         self.assertIn("72.09%", readme)
         self.assertIn("## Version 0.9.3 safe structural transactions", readme)
         self.assertIn("## Version 0.9.2 safe structural insertion and capacity foundation", readme)
@@ -53,14 +57,16 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn('`structural_contract="reference_safe_execution"`', readme)
         self.assertIn("`apply_structural_edit()`", readme)
         packaging = PACKAGING_PATH.read_text(encoding="utf-8")
-        self.assertIn("`v0.9.5.3` maps", packaging)
-        self.assertIn("distribution version `0.9.5.3`", packaging)
+        self.assertIn("`v0.9.5.4` maps", packaging)
+        self.assertIn("distribution version `0.9.5.4`", packaging)
         self.assertIn("structural preview/execution services", packaging)
         self.assertIn("structural transaction capability", packaging)
         self.assertIn("85 regular", packaging)
         self.assertIn("235 regular", packaging)
         self.assertIn("final release digests", packaging)
         self.assertIn("smart_part_explainability.py", packaging)
+        self.assertIn("smart_part_confidence.py", packaging)
+        self.assertIn("_smart_part_confidence.py", packaging)
         self.assertIn("does not include `docs/`", packaging)
         self.assertIn("1,666 automated tests", readme)
         self.assertIn("88.57%", readme)
@@ -167,6 +173,13 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("SmartPartEvidenceExplanation", public_api)
         self.assertIn("SmartPartExplanation", public_api)
         self.assertIn("explain_smart_parts", public_api)
+        self.assertIn("mmd_registry.smart_part_confidence", public_api)
+        self.assertIn("SmartPartConfidenceAssessment", public_api)
+        self.assertIn("assess_smart_parts", public_api)
+        confidence_doc = CONFIDENCE_DOC_PATH.read_text(encoding="utf-8")
+        self.assertIn("same_source_exact_conflict", confidence_doc)
+        self.assertIn("derived_texture_only", confidence_doc)
+        self.assertIn("Smart CLI remains deferred to v0.9.5.5", confidence_doc)
         explainability_doc = EXPLAINABILITY_DOC_PATH.read_text(encoding="utf-8")
         self.assertIn("shared private deterministic match trace", explainability_doc)
         self.assertIn("exact_alias", explainability_doc)
@@ -226,6 +239,10 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_changelog_documents_v093_and_prior_release_history(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("## 0.9.5.4 - 2026-09-06", changelog)
+        self.assertIn("Smart Part confidence and ambiguity", changelog)
+        self.assertIn("3,022 tests", changelog)
+        self.assertIn("87.01%", changelog)
         self.assertIn("## 0.9.5.3 - 2026-09-06", changelog)
         self.assertIn("Smart Part evidence explanations", changelog)
         self.assertIn("2,820 tests", changelog)
@@ -279,7 +296,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.9.5.3'", workflow)
+        self.assertIn("assert __version__ == '0.9.5.4'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -342,6 +359,16 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_v0953_smart_part_explainability_texture_provenance", workflow)
         self.assertIn("tests.test_v0953_smart_part_explainability_aggregation", workflow)
         self.assertIn("tests.test_v0953_smart_part_explainability_parity_adversarial", workflow)
+        self.assertIn("tests.test_pmx_joint_scanning", workflow)
+        self.assertIn("tests.test_v0954_confidence_foundation", workflow)
+        self.assertIn("tests.test_v0954_confidence_independence", workflow)
+        self.assertIn("tests.test_v0954_confidence_resolved_derivation", workflow)
+        self.assertIn("tests.test_v0954_confidence_ambiguity", workflow)
+        self.assertIn("tests.test_v0954_detector_explainer_parity", workflow)
+        self.assertIn("tests.test_v0954_public_confidence_api", workflow)
+        self.assertIn("tests.test_v0954_confidence_determinism", workflow)
+        self.assertIn("tests.test_v0954_compatibility_authority", workflow)
+        self.assertIn("tests.test_v0954_confidence_coverage_adversarial", workflow)
         self.assertIn("tests.test_v095_transaction_plan_build_vertex_cli", workflow)
         self.assertIn("tests.test_release_readiness", workflow)
         self.assertIn("tests.test_pmx_cross_feature_state_isolation", workflow)
@@ -377,8 +404,8 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.9.5.3", checklist)
-        self.assertIn("distribution version is `0.9.5.3`", checklist)
+        self.assertIn("MMD Asset Registry v0.9.5.4", checklist)
+        self.assertIn("distribution version is `0.9.5.4`", checklist)
         self.assertIn("python -m coverage run -m unittest discover -s tests -q", checklist)
         self.assertIn("git --no-pager diff --check", checklist)
         self.assertIn("python -m ruff check", checklist)
@@ -389,8 +416,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("MMD_REGISTRY_PRIVATE_PMX", checklist)
         self.assertIn("Optional private runtime validation is read-only", checklist)
         self.assertIn("tests.test_stable_edit_service", checklist)
-        self.assertIn("Record the observed v0.9.5.3 full-suite count", checklist)
-        self.assertIn("Record the observed v0.9.5.3 wheel/sdist member counts", checklist)
+        self.assertIn("Record the observed v0.9.5.4 full-suite count", checklist)
+        self.assertIn("Record the observed v0.9.5.4 wheel/sdist member counts", checklist)
         self.assertIn("Recompute artifact SHA-256", checklist)
         self.assertIn("pre-commit digests are not final release digests", checklist)
         self.assertIn("structural_write=True", checklist)
@@ -404,12 +431,13 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_structural_resource_state_isolation", checklist)
         self.assertIn("Verify merged main", checklist)
         self.assertIn("Never tag the feature", checklist)
-        self.assertIn("git tag -a v0.9.5.3", checklist)
-        self.assertIn("gh release create v0.9.5.3", checklist)
+        self.assertIn("git tag -a v0.9.5.4", checklist)
+        self.assertIn("gh release create v0.9.5.4", checklist)
         self.assertIn("isPrerelease` is `false", checklist)
         self.assertNotIn("--prerelease", checklist)
         self.assertIn("explainability remains read-only", checklist)
-        self.assertIn("Confidence is not part of v0.9.5.3", checklist)
+        self.assertIn("confidence/ambiguity layer remains read-only", checklist)
+        self.assertIn("confidence/ambiguity layer remains read-only", checklist)
         self.assertIn("Do not publish the wheel or sdist to PyPI", checklist)
 
     def test_tracked_pmx_files_are_only_empty_placeholders(self) -> None:

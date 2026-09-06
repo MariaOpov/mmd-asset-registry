@@ -19,7 +19,7 @@ from mmd_registry.smart_parts import (
 
 class SmartPartDetectionBackwardCompatibilityTests(unittest.TestCase):
     def test_root_package_surface_is_unchanged(self) -> None:
-        self.assertEqual(mmd_registry.__version__, "0.9.5.3")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.4")
         self.assertEqual(mmd_registry.__all__, ("__version__",))
         self.assertFalse(hasattr(mmd_registry, "detect_smart_parts"))
 

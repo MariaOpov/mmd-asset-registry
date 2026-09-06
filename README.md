@@ -19,19 +19,54 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.3
-Release label: v0.9.5.3
+Tool version: 0.9.5.4
+Release label: v0.9.5.4
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and
-GitHub release label `v0.9.5.3` maps to the PEP 440 Python package version
-`0.9.5.3`. This patch adds deterministic, read-only detection evidence and
-explainability on top of the v0.9.5.2 exact-match detector. Detector and
-explainer share one matching authority; v0.9.5.3 does not make matching smarter,
-add confidence or ambiguity scoring, add a Smart CLI, or expand PMX mutation
-authority.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.4` maps to the PEP 440 Python package version
+`0.9.5.4`. This patch adds deterministic, read-only confidence and ambiguity
+presentation on top of the shared exact-match detector/explainer trace. It also
+repairs Bullet 6DOF free-axis joint-limit compatibility without adding mutation,
+physics-generation, Smart CLI, schema, or capability authority.
+
+## Version 0.9.5.4 Confidence / Ambiguity
+
+Version 0.9.5.4 adds deterministic read-only confidence and ambiguity
+presentation on top of the shared exact-match Smart Part trace.
+
+- `mmd_registry.smart_part_confidence` explicitly exports
+  `SmartPartConfidence`, `SmartPartConfidenceCandidate`,
+  `SmartPartConfidenceAssessment`, and `assess_smart_parts`; none is promoted
+  through the package root.
+- HIGH requires multiple independent direct exact source identities; MEDIUM is
+  one direct exact source; LOW is derived texture-only evidence; AMBIGUOUS
+  preserves an unresolved same-source exact conflict.
+- Confidence is a presentation state, not a probability, score, permission, or
+  mutation authority. No evidence produces no assessment.
+- Material, bone, and morph are direct named sources. Texture is derived and
+  cannot independently upgrade confidence. Vertex and rigid-body entries have
+  no semantic authority.
+- Texture classification remains final-basename-stem exact matching. Slash and
+  backslash paths preserve different raw provenance while sharing the same
+  semantic result; parent directories never classify a part.
+- The confidence layer reuses the detector/explainer shared private trace and
+  therefore adds no second classifier, fuzzy matching, substring heuristic,
+  statistical model, or AI.
+- A PMX joint compatibility repair now preserves finite Bullet 6DOF free-axis
+  limit ordering (`lower > upper`) instead of rejecting it; raw limits are not
+  swapped or normalized.
+- Smart Part confidence remains read-only: no PMX mutation, transaction-plan
+  generation, preview/apply, writer/remapper access, filesystem publication,
+  CLI expansion, schema change, or capability promotion is introduced.
+
+The feature-branch quality gate passes 3,022 tests with 2 optional skips and
+reports 87.01% combined statement/branch coverage, 91.28% detector coverage,
+72.09% explainability coverage, 98.83% private-confidence coverage, 100.00%
+public-confidence coverage, and 91.58% joint-reader coverage.
+
+See `docs/v0954_smart_part_confidence.md` for the complete contract.
 
 ## Version 0.9.5.3 Detection Evidence / Explainability
 

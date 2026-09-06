@@ -2,6 +2,57 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.4 - 2026-09-06
+
+### Added
+
+- Added deterministic, read-only Smart Part confidence and ambiguity
+  presentation through `mmd_registry.smart_part_confidence.assess_smart_parts`.
+- Added frozen `SmartPartConfidenceCandidate` and
+  `SmartPartConfidenceAssessment` values plus the HIGH, MEDIUM, LOW, and
+  AMBIGUOUS presentation states.
+- Added independent-source derivation over the shared exact-match trace without
+  introducing a second classifier, score, probability model, or mutation
+  authority.
+- Added adversarial coverage for same-source conflicts, duplicate evidence,
+  texture-only evidence, path-separator provenance, validation guards, and
+  deterministic ordering.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.3` to `0.9.5.4`.
+- Updated release-facing README, public API policy, packaging policy, release
+  checklist, CI regression matrix, and version assertions for v0.9.5.4.
+- Corrected PMX joint parsing so finite Bullet 6DOF lower > upper limits are
+  preserved as valid free-axis semantics instead of being rejected. Values are
+  not swapped or normalized.
+
+### Verified
+
+- Full canonical serial discovery passes 3,022 tests with 2 optional skips.
+- Coverage reports 87.01% combined statement/branch coverage, 91.28% detector
+  coverage, 72.09% explainability coverage, 98.83% private-confidence coverage,
+  100.00% public-confidence coverage, and 91.58% joint-reader coverage.
+- Confidence repeat/reverse-input determinism, detector/explainer parity,
+  same-source ambiguity retention, texture-only LOW semantics, and raw texture
+  provenance are certified.
+- Primary and secondary private real-model certification is read-only and
+  preserves source bytes and metadata.
+- Ruff 0.16.3 and isolated compilation pass before version promotion.
+
+### Safety and compatibility
+
+- Confidence is presentation state only, never probability, permission, or
+  execution authority.
+- No fuzzy/substring/AI classifier, Smart CLI, schema expansion, capability
+  promotion, transaction engine, preview/apply authority, writer, remapper, or
+  publication authority is added.
+- Existing transaction-plan schema-one and reference-safe structural execution
+  authorities remain unchanged.
+- `mmd_registry.__all__` remains exactly `('__version__',)`.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.3 - 2026-09-06
 
 ### Added

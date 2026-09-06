@@ -143,25 +143,12 @@ def _validate_limit_pair(
     label: str,
     minimum_offset: int,
 ) -> None:
-    """Validate component-wise PMX joint lower and upper limits."""
+    """Accept every finite Bullet 6DOF limit ordering.
 
-    for component_index, (minimum_value, maximum_value) in enumerate(
-        zip(minimum, maximum)
-    ):
-        if minimum_value <= maximum_value:
-            continue
-
-        component_name = ("x", "y", "z")[component_index]
-        raise_pmx_error(
-            section="joints",
-            record_index=record_index,
-            offset=minimum_offset + component_index * 4,
-            operation=f"validating {label} limits",
-            reason=(
-                f"{label} minimum {component_name} value {minimum_value} "
-                f"exceeds maximum {component_name} value {maximum_value}."
-            ),
-        )
+    Bullet semantics use lower > upper for a free axis, lower == upper for a
+    locked axis, and lower < upper for a limited axis. The vectors are already
+    validated as finite while reading, so no ordering is invalid here.
+    """
 
 
 def _read_joint(

@@ -10,6 +10,7 @@ from typing import Any, Sequence
 
 import yaml
 
+import mmd_registry.smart_cli as _smart_cli
 import mmd_registry.transaction_plan_cli as _transaction_plan_cli
 from mmd_registry import __version__
 from mmd_registry.binary_reader import BinaryParseError
@@ -607,6 +608,28 @@ def _build_runtime_argument_parser() -> argparse.ArgumentParser:
 
     parser = build_argument_parser()
     _transaction_plan_cli.add_transaction_plan_parser(parser)
+    return parser
+
+
+_SMART_COMMAND = "smart"
+
+
+def _normalize_application_arguments(
+    argv: Sequence[str] | None,
+) -> list[str]:
+    """Add v0.9.5.5 Smart syntax without changing frozen prior normalizers."""
+
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == _SMART_COMMAND:
+        return arguments
+    return _normalize_runtime_arguments(arguments)
+
+
+def _build_application_argument_parser() -> argparse.ArgumentParser:
+    """Extend the frozen transaction-plan runtime parser with Smart Inspect."""
+
+    parser = _build_runtime_argument_parser()
+    _smart_cli.add_smart_parser(parser)
     return parser
 
 
@@ -1969,8 +1992,8 @@ def _run_doctor(arguments: argparse.Namespace) -> int:
 def run(argv: Sequence[str] | None = None) -> int:
     """Run the registry command-line application."""
 
-    parser = _build_runtime_argument_parser()
-    arguments = parser.parse_args(_normalize_runtime_arguments(argv))
+    parser = _build_application_argument_parser()
+    arguments = parser.parse_args(_normalize_application_arguments(argv))
 
     if arguments.command == "validate":
         return _run_validate(arguments)
@@ -1995,6 +2018,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if arguments.command == _TRANSACTION_PLAN_COMMAND:
         return _transaction_plan_cli.run_transaction_plan_command(arguments)
+
+    if arguments.command == _SMART_COMMAND:
+        return _smart_cli.run_smart_command(arguments)
 
     if arguments.command == "texture-portability":
         return run_texture_portability_command(

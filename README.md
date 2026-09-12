@@ -19,17 +19,51 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.4
-Release label: v0.9.5.4
+Tool version: 0.9.5.5
+Release label: v0.9.5.5
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.4` maps to the PEP 440 Python package version
-`0.9.5.4`. This patch adds deterministic, read-only confidence and ambiguity
-presentation on top of the shared exact-match detector/explainer trace. It also
-repairs Bullet 6DOF free-axis joint-limit compatibility without adding mutation,
-physics-generation, Smart CLI, schema, or capability authority.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.5` maps to the PEP 440 Python package version
+`0.9.5.5`. This patch adds the deterministic, read-only Smart Inspect CLI over
+the released exact-match detector, explainability, and confidence authorities.
+It adds no PMX mutation, automatic repair, transaction-plan generation, fuzzy
+matching, statistical/AI classification, schema change, or capability promotion.
+
+## Version 0.9.5.5 Smart Inspect CLI
+
+Version 0.9.5.5 adds the first user-facing Smart command surface over the
+existing deterministic Smart semantic stack.
+
+Typical usage:
+
+```text
+mmd-asset-registry smart inspect model.pmx
+python check_assets.py smart inspect model.pmx
+```
+
+- The command loads a PMX through the existing document/catalog services and
+  presents detected Smart Parts with HIGH/MEDIUM/LOW/AMBIGUOUS confidence.
+- Resolved results show concise exact-alias evidence. Ambiguous same-source
+  conflicts show every candidate and its evidence; no silent winner is chosen.
+- Ordering is deterministic across repeated runs and the certified
+  `PYTHONHASHSEED=0,1,2,42,31337` matrix.
+- Missing files/directories, malformed PMX input, Unicode/Japanese paths, spaces,
+  UTF-8 output, and expected user errors are handled without uncontrolled
+  tracebacks.
+- The application adapter does not add a new public package API. The package
+  root remains exactly `('__version__',)` and the private inspection service is
+  not promoted through `mmd_registry.services`.
+- The command is read-only: no writer, remapper, preview/apply, repair,
+  transaction-plan, JSON schema, fuzzy matching, probability model, ML/LLM/AI,
+  or filesystem publication authority is added.
+- Local certification runs 3,060 tests with 2 optional skips. Coverage measures
+  86.98% combined after adding the new modules; like-for-like existing-package
+  coverage is 87.01496%, with existing Smart semantic modules non-regressed.
+  The new Smart CLI and private inspection service measure 80.74% and 83.05%.
+
+See `docs/v0955_smart_inspect_cli.md` for the complete command contract.
 
 ## Version 0.9.5.4 Confidence / Ambiguity
 

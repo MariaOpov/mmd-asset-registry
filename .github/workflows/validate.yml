@@ -106,7 +106,7 @@ jobs:
           tests.test_v092_capability_promotion
           tests.test_v092_backward_compatibility
 
-      - name: Run v0.9.5 through v0.9.5.4 authoring and release regressions
+      - name: Run v0.9.5 through v0.9.5.5 authoring and release regressions
         run: >-
           python -m unittest -q
           tests.test_v093_structural_transaction_backward_compatibility
@@ -149,6 +149,14 @@ jobs:
           tests.test_v0954_confidence_determinism
           tests.test_v0954_compatibility_authority
           tests.test_v0954_confidence_coverage_adversarial
+          tests.test_v0955_smart_inspection_service
+          tests.test_v0955_smart_cli_routing
+          tests.test_v0955_smart_cli_output
+          tests.test_v0955_smart_cli_evidence
+          tests.test_v0955_smart_cli_ambiguity
+          tests.test_v0955_smart_cli_hardening
+          tests.test_v0955_smart_cli_determinism
+          tests.test_v0955_smart_cli_compatibility
           tests.test_release_readiness
 
       - name: Run full test suite with coverage
@@ -169,7 +177,7 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.9.5.4'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.9.5.5'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help
@@ -193,6 +201,8 @@ jobs:
           python check_assets.py transaction-plan build vertex --help
           python check_assets.py transaction-plan format --help
           python check_assets.py transaction-plan preview --help
+          python check_assets.py smart --help
+          python check_assets.py smart inspect --help
 
       - name: Validate registry with legacy syntax
         run: python check_assets.py --mode private --no-report

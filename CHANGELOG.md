@@ -2,6 +2,60 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.5 - 2026-09-12
+
+### Added
+
+- Added the Smart Inspect CLI command `mmd-asset-registry smart inspect SOURCE` as the first deterministic,
+  read-only user-facing command over the existing Smart semantic stack.
+- Added a private read-only Smart inspection orchestration service that reuses
+  the existing PMX loader/catalog, exact detector, explainability projection,
+  and confidence/ambiguity authority.
+- Added concise resolved and ambiguous evidence presentation with deterministic
+  Smart Part ordering and explicit no-result behavior.
+- Added CLI hardening for missing/directory/non-PMX/truncated input, Unicode and
+  Japanese paths/names, spaces, UTF-8 output, slash/backslash behavior, and
+  redacted unexpected internal failures.
+- Added repeat-run, reversed-equivalent-input, and
+  `PYTHONHASHSEED=0,1,2,42,31337` determinism certification.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.4` to `0.9.5.5`.
+- Updated release-facing README, public API policy, packaging policy, release
+  checklist, CI regression matrix, and current-version assertions for
+  v0.9.5.5.
+- Kept the legacy parser/runtime parser contracts unchanged by adding Smart
+  through the outer application parser only.
+
+### Verified
+
+- Full canonical serial discovery passes 3,060 tests with 2 optional skips.
+- The targeted Smart/release regression bundle passes 578 tests.
+- Existing detector, explainability, confidence, transaction, and package-root
+  authorities remain unchanged.
+- Coverage measures 86.98% combined with 87.01496% like-for-like coverage when
+  the two new modules are excluded; existing Smart semantic module coverage
+  does not regress. The new Smart CLI and private inspection service measure
+  80.74% and 83.05%.
+- Ruff 0.16.3, compileall, direct source compilation, deterministic output, and
+  release-facing compatibility gates pass.
+- Optional private real-model checkpoints were skipped when no controlled
+  private corpus was configured; no substitute private model was invented.
+
+### Safety and compatibility
+
+- Smart Inspect is read-only and adds no writer/remapper, preview/apply,
+  automatic repair, transaction-plan generation, schema/capability promotion,
+  fuzzy/substring matching, probability score, ML/LLM/AI, or publication
+  authority.
+- The package root remains exactly `('__version__',)` and the inspection service
+  remains private.
+- Existing v0.8/v0.9 structural execution and transaction authorities remain
+  unchanged.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.4 - 2026-09-06
 
 ### Added

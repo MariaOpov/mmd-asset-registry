@@ -29,7 +29,7 @@ class SmartPartDetectionContractTests(unittest.TestCase):
 
     def test_root_public_surface_remains_unchanged(self) -> None:
         self.assertEqual(mmd_registry.__all__, ("__version__",))
-        self.assertEqual(mmd_registry.__version__, "0.9.5.4")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.5")
         self.assertFalse(hasattr(mmd_registry, "detect_smart_parts"))
 
     def test_detector_signature_has_one_input_and_tuple_output(self) -> None:

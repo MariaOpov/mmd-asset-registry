@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.4. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.5. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -143,8 +143,26 @@ confidence, including a material plus its referenced texture.
 
 Confidence is not a probability, score, edit permission, or mutation authority.
 The surface performs no filesystem write, PMX mutation, transaction planning,
-preview/apply, remapping, writer access, CLI expansion, schema change, or
-capability promotion. The Smart CLI remains deferred to v0.9.5.5.
+preview/apply, remapping, writer access, schema change, or capability promotion.
+The v0.9.5.5 Smart Inspect application adapter consumes this released authority
+without changing the confidence submodule API.
+
+## Smart Inspect application surface (v0.9.5.5)
+
+`mmd-asset-registry smart inspect SOURCE` is an application/CLI surface, not a
+new package-root public API. `mmd_registry.smart_cli` is the command adapter and
+`mmd_registry.services._smart_inspection` is a private orchestration service.
+Neither is promoted through `mmd_registry.__all__` or
+`mmd_registry.services.__all__`.
+
+The adapter reuses the released loader/catalog, detector, explainability, and
+confidence authorities. It renders deterministic human-readable Smart Part
+results and exact-alias evidence, including explicit ambiguity candidates and a
+stable no-detection result. It does not create an independent classifier.
+
+The command remains read-only. It owns no writer/remapper, preview/apply,
+transaction-plan, repair, fuzzy/substring, probability, ML/LLM/AI, schema,
+capability, or publication authority.
 
 ## Capability surface
 

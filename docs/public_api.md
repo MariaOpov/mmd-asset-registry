@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.6. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.7. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -187,6 +187,32 @@ filesystem publication.
 The released detector, explainability, confidence, Smart Inspect application,
 editing, preview/apply, writer/remapper, and structural transaction public
 surfaces remain unchanged.
+
+## Smart material preview bridge private foundation (v0.9.5.7)
+
+v0.9.5.7 adds no public package API. The implementation module
+`mmd_registry.services._smart_material_preview` remains private and is not
+promoted through either `mmd_registry.__all__` or
+`mmd_registry.services.__all__`.
+
+The private bridge consumes exact source bytes and one already-certified
+v0.9.5.6 Smart Material `PmxEditPlan`. It delegates those exact values to the
+existing `mmd_registry.services.preview_edit` authority and returns the existing
+`PmxEditPreview` type unchanged. It does not construct or normalize color
+intent, rebuild semantic evidence, choose targets, reorder operations, repair
+source identity, define a second preview DTO, or own a second preview engine.
+
+Source identity remains bound by the existing SHA-256 edit-plan contract.
+Stale drafts fail closed; no automatic draft regeneration or semantic
+re-resolution occurs. Preview changes are limited to the operations already
+present in the certified draft, preserve source alpha and untouched material
+fields, and leave source bytes unchanged.
+
+The module performs no apply, source write, writer/remapper call, structural
+transaction schema widening, output publication, CLI expansion, or capability
+promotion. The released detector, explainability, confidence, Smart Inspect,
+v0.9.5.6 draft, editing, preview/apply, writer/remapper, and transaction
+authorities remain unchanged.
 
 ## Capability surface
 

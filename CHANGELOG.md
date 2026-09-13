@@ -2,6 +2,53 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.7 - 2026-09-13
+
+### Added
+
+- Added the minimal private Smart Material Preview Bridge from one already
+  certified v0.9.5.6 `PmxEditPlan(schema_version=1)` draft into the existing
+  stable PMX preview service.
+- Added source-binding drift certification, exact draft/preview parity,
+  untouched-field and source-alpha preservation, deterministic hash-seed
+  certification, and adversarial ambiguity/unsupported/malformed coverage.
+- Added a frozen v0.9.5.7 preview-bridge contract document and focused bridge
+  regression coverage without adding a public package or CLI surface.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.6` to `0.9.5.7`.
+- Extended release-facing documentation, CI regression coverage, packaging
+  policy, release checklist, and current-version compatibility assertions for
+  v0.9.5.7 while retaining the v0.9.5.6 Smart Material Draft contract intact.
+- Kept Smart CLI inspect-only and kept the package root exactly
+  `('__version__',)`.
+
+### Verified
+
+- Fresh canonical serial discovery completes 3,114 tests with 2 optional
+  private-runtime skips and zero failures/errors.
+- The complete v0.9.5.7 focused bridge bundle passes 8 tests; the protected
+  v0.9.5.6 Smart Material bundle passes 46 tests.
+- Exact source SHA-256 binding rejects stale drafts without regeneration.
+  Repeated preview calls and `PYTHONHASHSEED=0,1,2,42,31337` are deterministic.
+- Protected preview/apply, writer/remapper, structural transaction, public API,
+  and Smart CLI authorities remain unchanged.
+
+### Safety and compatibility
+
+- The bridge consumes a certified draft and delegates exact source bytes plus
+  that exact draft to the existing preview authority; it does not create a
+  second preview engine or DTO.
+- Preview changes only the draft-authorized diffuse RGB in simulated state,
+  preserves source alpha and untouched material fields, and never applies or
+  publishes output.
+- No automatic semantic re-resolution, draft regeneration, source write,
+  writer/remapper call, transaction-schema widening, CLI mutation command, or
+  package-root API promotion is added.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.6 - 2026-09-13
 
 ### Added

@@ -258,7 +258,7 @@ class SmartPartMatchTraceFoundationTests(unittest.TestCase):
 
     def test_public_surfaces_and_version_remain_v0952_compatible(self) -> None:
         self.assertEqual(mmd_registry.__all__, ("__version__",))
-        self.assertEqual(mmd_registry.__version__, "0.9.5.6")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.7")
         self.assertEqual(detection.__all__, ("detect_smart_parts",))
         self.assertFalse(hasattr(mmd_registry, "_SmartPartMatchTrace"))
         self.assertFalse(hasattr(mmd_registry, "_match_smart_part_traces"))

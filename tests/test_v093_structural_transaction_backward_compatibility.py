@@ -240,7 +240,7 @@ class V093StructuralTransactionBackwardCompatibilityTests(unittest.TestCase):
             private_runtime_required=False,
         )
         self.assertFalse(legacy_manifest.structural_transaction)
-        self.assertEqual(mmd_registry.__version__, "0.9.5.6")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.7")
 
     def test_v08_edit_preview_and_write_survive_transaction_activity(self) -> None:
         document = _clean_document()

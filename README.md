@@ -19,18 +19,53 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.6
-Release label: v0.9.5.6
+Tool version: 0.9.5.7
+Release label: v0.9.5.7
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.6` maps to the PEP 440 Python package version
-`0.9.5.6`. This patch adds a deterministic private Smart Material Color Draft
-foundation over the released exact-match Smart semantic stack and existing safe
-material-edit plan authority. It adds no PMX apply/write path, writer/remapper,
-Smart CLI mutation command, structural-schema widening, fuzzy/AI classifier, or
-silent ambiguity resolution.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.7` maps to the PEP 440 Python package version
+`0.9.5.7`. This patch adds a deterministic private Smart Material Preview Bridge
+from the certified v0.9.5.6 material-color draft into the existing safe preview
+authority. It adds no apply/source-write path, writer/remapper, second preview
+engine, Smart CLI mutation command, public package-root export, or transaction
+schema widening.
+
+## Version 0.9.5.7 Smart Material Preview Bridge
+
+Version 0.9.5.7 adds a minimal private draft-to-preview bridge over the released
+v0.9.5.6 Smart Material Color Draft and the existing edit preview authority.
+The implementation remains private and does not add a new CLI command or
+package-root API.
+
+- The private implementation lives in
+  `mmd_registry/services/_smart_material_preview.py`; its bridge entry point is
+  `mmd_registry.services._smart_material_preview.preview_smart_material_color_draft()`.
+  It accepts exact source bytes plus an already-certified `PmxEditPlan` and
+  delegates those exact inputs to the existing `mmd_registry.services.preview_edit`
+  authority.
+- The bridge does not rebuild Smart semantics, capability evidence, target
+  indices, color intent, operations, or source identity. A stale draft against
+  different valid source bytes fails closed through the existing SHA-256 source
+  binding.
+- Preview target order and `UpdateMaterial` payloads remain exactly equal to the
+  certified draft. Diffuse RGB follows the draft while every source alpha and
+  every untouched material field remains unchanged in simulated state.
+- Repeated calls and the `PYTHONHASHSEED=0,1,2,42,31337` matrix produce the same
+  canonical draft/preview projection. Ambiguity, unsupported capability,
+  missing exact material evidence, malformed RGB, and invalid source binding
+  remain blocked upstream.
+- No apply, source write, writer, remapper, structural transaction schema,
+  output publication, second preview DTO, or second preview engine is added.
+  The package root remains exactly `('__version__',)` and Smart CLI remains
+  inspect-only.
+- Fresh local behavior certification runs 3,114 tests with 2 optional private
+  runtime skips. The v0.9.5.7 focused bridge bundle passes 8 tests and the
+  protected v0.9.5.6 Smart Material bundle passes 46 tests.
+
+See `docs/v0957_smart_material_preview_bridge.md` for the complete frozen
+preview-bridge contract.
 
 ## Version 0.9.5.6 Smart Material Color Draft
 

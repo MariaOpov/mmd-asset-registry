@@ -72,7 +72,7 @@ PUBLIC_VOCABULARY = {
 
 class V092CapabilityPromotionTests(unittest.TestCase):
     def test_version_and_schema_promotion_are_independent(self) -> None:
-        self.assertEqual(mmd_registry.__version__, "0.9.5.5")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.6")
         self.assertEqual(PMX_EDIT_PLAN_SCHEMA_VERSION, 1)
         self.assertEqual(LATEST_SCHEMA_VERSION, "0.3")
         self.assertEqual(SUPPORTED_SCHEMA_VERSIONS, frozenset(("0.2", "0.3")))

@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.5.5` maps
-to the PEP 440 Python distribution version `0.9.5.5`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.5.6` maps
+to the PEP 440 Python distribution version `0.9.5.6`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -66,6 +66,13 @@ source. Smart Part and Smart Inspect tests remain excluded from the wheel and
 included in the sdist through the existing `MANIFEST.in` Python-test rule.
 Release documentation is not required in the sdist because `MANIFEST.in` does
 not include `docs/`.
+
+For v0.9.5.6 the runtime wheel must additionally include
+`mmd_registry/_smart_material_color.py` and
+`mmd_registry/services/_smart_material_draft.py` with bytes matching the
+reviewed source. These modules remain private; no package-root or root-service
+export is added. Their v0.9.5.6 tests remain excluded from the wheel and are
+carried only by the sdist's existing Python-test rule.
 
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
@@ -174,6 +181,13 @@ environment outside the source checkout against a generated PMX fixture, checks
 deterministic UTF-8 semantic output, and verifies the installed Smart CLI and
 private inspection-service bytes match the reviewed wheel source. The command
 remains read-only and adds no package-root or root-service API promotion.
+
+For v0.9.5.6 the installed-package certification must additionally prove that
+the two private Smart Material modules import from the installed wheel, preserve
+the root/service public surfaces, compose the same source-bound schema-one
+`PmxEditPlan`/`UpdateMaterial` draft contract, preserve source alpha, and perform
+no source write or apply. Feature-branch artifact hashes remain NONFINAL; final
+release digests are established only from merged-main certification.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

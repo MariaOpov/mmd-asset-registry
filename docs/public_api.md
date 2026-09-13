@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.5. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.6. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -163,6 +163,30 @@ stable no-detection result. It does not create an independent classifier.
 The command remains read-only. It owns no writer/remapper, preview/apply,
 transaction-plan, repair, fuzzy/substring, probability, ML/LLM/AI, schema,
 capability, or publication authority.
+
+## Smart material color draft private foundation (v0.9.5.6)
+
+v0.9.5.6 adds no public package API. The implementation modules
+`mmd_registry._smart_material_color` and
+`mmd_registry.services._smart_material_draft` remain private and are not
+promoted through either `mmd_registry.__all__` or
+`mmd_registry.services.__all__`.
+
+The private bridge consumes the released exact Smart semantic/confidence
+evidence and may group only exact MATERIAL evidence by source index. It exposes
+the internal `material_color` capability only for unambiguous exact material
+targets. Confidence is not permission and ambiguity cannot be silently resolved.
+
+Color intent is limited to the frozen lowercase presets plus an exact finite
+normalized RGB float tuple. Draft composition reuses the existing
+`PmxEditPlan(schema_version=1)` and `UpdateMaterial` authority, preserves source
+alpha, binds exact source SHA-256, and performs no apply, source write, writer,
+remapper, structural transaction schema widening, preview simulation, or
+filesystem publication.
+
+The released detector, explainability, confidence, Smart Inspect application,
+editing, preview/apply, writer/remapper, and structural transaction public
+surfaces remain unchanged.
 
 ## Capability surface
 

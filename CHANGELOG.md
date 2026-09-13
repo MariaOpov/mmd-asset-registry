@@ -2,6 +2,62 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.6 - 2026-09-13
+
+### Added
+
+- Added the deterministic private Smart Material Color Draft foundation that maps
+  one resolved semantic Smart Part to exact material evidence and a
+  model-specific `material_color` capability without creating a second detector
+  or execution authority.
+- Added exact material grouping by `MATERIAL/source_index`, stable capability
+  reasons, frozen normalized RGB presets (`blue`, `red`, `green`, `purple`),
+  strict custom RGB validation, and float32 canonicalization.
+- Added source-bound draft composition through the existing
+  `PmxEditPlan(schema_version=1)` and `UpdateMaterial` authority while
+  preserving each source material alpha.
+- Added ambiguity/evidence hardening, source/catalog identity checks, duplicate
+  evidence handling, Unicode coverage, invalid/non-finite RGB rejection, and
+  repeat/reverse/`PYTHONHASHSEED=0,1,2,42,31337` determinism certification.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.5` to `0.9.5.6`.
+- Updated release-facing README, private/public boundary documentation,
+  packaging policy, release checklist, CI regression matrix, and current-version
+  assertions for v0.9.5.6.
+- Kept the Smart CLI inspect-only and kept the package root exactly
+  `('__version__',)`.
+
+### Verified
+
+- Full canonical serial discovery passes 3,106 tests with 2 optional skips.
+- The targeted v0.9.5.6 Smart Material regression bundle passes 46 tests with no
+  skips.
+- Combined statement/branch coverage measures 86.93%; protected
+  Smart detector/explainer/confidence modules meet or exceed their v0.9.5.5
+  baselines. The new color-intent and draft-composition modules measure
+  89.47% and 80.80%.
+- Ruff 0.16.3, compileall, direct source compilation, package-root/CLI
+  compatibility, distribution build/inspection, and clean-install gates pass.
+- Optional private real-model checkpoints remain honestly skipped when no
+  controlled private corpus is configured.
+
+### Safety and compatibility
+
+- Only exact `MATERIAL` Smart evidence can become a material target; texture,
+  bone, morph, vertex, and rigid-body evidence cannot be silently promoted.
+- Ambiguity blocks automatic draft composition. Confidence is presentation,
+  never edit permission.
+- Color drafting changes RGB only, preserves source alpha, and performs no
+  apply, source write, direct writer/remapper call, structural-plan widening, or
+  filesystem publication.
+- Existing detector, explainability, confidence, Smart Inspect, schema-one
+  transaction, preview/apply, writer, remapper, and package-root authorities
+  remain unchanged.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate Maintainer-controlled gates.
+
 ## 0.9.5.5 - 2026-09-12
 
 ### Added

@@ -19,17 +19,54 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.5
-Release label: v0.9.5.5
+Tool version: 0.9.5.6
+Release label: v0.9.5.6
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.5` maps to the PEP 440 Python package version
-`0.9.5.5`. This patch adds the deterministic, read-only Smart Inspect CLI over
-the released exact-match detector, explainability, and confidence authorities.
-It adds no PMX mutation, automatic repair, transaction-plan generation, fuzzy
-matching, statistical/AI classification, schema change, or capability promotion.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.6` maps to the PEP 440 Python package version
+`0.9.5.6`. This patch adds a deterministic private Smart Material Color Draft
+foundation over the released exact-match Smart semantic stack and existing safe
+material-edit plan authority. It adds no PMX apply/write path, writer/remapper,
+Smart CLI mutation command, structural-schema widening, fuzzy/AI classifier, or
+silent ambiguity resolution.
+
+## Version 0.9.5.6 Smart Material Color Draft
+
+Version 0.9.5.6 adds the first deterministic bridge from resolved Smart Part
+semantics to a safe existing material edit draft. The implementation remains
+private and does not add a new CLI command or package-root API.
+
+- Exact `MATERIAL` evidence is grouped by source index, deduplicated, and emitted
+  in ascending source order. Texture, bone, morph, vertex, and rigid-body
+  evidence never becomes a material target by inference.
+- `material_color` is supported only when the requested Smart Part is
+  unambiguous and has exact material evidence. Ambiguity blocks the whole draft;
+  confidence is not permission.
+- Color input is either the exact lowercase presets `blue`, `red`, `green`, and
+  `purple`, or exactly three finite Python floats in the normalized `[0, 1]`
+  domain. Values are canonicalized through the existing PMX float32 contract;
+  there is no 0-255 inference, clamping, gamma conversion, or case folding.
+- Draft composition reuses the existing `PmxEditPlan(schema_version=1)` and
+  `UpdateMaterial` operation. It changes diffuse RGB only and preserves source
+  alpha for every material.
+- The source bytes are bound by exact SHA-256 and are never changed by draft
+  generation. Catalog/document identity mismatch, out-of-range evidence, and
+  conflicting duplicate identities fail closed.
+- Draft generation performs no apply, source write, direct writer/remapper call,
+  structural transaction schema expansion, preview simulation, or filesystem
+  publication.
+- The private implementation lives in
+  `mmd_registry/_smart_material_color.py` and
+  `mmd_registry/services/_smart_material_draft.py`; the package root remains
+  exactly `('__version__',)` and the existing Smart CLI remains inspect-only.
+- Local certification runs 3,106 tests with 2 optional skips. Combined coverage
+  measures 86.93%; protected Smart semantic modules do not regress.
+  The new color-intent and draft-composition modules measure 89.47% and
+  80.80% coverage.
+
+See `docs/v0956_smart_material_color_draft.md` for the complete frozen contract.
 
 ## Version 0.9.5.5 Smart Inspect CLI
 

@@ -106,7 +106,7 @@ jobs:
           tests.test_v092_capability_promotion
           tests.test_v092_backward_compatibility
 
-      - name: Run v0.9.5 through v0.9.5.5 authoring and release regressions
+      - name: Run v0.9.5 through v0.9.5.6 authoring and release regressions
         run: >-
           python -m unittest -q
           tests.test_v093_structural_transaction_backward_compatibility
@@ -157,6 +157,12 @@ jobs:
           tests.test_v0955_smart_cli_hardening
           tests.test_v0955_smart_cli_determinism
           tests.test_v0955_smart_cli_compatibility
+          tests.test_v0956_smart_material_authority_boundaries
+          tests.test_v0956_smart_material_capability
+          tests.test_v0956_smart_material_color_contract
+          tests.test_v0956_smart_material_determinism
+          tests.test_v0956_smart_material_draft
+          tests.test_v0956_smart_material_grouping
           tests.test_release_readiness
 
       - name: Run full test suite with coverage
@@ -177,7 +183,7 @@ jobs:
 
       - name: Check release-facing commands
         run: |
-          python -c "from mmd_registry import __version__; assert __version__ == '0.9.5.5'"
+          python -c "from mmd_registry import __version__; assert __version__ == '0.9.5.6'"
           python check_assets.py --version
           python check_assets.py scan --help
           python check_assets.py roundtrip --help

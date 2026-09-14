@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.7. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.8. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -213,6 +213,34 @@ transaction schema widening, output publication, CLI expansion, or capability
 promotion. The released detector, explainability, confidence, Smart Inspect,
 v0.9.5.6 draft, editing, preview/apply, writer/remapper, and transaction
 authorities remain unchanged.
+
+## Confirmed Smart Material apply private integration (v0.9.5.8)
+
+v0.9.5.8 adds no public package API. The implementation module
+`mmd_registry.services._smart_material_apply` remains private and is not
+promoted through either `mmd_registry.__all__` or
+`mmd_registry.services.__all__`.
+
+The private integration consumes one exact source path, distinct destination,
+already-certified `PmxEditPlan`, exact approved `PmxEditPreview`, and immutable
+explicit confirmation. Confirmation binds preview schema version, exact source
+SHA-256, and canonical plan SHA-256; destination is not part of confirmation
+identity.
+
+The module replays the exact plan through existing `preview_edit`, then delegates
+once to existing `apply_edit(..., overwrite=False)`. Generic apply remains
+sovereign for path normalization, no-clobber atomic publication, writer,
+serializer, remapper participation, and source/destination race protection.
+
+After publication the Smart boundary reads destination bytes back, certifies the
+generic output SHA-256, reparses through the existing PMX reader, validates the
+document, requires equality with the exact approved preview document, and
+rechecks source SHA-256. It owns no rollback/repair writer.
+
+No automatic apply, in-place overwrite, second writer/remapper/preview/apply
+engine, new transaction schema, semantic retargeting, ambiguity resolution,
+Smart mutation CLI command, package-root promotion, or service-root promotion
+is introduced.
 
 ## Capability surface
 

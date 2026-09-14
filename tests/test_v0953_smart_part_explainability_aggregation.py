@@ -111,7 +111,7 @@ class SmartPartExplainabilityAggregationTests(unittest.TestCase):
 
     def test_root_api_and_runtime_version_are_unchanged(self) -> None:
         self.assertEqual(mmd_registry.__all__, ("__version__",))
-        self.assertEqual(mmd_registry.__version__, "0.9.5.7")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.8")
         self.assertFalse(hasattr(mmd_registry, "explain_smart_parts"))
         self.assertFalse(
             hasattr(mmd_registry, "SmartPartEvidenceExplanation")

@@ -2,6 +2,53 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.8 - 2026-09-15
+
+### Added
+
+- Added the private Confirmed Smart Material Apply Integration from one exact
+  certified v0.9.5.7 preview and source-bound schema-one draft into the existing
+  generic `preview_edit` / `apply_edit` authorities.
+- Added immutable explicit confirmation identity, preview replay parity,
+  source-drift/race hardening, distinct no-clobber destination enforcement,
+  post-publication SHA/reparse/validation certification, and deterministic
+  independent-destination apply coverage.
+- Added focused v0.9.5.8 adversarial coverage and this frozen feature contract
+  without adding a package-root/service-root API or Smart mutation CLI command.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.7` to `0.9.5.8`.
+- Extended release-facing documentation, CI regression coverage, packaging
+  policy, release checklist, and current-version compatibility assertions for
+  v0.9.5.8 while retaining v0.9.5.7 preview and v0.9.5.6 draft authorities.
+- Kept the package root exactly `('__version__',)` and Smart CLI inspect-only.
+
+### Verified
+
+- CP17 canonical discovery completes 3,149 tests with 2 optional skips and zero
+  failures/errors.
+- The v0.9.5.8 focused integration bundle passes 35 tests; CP16 targeted
+  release-facing regression runs 918 tests with one skip.
+- CP13 protects preview/apply/writer/remapper/publication compatibility with 318
+  protected tests, while source/destination race and post-write certification
+  gates remain fail-closed.
+- Optional private and lawful-secondary corpus certification is honestly skipped
+  when no controlled corpus is configured; no corpus coverage is fabricated.
+
+### Safety and compatibility
+
+- Explicit confirmation is mandatory and binds exact preview/source/plan
+  identity. Preview success is not apply permission.
+- The Smart layer delegates to existing preview/apply and atomic publication
+  authorities; it adds no second writer/remapper/apply engine and no overwrite
+  option.
+- Source overwrite, automatic apply, semantic retargeting, silent ambiguity
+  resolution, CLI mutation expansion, package-root promotion, and PyPI
+  publication remain outside this release.
+- Push, pull request, merge, tag, and GitHub Release remain later explicit
+  Maintainer-controlled gates.
+
 ## 0.9.5.7 - 2026-09-13
 
 ### Added

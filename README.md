@@ -19,18 +19,60 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.7
-Release label: v0.9.5.7
+Tool version: 0.9.5.8
+Release label: v0.9.5.8
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.7` maps to the PEP 440 Python package version
-`0.9.5.7`. This patch adds a deterministic private Smart Material Preview Bridge
-from the certified v0.9.5.6 material-color draft into the existing safe preview
-authority. It adds no apply/source-write path, writer/remapper, second preview
-engine, Smart CLI mutation command, public package-root export, or transaction
-schema widening.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.8` maps to the PEP 440 Python package version
+`0.9.5.8`. This patch adds a private Confirmed Smart Material Apply Integration
+from the certified v0.9.5.7 preview into the existing safe apply authority.
+Exact explicit confirmation is required; output is published only to a distinct
+no-clobber destination and is read back, reparsed, validated, and compared with
+the approved preview. It adds no automatic apply, source overwrite, second
+writer/remapper/apply engine, Smart mutation CLI command, or public API.
+
+## Version 0.9.5.8 Confirmed Smart Material Apply Integration
+
+Version 0.9.5.8 adds one private confirmed-execution boundary from the released
+v0.9.5.7 Smart Material preview to the existing generic PMX apply authority.
+Preview success alone is not permission to mutate: the caller must explicitly
+confirm the exact preview/source/plan identity.
+
+- The private implementation lives in
+  `mmd_registry/services/_smart_material_apply.py`; its entry point is
+  `mmd_registry.services._smart_material_apply.apply_smart_material_color_draft()`.
+  It validates an immutable confirmation bound to preview schema version,
+  source SHA-256, and canonical `PmxEditPlan` SHA-256 before replay or apply.
+- The exact certified plan is replayed through the existing `preview_edit()`
+  authority and delegated once to the existing `apply_edit(..., overwrite=False)`
+  authority. Smart Tool owns no second writer, remapper, serializer, or atomic
+  publication path.
+- The source must remain byte-identical. Source drift before apply, during lower
+  publication, or after publication fails closed. Existing destination aliases,
+  publish races, hardlink races, and same-source destinations remain governed by
+  the existing lower path/publication authority.
+- After successful publication the destination bytes are read back, SHA-256 is
+  matched to the generic apply result, the PMX is reparsed and validated, and
+  the reparsed document must equal the exact approved preview document.
+- Deterministic repeated apply to independent destinations produces identical
+  output bytes/hashes. Diffuse RGB changes preserve source alpha, untouched
+  material fields, and non-target materials.
+- Ambiguity, unsupported capability, malformed color/draft evidence, and
+  semantic target selection remain upstream responsibilities. There is no
+  silent retargeting, semantic refresh, automatic confirmation, or fuzzy
+  fallback.
+- Local certification before release preparation: 35 focused v0.9.5.8 tests
+  pass; the CP16 targeted bundle runs 918 tests with one skip; canonical CP17
+  discovery runs 3,149 tests with two optional skips. Optional private and
+  secondary corpus gates are honestly skipped when no lawful corpus is
+  configured.
+- The package root remains exactly `('__version__',)`, the root service surface
+  is unchanged, and Smart CLI remains `smart inspect` only.
+
+See `docs/v0958_confirmed_smart_material_apply_integration.md` for the frozen
+confirmed-apply contract.
 
 ## Version 0.9.5.7 Smart Material Preview Bridge
 

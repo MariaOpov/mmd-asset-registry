@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.5.7` maps
-to the PEP 440 Python distribution version `0.9.5.7`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.5.8` maps
+to the PEP 440 Python distribution version `0.9.5.8`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -79,6 +79,14 @@ For v0.9.5.7 the runtime wheel must additionally include
 reviewed source. The module remains private, delegates to the existing preview
 service, and adds no package-root or root-service export. Its v0.9.5.7 tests
 remain excluded from the wheel and are carried only by the sdist's existing
+Python-test rule.
+
+For v0.9.5.8 the runtime wheel must additionally include
+`mmd_registry/services/_smart_material_apply.py` with bytes matching the
+reviewed source. The module remains private, delegates to the existing preview
+and generic apply authorities, owns no second writer/remapper/publication path,
+and adds no package-root or root-service export. Its v0.9.5.8 tests remain
+excluded from the wheel and are carried only by the sdist's existing
 Python-test rule.
 
 Build output remains local and ignored. This checkpoint does not upload or
@@ -201,6 +209,14 @@ the private Smart Material preview module imports from the installed wheel,
 preserves the root/service public surfaces, accepts the same certified
 source-bound schema-one draft, delegates to the installed existing preview
 authority, preserves source bytes and material alpha, and publishes no output.
+Feature-branch artifact hashes remain NONFINAL; final release digests are
+established only from merged-main certification.
+
+For v0.9.5.8 the installed-package certification must additionally prove that
+the private Smart Material apply module imports from the installed wheel,
+runtime version is `0.9.5.8`, package/service public surfaces remain frozen,
+the module delegates to existing preview/apply authorities, and no Smart CLI
+mutation command or second writer/remapper/publication authority is introduced.
 Feature-branch artifact hashes remain NONFINAL; final release digests are
 established only from merged-main certification.
 

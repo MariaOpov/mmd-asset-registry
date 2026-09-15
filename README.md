@@ -19,19 +19,65 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.8
-Release label: v0.9.5.8
+Tool version: 0.9.5.9
+Release label: v0.9.5.9
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.8` maps to the PEP 440 Python package version
-`0.9.5.8`. This patch adds a private Confirmed Smart Material Apply Integration
-from the certified v0.9.5.7 preview into the existing safe apply authority.
-Exact explicit confirmation is required; output is published only to a distinct
-no-clobber destination and is read back, reparsed, validated, and compared with
-the approved preview. It adds no automatic apply, source overwrite, second
-writer/remapper/apply engine, Smart mutation CLI command, or public API.
+Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.9` maps to the PEP 440 Python package version
+`0.9.5.9`. This patch expands private Smart Material authoring beyond diffuse
+RGB with exact transparency, material-specular, and material-edge intents.
+Drafting reuses the existing schema-one `PmxEditPlan` / `UpdateMaterial`
+authority, preview reuses the existing Smart preview bridge, and confirmed
+execution remains governed by the released explicit-confirmation/apply path.
+Texture replacement and appearance presets remain architecture-blocked,
+brightness remains unsupported for v0.9.5.9, and the patch adds no automatic
+apply, source overwrite, second writer/remapper/apply path, Smart mutation CLI
+command, package-root export, or root-service export.
+
+## Version 0.9.5.9 Smart Material Appearance Expansion
+
+Version 0.9.5.9 expands the private Smart Material authoring bridge from diffuse
+RGB to three exact appearance capabilities: transparency, material specular, and
+material edge. The implementation remains private and does not add a new CLI
+command, package-root API, or root-service export.
+
+- The private implementation lives in
+  `mmd_registry/services/_smart_material_appearance.py`. It accepts only exact
+  `MATERIAL` evidence resolved through the existing Smart inspection/draft
+  authority; callers cannot supply raw material indices or bypass ambiguity
+  handling.
+- Transparency updates only diffuse alpha while preserving source diffuse RGB.
+  Specular intent may update exact specular RGB and/or strength. Edge intent may
+  update exact edge RGBA and/or scale while preserving `drawing_flags`.
+- All floats are exact finite PMX float32 values. Transparency is restricted to
+  `[0.0, 1.0]`; no clamp, gamma conversion, 0-255 inference, or silent coercion
+  is introduced.
+- Draft composition reuses the existing `PmxEditPlan(schema_version=1)` and
+  `UpdateMaterial` authority, emits one operation per exact material target in
+  ascending index order, and binds the exact source SHA-256.
+- Preview delegates to the existing Smart Material preview bridge. Confirmed
+  apply remains governed by the released v0.9.5.8 explicit-confirmation path and
+  generic no-clobber apply/publication authority. Preview success is still not
+  apply permission.
+- Texture replacement and appearance presets remain
+  `BLOCKED_PENDING_ARCHITECTURE`; brightness remains unsupported for v0.9.5.9.
+  Geometry, vertices, bones, morphs, physics, UVs, arbitrary image processing,
+  automatic Smart apply, and a Smart mutation CLI remain outside scope.
+- Determinism covers repeated/equivalent inputs, canonical operation order,
+  plan identity, path normalization, and the
+  `PYTHONHASHSEED=0,1,2,42,31337` matrix.
+- Local release preparation certifies 57 focused v0.9.5.9 tests, 137 targeted
+  release tests, and canonical discovery of 3,206 tests with 2 optional skips.
+  Optional private-model certification is honestly skipped when
+  `MMD_REGISTRY_PRIVATE_PMX` is not explicitly configured.
+- The package root remains exactly `('__version__',)`, Smart Inspect remains
+  read-only, Smart CLI remains `smart inspect` only, and generic preview/apply
+  signatures remain unchanged.
+
+See `docs/v0959_smart_material_appearance_expansion.md` for the frozen release
+contract and certification boundary.
 
 ## Version 0.9.5.8 Confirmed Smart Material Apply Integration
 

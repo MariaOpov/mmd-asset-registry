@@ -1,7 +1,7 @@
 # Public API policy
 
 This document defines the public package boundary carried from v0.9.0 through
-v0.9.5.8. The release retains read-only reference analysis and the v0.9.1
+v0.9.5.9. The release retains read-only reference analysis and the v0.9.1
 certified structural execution boundary while additively promoting bounded
 structural insertion and transactions through the reviewed authorities. Raw
 structural writer, remap, serialization, and filesystem-publication internals
@@ -241,6 +241,36 @@ No automatic apply, in-place overwrite, second writer/remapper/preview/apply
 engine, new transaction schema, semantic retargeting, ambiguity resolution,
 Smart mutation CLI command, package-root promotion, or service-root promotion
 is introduced.
+
+## Smart Material Appearance private expansion (v0.9.5.9)
+
+v0.9.5.9 adds no public package API. The implementation module
+`mmd_registry.services._smart_material_appearance` remains private and is not
+promoted through either `mmd_registry.__all__` or
+`mmd_registry.services.__all__`.
+
+The private expansion consumes exact Smart `MATERIAL` evidence and supports only
+the frozen appearance primitives `transparency`, `material_specular`, and
+`material_edge`. It normalizes exact finite PMX float32 intent, resolves target
+materials through existing Smart authority, and composes the existing
+`PmxEditPlan(schema_version=1)` / `UpdateMaterial` vocabulary. Callers cannot
+supply raw material indices.
+
+Transparency preserves diffuse RGB and changes only alpha. Specular intent may
+change exact specular RGB and/or strength. Edge intent may change exact edge
+RGBA and/or scale while preserving drawing flags. Untouched fields and
+non-target materials remain unchanged.
+
+Preview delegates to the released Smart Material preview bridge. Confirmed
+execution continues through the released v0.9.5.8 explicit-confirmation and
+generic apply/publication authority; preview success is not apply permission.
+The module owns no writer, remapper, serializer, filesystem publication path,
+second preview/apply engine, transaction schema, or public mutation authority.
+
+Texture replacement and appearance presets remain architecture-blocked and
+brightness remains unsupported for v0.9.5.9. No automatic apply, Smart mutation
+CLI command, geometry/vertex/bone/morph/physics/UV authoring, fuzzy ownership,
+or arbitrary image-processing authority is introduced.
 
 ## Capability surface
 

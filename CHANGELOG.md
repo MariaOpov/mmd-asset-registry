@@ -2,6 +2,55 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.9 - 2026-09-15
+
+### Added
+
+- Added the private Smart Material Appearance Expansion with exact
+  `transparency`, `material_specular`, and `material_edge` capability
+  representation and source-bound draft composition.
+- Added exact transparency alpha, specular RGB/strength, and edge RGBA/scale
+  intent normalization through finite canonical PMX float32 values.
+- Added exact MATERIAL-evidence target resolution, deterministic one-operation-
+  per-material draft composition, existing-preview integration, parity,
+  determinism/hardening, compatibility protection, and adversarial corpus
+  certification without adding a second writer/remapper/preview/apply path.
+- Added the frozen v0.9.5.9 appearance-expansion release document and release-
+  facing regression/packaging certification.
+
+### Changed
+
+- Bumped the runtime and distribution version from `0.9.5.8` to `0.9.5.9`.
+- Extended release-facing documentation, CI regression coverage, packaging
+  policy, release checklist, and current-version compatibility assertions while
+  preserving the released v0.9.5.8 confirmed-apply authority unchanged.
+- Kept the package root exactly `('__version__',)`, Smart Inspect read-only,
+  Smart CLI inspect-only, and generic preview/apply signatures unchanged.
+
+### Verified
+
+- CP23 targeted release regression passes 137 tests across the v0.9.5.9 focused
+  suite and protected Smart Material/determinism/adversarial regressions.
+- CP24 canonical discovery completes 3,206 tests with 2 optional skips and zero
+  failures/errors.
+- Private-PMX certification reports `PASS_WITH_OPTIONAL_SKIP` when
+  `MMD_REGISTRY_PRIVATE_PMX` is unset; the available local synthetic
+  adversarial PMX corpus passes its deterministic fail-closed certification.
+- Exact transparency/specular/edge preview, confirmed apply, destination reparse,
+  validation, untouched-field preservation, source immutability, and
+  deterministic publication parity are certified before release preparation.
+
+### Safety and compatibility
+
+- Texture replacement and appearance presets remain
+  `BLOCKED_PENDING_ARCHITECTURE`; brightness remains unsupported for v0.9.5.9.
+- No automatic Smart apply, source overwrite, geometry/vertex/bone/morph/
+  physics/UV authoring, arbitrary image processing, Smart mutation CLI, public
+  API promotion, new transaction schema, second writer/remapper, or second
+  preview/apply/publication path is introduced.
+- Push, pull request, merge, tag, GitHub Release, and PyPI publication remain
+  separate later gates; PyPI always requires separate explicit authorization.
+
 ## 0.9.5.8 - 2026-09-15
 
 ### Added

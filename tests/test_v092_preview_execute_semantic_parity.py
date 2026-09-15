@@ -328,7 +328,7 @@ class PreviewExecuteSemanticParityTests(unittest.TestCase):
         self._assert_public_parity(request)
 
     def test_public_authority_and_capability_freeze_survives_cp18(self) -> None:
-        self.assertEqual(mmd_registry.__version__, "0.9.5.8")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.9")
         self.assertIs(
             services.PmxStructuralEditRequest,
             services.PmxStructuralPreviewRequest,

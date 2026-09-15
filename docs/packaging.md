@@ -15,8 +15,8 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.5.8` maps
-to the PEP 440 Python distribution version `0.9.5.8`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.5.9` maps
+to the PEP 440 Python distribution version `0.9.5.9`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
@@ -88,6 +88,13 @@ and generic apply authorities, owns no second writer/remapper/publication path,
 and adds no package-root or root-service export. Its v0.9.5.8 tests remain
 excluded from the wheel and are carried only by the sdist's existing
 Python-test rule.
+
+For v0.9.5.9 the runtime wheel must additionally include
+`mmd_registry/services/_smart_material_appearance.py` with bytes matching the
+reviewed source. The module remains private, reuses the existing
+`PmxEditPlan`/`UpdateMaterial`/preview/apply authorities, and adds no
+package-root or root-service export. Its v0.9.5.9 tests remain excluded from the
+wheel and are carried only by the sdist's existing Python-test rule.
 
 Build output remains local and ignored. This checkpoint does not upload or
 publish either artifact.
@@ -219,6 +226,15 @@ the module delegates to existing preview/apply authorities, and no Smart CLI
 mutation command or second writer/remapper/publication authority is introduced.
 Feature-branch artifact hashes remain NONFINAL; final release digests are
 established only from merged-main certification.
+
+For v0.9.5.9 the installed-package certification must additionally prove that
+the private Smart Material Appearance module imports from the installed wheel,
+runtime version is `0.9.5.9`, package/service public surfaces remain frozen,
+exact transparency/specular/edge intent behavior remains available, and no
+Smart mutation CLI, second writer/remapper/preview/apply/publication authority,
+or private-data leak is introduced. Feature-branch artifact hashes remain
+NONFINAL; final release digests are established only from merged-main
+certification.
 
 Package indexes remain enabled by default so pip can resolve `PyYAML>=6.0` in a
 genuinely empty environment. A complete local dependency wheelhouse can be used

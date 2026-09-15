@@ -1,4 +1,4 @@
-"""Release-readiness checks for v0.9.5.8."""
+"""Release-readiness checks for v0.9.5.9."""
 
 from __future__ import annotations
 
@@ -26,22 +26,28 @@ SMART_INSPECT_DOC_PATH = PROJECT_ROOT / "docs" / "v0955_smart_inspect_cli.md"
 SMART_MATERIAL_DOC_PATH = PROJECT_ROOT / "docs" / "v0956_smart_material_color_draft.md"
 SMART_PREVIEW_DOC_PATH = PROJECT_ROOT / "docs" / "v0957_smart_material_preview_bridge.md"
 SMART_APPLY_DOC_PATH = PROJECT_ROOT / "docs" / "v0958_confirmed_smart_material_apply_integration.md"
+SMART_APPEARANCE_DOC_PATH = PROJECT_ROOT / "docs" / "v0959_smart_material_appearance_expansion.md"
 
 
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_9_5_8(self) -> None:
-        self.assertEqual(__version__, "0.9.5.8")
+    def test_package_version_is_0_9_5_9(self) -> None:
+        self.assertEqual(__version__, "0.9.5.9")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.9.5.8", readme)
-        self.assertIn("Release label: v0.9.5.8", readme)
+        self.assertIn("Tool version: 0.9.5.9", readme)
+        self.assertIn("Release label: v0.9.5.9", readme)
         self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
+        self.assertIn("## Version 0.9.5.9 Smart Material Appearance Expansion", readme)
+        self.assertIn("_smart_material_appearance.py", readme)
+        self.assertIn("57 focused v0.9.5.9 tests", readme)
+        self.assertIn("137 targeted release tests", " ".join(readme.split()))
+        self.assertIn("3,206 tests", readme)
         self.assertIn("## Version 0.9.5.8 Confirmed Smart Material Apply Integration", readme)
         self.assertIn("_smart_material_apply.py", readme)
         self.assertIn("3,149 tests", readme)
@@ -75,8 +81,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn('`structural_contract="reference_safe_execution"`', readme)
         self.assertIn("`apply_structural_edit()`", readme)
         packaging = PACKAGING_PATH.read_text(encoding="utf-8")
-        self.assertIn("`v0.9.5.8` maps", packaging)
-        self.assertIn("distribution version `0.9.5.8`", packaging)
+        self.assertIn("`v0.9.5.9` maps", packaging)
+        self.assertIn("distribution version `0.9.5.9`", packaging)
         self.assertIn("structural preview/execution services", packaging)
         self.assertIn("structural transaction capability", packaging)
         self.assertIn("85 regular", packaging)
@@ -90,6 +96,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("_smart_material_color.py", packaging)
         self.assertIn("_smart_material_draft.py", packaging)
         self.assertIn("_smart_material_preview.py", packaging)
+        self.assertIn("_smart_material_appearance.py", packaging)
         self.assertIn("_smart_material_apply.py", packaging)
         normalized_packaging = " ".join(packaging.split())
         self.assertIn("does not include `docs/`", normalized_packaging)
@@ -223,11 +230,19 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("## Smart material color draft private foundation (v0.9.5.6)", public_api)
         self.assertIn("## Smart material preview bridge private foundation (v0.9.5.7)", public_api)
         self.assertIn("## Confirmed Smart Material apply private integration (v0.9.5.8)", public_api)
+        self.assertIn("## Smart Material Appearance private expansion (v0.9.5.9)", public_api)
         smart_apply_doc = SMART_APPLY_DOC_PATH.read_text(encoding="utf-8")
         self.assertIn("Confirmed Smart Material Apply Integration", smart_apply_doc)
         self.assertIn("apply_smart_material_color_draft", smart_apply_doc)
         self.assertIn("explicit confirmation", smart_apply_doc)
         self.assertIn("post-write", smart_apply_doc)
+        smart_appearance_doc = SMART_APPEARANCE_DOC_PATH.read_text(encoding="utf-8")
+        self.assertIn("Smart Material Appearance Expansion", smart_appearance_doc)
+        self.assertIn("transparency", smart_appearance_doc)
+        self.assertIn("material_specular", smart_appearance_doc)
+        self.assertIn("material_edge", smart_appearance_doc)
+        self.assertIn("BLOCKED_PENDING_ARCHITECTURE", smart_appearance_doc)
+        self.assertIn("package root", smart_appearance_doc)
         smart_preview_doc = SMART_PREVIEW_DOC_PATH.read_text(encoding="utf-8")
         self.assertIn("Smart Material Preview Bridge", smart_preview_doc)
         self.assertIn("preview_smart_material_color_draft", smart_preview_doc)
@@ -298,6 +313,9 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_changelog_documents_v093_and_prior_release_history(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("## 0.9.5.9 - 2026-09-15", changelog)
+        self.assertIn("Smart Material Appearance Expansion", changelog)
+        self.assertIn("3,206 tests", changelog)
         self.assertIn("## 0.9.5.8 - 2026-09-15", changelog)
         self.assertIn("Confirmed Smart Material Apply Integration", changelog)
         self.assertIn("3,149 tests", changelog)
@@ -368,7 +386,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.9.5.8'", workflow)
+        self.assertIn("assert __version__ == '0.9.5.9'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -458,6 +476,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_v0956_smart_material_draft", workflow)
         self.assertIn("tests.test_v0956_smart_material_grouping", workflow)
         self.assertIn("tests.test_v0957_smart_material_preview_bridge", workflow)
+        self.assertIn("tests.test_v0959_smart_material_appearance", workflow)
         self.assertIn("tests.test_v0958_smart_material_apply_integration", workflow)
         self.assertIn("tests.test_v095_transaction_plan_build_vertex_cli", workflow)
         self.assertIn("tests.test_release_readiness", workflow)
@@ -494,8 +513,8 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.9.5.8", checklist)
-        self.assertIn("distribution version is `0.9.5.8`", checklist)
+        self.assertIn("MMD Asset Registry v0.9.5.9", checklist)
+        self.assertIn("distribution version is `0.9.5.9`", checklist)
         self.assertIn("python -m coverage run -m unittest discover -s tests -q", checklist)
         self.assertIn("git --no-pager diff --check", checklist)
         self.assertIn("python -m ruff check", checklist)
@@ -506,8 +525,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("MMD_REGISTRY_PRIVATE_PMX", checklist)
         self.assertIn("Optional private runtime validation is read-only", checklist)
         self.assertIn("tests.test_stable_edit_service", checklist)
-        self.assertIn("Record the observed v0.9.5.8 full-suite count", checklist)
-        self.assertIn("Record the observed v0.9.5.8 wheel/sdist member counts", checklist)
+        self.assertIn("Record the observed v0.9.5.9 full-suite count", checklist)
+        self.assertIn("Record the observed v0.9.5.9 wheel/sdist member counts", checklist)
         self.assertIn("Recompute artifact SHA-256", checklist)
         self.assertIn("pre-commit digests are not final release digests", checklist)
         self.assertIn("structural_write=True", checklist)
@@ -521,8 +540,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_structural_resource_state_isolation", checklist)
         self.assertIn("Verify merged main", checklist)
         self.assertIn("Never tag the feature", checklist)
-        self.assertIn("git tag -a v0.9.5.8", checklist)
-        self.assertIn("gh release create v0.9.5.8", checklist)
+        self.assertIn("git tag -a v0.9.5.9", checklist)
+        self.assertIn("gh release create v0.9.5.9", checklist)
         self.assertIn("isPrerelease` is `false", checklist)
         self.assertNotIn("--prerelease", checklist)
         self.assertIn("explainability remains read-only", checklist)
@@ -532,6 +551,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("Smart Material Preview Bridge is private preview delegation only", checklist)
         self.assertIn("Confirmed Smart Material Apply Integration is private confirmed execution", checklist)
         self.assertIn("tests.test_v0957_smart_material_preview_bridge", checklist)
+        self.assertIn("tests.test_v0959_smart_material_appearance", checklist)
+        self.assertIn("Smart Material Appearance Expansion is private bounded authoring only", checklist)
         self.assertIn("tests.test_v0958_smart_material_apply_integration", checklist)
         self.assertIn("Do not publish the wheel or sdist to PyPI", checklist)
 

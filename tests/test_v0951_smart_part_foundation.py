@@ -196,7 +196,7 @@ class SmartPartFoundationTests(unittest.TestCase):
 
     def test_root_public_surface_unchanged(self) -> None:
         self.assertEqual(mmd_registry.__all__, ("__version__",))
-        self.assertEqual(mmd_registry.__version__, "0.9.5.8")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.9")
 
     def test_smart_symbols_not_root_promoted(self) -> None:
         for name in smart_parts.__all__:

@@ -15,12 +15,16 @@ Python packages in the distribution.
 
 `mmd_registry.__version__` remains the single runtime version source.
 `pyproject.toml` declares `version` as dynamic and asks setuptools to read that
-literal attribute. For the current release, the Git/GitHub label `v0.9.5.9` maps
-to the PEP 440 Python distribution version `0.9.5.9`. Runtime imports, installed
+literal attribute. For the current release, the Git/GitHub label `v0.9.5.10` maps
+to the PEP 440 Python distribution version `0.9.5.10`. Runtime imports, installed
 metadata, wheel and sdist filenames, console output, reports, CI assertions,
 and release-facing tests all derive from or explicitly verify that mapping; no
 second distribution-version source is introduced. Historical release mappings
 such as `pre-0.9.0` -> `0.9.0a0` remain documented in the changelog.
+
+For v0.9.5.10 this is a release-identity and synthetic-hardening
+promotion only. Historical v0.9.5.9 module and packaging guarantees
+remain in force; no runtime feature or package export is added.
 
 ## Dependencies and build backend
 

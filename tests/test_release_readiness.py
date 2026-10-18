@@ -1,4 +1,4 @@
-"""Release-readiness checks for v0.9.5.9."""
+"""Release-readiness checks for v0.9.5.10."""
 
 from __future__ import annotations
 
@@ -32,17 +32,18 @@ SMART_APPEARANCE_DOC_PATH = PROJECT_ROOT / "docs" / "v0959_smart_material_appear
 class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
-    def test_package_version_is_0_9_5_9(self) -> None:
-        self.assertEqual(__version__, "0.9.5.9")
+    def test_package_version_is_0_9_5_10(self) -> None:
+        self.assertEqual(__version__, "0.9.5.10")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.9.5.9", readme)
-        self.assertIn("Release label: v0.9.5.9", readme)
+        self.assertIn("Tool version: 0.9.5.10", readme)
+        self.assertIn("Release label: v0.9.5.10", readme)
         self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
         self.assertIn("Supported registry schemas: 0.2, 0.3", readme)
+        self.assertIn("## Version 0.9.5.10 Smart Material Editing Hardening", readme)
         self.assertIn("## Version 0.9.5.9 Smart Material Appearance Expansion", readme)
         self.assertIn("_smart_material_appearance.py", readme)
         self.assertIn("57 focused v0.9.5.9 tests", readme)
@@ -81,8 +82,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn('`structural_contract="reference_safe_execution"`', readme)
         self.assertIn("`apply_structural_edit()`", readme)
         packaging = PACKAGING_PATH.read_text(encoding="utf-8")
-        self.assertIn("`v0.9.5.9` maps", packaging)
-        self.assertIn("distribution version `0.9.5.9`", packaging)
+        self.assertIn("`v0.9.5.10` maps", packaging)
+        self.assertIn("distribution version `0.9.5.10`", packaging)
         self.assertIn("structural preview/execution services", packaging)
         self.assertIn("structural transaction capability", packaging)
         self.assertIn("85 regular", packaging)
@@ -313,6 +314,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_changelog_documents_v093_and_prior_release_history(self) -> None:
         changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
+        self.assertIn("## 0.9.5.10 - 2026-10-16", changelog)
         self.assertIn("## 0.9.5.9 - 2026-09-15", changelog)
         self.assertIn("Smart Material Appearance Expansion", changelog)
         self.assertIn("3,206 tests", changelog)
@@ -386,7 +388,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.9.5.9'", workflow)
+        self.assertIn("assert __version__ == '0.9.5.10'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)
@@ -513,8 +515,8 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_release_checklist_covers_safe_publication_flow(self) -> None:
         checklist = RELEASE_CHECKLIST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("MMD Asset Registry v0.9.5.9", checklist)
-        self.assertIn("distribution version is `0.9.5.9`", checklist)
+        self.assertIn("MMD Asset Registry v0.9.5.10", checklist)
+        self.assertIn("distribution version is `0.9.5.10`", checklist)
         self.assertIn("python -m coverage run -m unittest discover -s tests -q", checklist)
         self.assertIn("git --no-pager diff --check", checklist)
         self.assertIn("python -m ruff check", checklist)
@@ -525,8 +527,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("MMD_REGISTRY_PRIVATE_PMX", checklist)
         self.assertIn("Optional private runtime validation is read-only", checklist)
         self.assertIn("tests.test_stable_edit_service", checklist)
-        self.assertIn("Record the observed v0.9.5.9 full-suite count", checklist)
-        self.assertIn("Record the observed v0.9.5.9 wheel/sdist member counts", checklist)
+        self.assertIn("Record the observed v0.9.5.10 full-suite count", checklist)
+        self.assertIn("Record the observed v0.9.5.10 wheel/sdist member counts", checklist)
         self.assertIn("Recompute artifact SHA-256", checklist)
         self.assertIn("pre-commit digests are not final release digests", checklist)
         self.assertIn("structural_write=True", checklist)
@@ -540,8 +542,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("tests.test_pmx_structural_resource_state_isolation", checklist)
         self.assertIn("Verify merged main", checklist)
         self.assertIn("Never tag the feature", checklist)
-        self.assertIn("git tag -a v0.9.5.9", checklist)
-        self.assertIn("gh release create v0.9.5.9", checklist)
+        self.assertIn("git tag -a v0.9.5.10", checklist)
+        self.assertIn("gh release create v0.9.5.10", checklist)
         self.assertIn("isPrerelease` is `false", checklist)
         self.assertNotIn("--prerelease", checklist)
         self.assertIn("explainability remains read-only", checklist)

@@ -2,6 +2,36 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.10 - 2026-10-16
+
+### Added
+
+- Promoted 11 synthetic-only Smart Material Editing hardening and certification
+  test modules merged through PR #29, covering source drift, evidence safety,
+  Unicode/duplicate material identities, deterministic preview/apply parity,
+  observational performance and integration handoff.
+
+### Changed
+
+- Updated package/distribution release identity from `0.9.5.9` to `0.9.5.10`.
+- Made CP16 handoff checks portable across LF/CRLF platforms and GitHub Actions
+  detached HEAD checkouts while preserving source-content integrity checks.
+- Updated current-version documentation, CI release assertions, packaging and
+  release checklist without modifying historical v0.9.5.9 records.
+
+### Verified
+
+- Before promotion, the hardening PR passed GitHub Actions on Ubuntu and Windows
+  Python 3.12; release-promotion CI and final merged-main packaging require
+  their own fresh verification.
+
+### Safety and compatibility
+
+- No production Smart Material logic, new public API, Smart mutation CLI,
+  source overwrite, PMX/registry schema, second writer/remapper or automatic
+  Smart apply authority is introduced.
+- No PyPI publication is authorized by this release-promotion change.
+
 ## 0.9.5.9 - 2026-09-15
 
 ### Added

@@ -19,22 +19,31 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.9
-Release label: v0.9.5.9
+Tool version: 0.9.5.10
+Release label: v0.9.5.10
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
-Tool version and registry schema are intentionally independent. The Git and GitHub release label `v0.9.5.9` maps to the PEP 440 Python package version
-`0.9.5.9`. This patch expands private Smart Material authoring beyond diffuse
-RGB with exact transparency, material-specular, and material-edge intents.
-Drafting reuses the existing schema-one `PmxEditPlan` / `UpdateMaterial`
-authority, preview reuses the existing Smart preview bridge, and confirmed
-execution remains governed by the released explicit-confirmation/apply path.
-Texture replacement and appearance presets remain architecture-blocked,
-brightness remains unsupported for v0.9.5.9, and the patch adds no automatic
-apply, source overwrite, second writer/remapper/apply path, Smart mutation CLI
-command, package-root export, or root-service export.
+Tool version and registry schema are intentionally independent. The Git and GitHub
+release label `v0.9.5.10` maps to the PEP 440 Python package version
+`0.9.5.10`. This release adds deterministic, synthetic-only Smart Material
+Editing hardening and certification, without expanding the released v0.9.5.9
+Smart Material functionality, public API, CLI or PMX mutation authority.
+
+## Version 0.9.5.10 Smart Material Editing Hardening
+
+This release promotes the reviewed v0.9.5.10 hardening test suite and the
+portable CP16 handoff certification after pull request #29. The 11 test modules
+cover Unicode names, duplicate/unnamed material handling, multiple semantic
+targets, material-versus-texture boundaries, malformed evidence, source drift,
+preview/apply parity, determinism, observational performance, integration
+readiness and cumulative handoff checks.
+
+No production Smart Material implementation, PMX/registry schema, generic
+preview/apply permission, public exports, or private-asset access policy changes.
+Ubuntu and Windows CI are required for the release promotion. Historical
+v0.9.5.9 behavior and the limitations documented below remain authoritative.
 
 ## Version 0.9.5.9 Smart Material Appearance Expansion
 

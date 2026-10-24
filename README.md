@@ -19,17 +19,26 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.10
-Release label: v0.9.5.10
+Tool version: 0.9.5.11
+Release label: v0.9.5.11
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3
 ```
 
 Tool version and registry schema are intentionally independent. The Git and GitHub
-release label `v0.9.5.10` maps to the PEP 440 Python package version
-`0.9.5.10`. This release adds deterministic, synthetic-only Smart Material
-Editing hardening and certification, without expanding the released v0.9.5.9
-Smart Material functionality, public API, CLI or PMX mutation authority.
+release label `v0.9.5.11` maps to the PEP 440 Python package version
+`0.9.5.11`. This release exposes existing morphs through a private,
+read-only Smart Morph inspection slice; it does not add morph mutation,
+preview/apply permission or new public package-root exports.
+
+## Version 0.9.5.11 Smart Morph Read-Only First Slice
+
+The `inspect_smart_morphs(source_bytes: bytes)` private entry point
+inventories existing morph types 0 through 10 and reports exact `smile`
+and `blink` capability descriptions from frozen CP02-R2 detector evidence.
+Supported means structural evidence only; ambiguity and mismatch block
+support, and there is no writer, weight setting or preview/apply authority.
+See `docs/v09511_smart_morph_first_slice.md` for the contract and limits.
 
 ## Version 0.9.5.10 Smart Material Editing Hardening
 

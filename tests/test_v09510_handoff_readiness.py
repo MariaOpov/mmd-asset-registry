@@ -31,6 +31,38 @@ def _root():
 def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
+# CP07 v0.9.5.11: permit exactly three certified one-assertion test variants.
+# Historical 28-file PINS, canonical manifest and matrix remain unchanged.
+_CP07_VERSION_ONLY = {
+    'tests/test_v09510_determinism_certification.py': (
+        '4e3fc48974863d7769d542911749b106d35771c22362a8cbdcbecbd0f04f82f1',
+        "self.assertEqual(mmd_registry.__version__,'0.9.5.10')"),
+    'tests/test_v09510_performance_hardening.py': (
+        'd4d41774a50fb0ea267e4eea155c6c3a02f7e7ff9927249dc60edfe74fe6d5dc',
+        "self.assertEqual(mmd_registry.__version__, '0.9.5.10')"),
+    'tests/test_v09510_integration_readiness.py': (
+        'a8cc2b991b230914a526144c507a97a1e217fb9e7d668d00623509490923947d',
+        "self.assertEqual(mmd_registry.__version__,'0.9.5.10')"),
+}
+
+def _cp07_frozen_digest_allowed(relative, content, expected, valid_hashes):
+    if expected in valid_hashes:
+        return True
+    variant = _CP07_VERSION_ONLY.get(relative)
+    if variant is None:
+        return False
+    promoted_digest, old_assertion = variant
+    old = old_assertion.encode('utf-8')
+    new = old.replace(b'0.9.5.10', b'0.9.5.11')
+    normalized = content.replace(b'\r\n', b'\n')
+    if normalized.count(new) != 1:
+        return False
+    restored = normalized.replace(new, old, 1)
+    original_digests = {_sha(restored), _sha(restored.replace(b'\n', b'\r\n'))}
+    # Two independent locks: the R5-approved promoted digest and the
+    # original CP16 historical digest after reversing only that assertion.
+    return promoted_digest in valid_hashes and expected in original_digests
+
 def _module_contract(relative, expected_count):
     root = _root()
     path = root / relative
@@ -39,7 +71,7 @@ def _module_contract(relative, expected_count):
     content = path.read_bytes()
     lf = content.replace(b'\r\n', b'\n')
     valid_hashes = {_sha(content), _sha(lf), _sha(lf.replace(b'\n', b'\r\n'))}
-    if PINS[relative] not in valid_hashes:
+    if not _cp07_frozen_digest_allowed(relative, content, PINS[relative], valid_hashes):
         raise AssertionError('Frozen test digest mismatch: ' + relative)
     tree = ast.parse(content.decode('utf-8'), filename=relative)
     compile(tree, relative, 'exec')
@@ -100,7 +132,7 @@ class V09510HandoffReadinessTests(unittest.TestCase):
             # Preserve exact provenance while tolerating LF/CRLF checkout.
             hashes = {_sha(raw), _sha(lf),
                       _sha(lf.replace(b'\n', b'\r\n'))}
-            self.assertIn(expected, hashes, rel)
+            self.assertTrue(_cp07_frozen_digest_allowed(rel, raw, expected, hashes), rel)
         matrix = json.dumps(HANDOFF_MATRIX, ensure_ascii=True,
                             separators=(',', ':')).encode('utf-8')
         self.assertEqual(_sha(matrix), MATRIX_SHA256)
@@ -153,7 +185,7 @@ class V09510HandoffReadinessTests(unittest.TestCase):
 
     def test_cp16_14_git_api_and_no_private_asset_boundary(self):
         import mmd_registry
-        self.assertEqual(mmd_registry.__version__, '0.9.5.10')
+        self.assertEqual(mmd_registry.__version__, '0.9.5.11')
         self.assertEqual(mmd_registry.__all__, ('__version__',))
         self.assertFalse(os.environ.get('MMD_REGISTRY_PRIVATE_PMX'))
         self.assertEqual(len(METHODS), 10)

@@ -130,7 +130,7 @@ class V09510IntegrationReadinessTests(unittest.TestCase):
     def test_cp15_14_public_root_api_and_synthetic_boundary(self):
         import mmd_registry
         from tests.test_v09510_preview_apply_parity_hardening import _source
-        self.assertEqual(mmd_registry.__version__,'0.9.5.10')
+        self.assertEqual(mmd_registry.__version__,'0.9.5.11')
         self.assertEqual(mmd_registry.__all__,('__version__',))
         self.assertFalse(os.environ.get('MMD_REGISTRY_PRIVATE_PMX'))
         self.assertEqual(set(self.keyed),{(s,c) for s in ('single','multi') for c in CAPABILITIES})

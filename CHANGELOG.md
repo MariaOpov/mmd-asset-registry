@@ -2,6 +2,25 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.11 - 2026-10-22
+
+### Added
+
+- Added the private, read-only Smart Morph first slice for exact `smile` and `blink` aliases, with immutable source-bound inventory and capability descriptions.
+- Preserved fail-closed source mismatch, same-source conflict, multi-candidate ambiguity, unsupported morph-type and empty-offset precedence.
+- Added synthetic-first development and adversarial QA tests, including five-seed deterministic certification, merged in PR #31.
+
+### Verified
+
+- CP04 unified-session adversarial QA completed 80/80 (16 tests for each of five seeds), without an external independent Session B certification claim.
+- CP05 integration executed 3,418 tests (two optional full-discovery skips), with no failures/errors.
+- PR #31 and merged-main CI both passed Windows and Ubuntu Python 3.12 validation before this metadata promotion.
+
+### Safety and compatibility
+
+- No new PMX writer, morph-weight setter, deformation, preview/apply authority, Smart mutation CLI or public package-root export.
+- Prior release records and registered schemas remain unchanged. No PyPI publication is authorized.
+
 ## 0.9.5.10 - 2026-10-16
 
 ### Added

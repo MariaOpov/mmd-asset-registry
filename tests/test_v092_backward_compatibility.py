@@ -324,7 +324,7 @@ class V092BackwardCompatibilityTests(unittest.TestCase):
             "unsupported",
             manifest_after["structural_target_kinds"],
         )
-        self.assertEqual(mmd_registry.__version__, "0.9.5.11")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.12")
         self.assertIs((manifest_after)["structural_insert"], True)
         self.assertIs(
             services.PmxStructuralEditRequest,

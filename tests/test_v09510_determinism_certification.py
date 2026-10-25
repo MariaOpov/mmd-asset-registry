@@ -177,7 +177,7 @@ class V09510DeterminismCertificationTests(unittest.TestCase):
 
     def test_cp13_14_semantic_preview_nonwriting_public_root_api_frozen(self):
         import mmd_registry
-        self.assertEqual(mmd_registry.__version__,'0.9.5.11')
+        self.assertEqual(mmd_registry.__version__,'0.9.5.12')
         self.assertEqual(mmd_registry.__all__,('__version__',))
         for fixture in SUPPORTED_FIXTURES:
             for cap in CAPABILITIES:

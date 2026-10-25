@@ -200,7 +200,7 @@ class SmartMorphCapabilityTests(unittest.TestCase):
 
     def test_legacy_version_exports_not_modified(self) -> None:
         import mmd_registry
-        self.assertEqual(mmd_registry.__version__, "0.9.5.11")
+        self.assertEqual(mmd_registry.__version__, "0.9.5.12")
         self.assertEqual(mmd_registry.__all__, ("__version__",))
 
 

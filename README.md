@@ -19,7 +19,7 @@ redistributes an asset.
 ## Current version
 
 ```text
-Tool version: 0.9.5.11
+Tool version: 0.9.5.12 (local candidate; not released)
 Release label: v0.9.5.11
 Latest registry schema: 0.3
 Supported registry schemas: 0.2, 0.3

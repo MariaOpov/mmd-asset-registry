@@ -45,8 +45,49 @@ _CP07_VERSION_ONLY = {
         "self.assertEqual(mmd_registry.__version__,'0.9.5.10')"),
 }
 
+# CP14-C v0.9.5.12: additive exact three-path provenance variant only.
+# The original CP16 PINS, CP07 map, hashes, and prior variants are immutable.
+_CP14C_V09512_EXACT_LF_DIGESTS = {
+    'tests/test_v09510_determinism_certification.py': (
+        '9dc370081305807bf2cfbcc654e659c5f13502116bb1af80161dd3aed0b39fb1',
+        '9815af78604c24e9d1a28f9a045236f0befa049853c5f7b132a9a7d0ac036db0'),
+    'tests/test_v09510_integration_readiness.py': (
+        'fd2bc34d4cccf4fb44ff8962d58d44056620f6afe46b6aa0f0e53c1582a28b8d',
+        '9042ff36a8eb73325c57f5ca49c3a35b8a87f2b5bd672a8d15bbc7938b51479f'),
+    'tests/test_v09510_performance_hardening.py': (
+        '2a64bd04a57928004a6deaa2a4f97cafb4aebe3c4b91bf719f62df85156a1068',
+        'f9a1a12838704416500bdb64c2b9187e0eee154c5ec76ce8e19a52438fd8a287'),
+}
+
+def _cp14c_v09512_digest_allowed(relative, content, expected):
+    pair = _CP14C_V09512_EXACT_LF_DIGESTS.get(relative)
+    variant = _CP07_VERSION_ONLY.get(relative)
+    if pair is None or variant is None or expected != PINS.get(relative):
+        return False
+    if b'\r' in content.replace(b'\r\n', b''):
+        return False
+    if b'\r\n' in content and b'\n' in content.replace(b'\r\n', b''):
+        return False
+    normalized = content.replace(b'\r\n', b'\n')
+    if _sha(normalized) != pair[0]:
+        return False
+    original = variant[1].encode('utf-8')
+    version11 = original.replace(b'0.9.5.10', b'0.9.5.11')
+    version12 = original.replace(b'0.9.5.10', b'0.9.5.12')
+    if normalized.count(version12) != 1 or version12 == original:
+        return False
+    restored11 = normalized.replace(version12, version11, 1)
+    if _sha(restored11) != pair[1]:
+        return False
+    restored10 = restored11.replace(version11, original, 1)
+    if restored11.count(version11) != 1:
+        return False
+    return expected in {_sha(restored10), _sha(restored10.replace(b'\n', b'\r\n'))}
+
 def _cp07_frozen_digest_allowed(relative, content, expected, valid_hashes):
     if expected in valid_hashes:
+        return True
+    if _cp14c_v09512_digest_allowed(relative, content, expected):
         return True
     variant = _CP07_VERSION_ONLY.get(relative)
     if variant is None:
@@ -185,7 +226,7 @@ class V09510HandoffReadinessTests(unittest.TestCase):
 
     def test_cp16_14_git_api_and_no_private_asset_boundary(self):
         import mmd_registry
-        self.assertEqual(mmd_registry.__version__, '0.9.5.11')
+        self.assertEqual(mmd_registry.__version__, '0.9.5.12')
         self.assertEqual(mmd_registry.__all__, ('__version__',))
         self.assertFalse(os.environ.get('MMD_REGISTRY_PRIVATE_PMX'))
         self.assertEqual(len(METHODS), 10)

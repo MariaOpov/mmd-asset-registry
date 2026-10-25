@@ -33,12 +33,12 @@ class ReleaseReadinessTests(unittest.TestCase):
     """Keep release metadata, documentation, and CI expectations aligned."""
 
     def test_package_version_is_0_9_5_11(self) -> None:
-        self.assertEqual(__version__, "0.9.5.11")
+        self.assertEqual(__version__, "0.9.5.12")
 
     def test_readme_documents_current_version_and_schema(self) -> None:
         readme = README_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("Tool version: 0.9.5.11", readme)
+        self.assertIn("Tool version: 0.9.5.12 (local candidate; not released)", readme)
         self.assertIn("Release label: v0.9.5.11", readme)
         self.assertIn("PEP 440 Python package version", readme)
         self.assertIn("Latest registry schema: 0.3", readme)
@@ -390,7 +390,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_workflow_checks_release_version_and_commands(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("assert __version__ == '0.9.5.11'", workflow)
+        self.assertIn("assert __version__ == '0.9.5.12'", workflow)
         self.assertIn('MMD_REGISTRY_PRIVATE_PMX: ""', workflow)
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("windows-latest", workflow)

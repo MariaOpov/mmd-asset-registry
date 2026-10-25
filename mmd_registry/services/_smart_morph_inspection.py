@@ -23,7 +23,11 @@ from mmd_registry.services.structural_authoring_catalog import (
     PmxStructuralAuthoringMorphCatalogEntry,
     inspect_structural_authoring_catalog,
 )
-from mmd_registry.smart_part_detection import _match_smart_part_candidate_traces
+from mmd_registry.smart_part_detection import (
+    _match_smart_part_candidate_traces,
+    _trace_named_entry_candidates,
+    _build_normalized_alias_index,
+)
 from mmd_registry.smart_parts import SmartPartEvidenceKind, SmartPartKind
 
 
@@ -33,6 +37,16 @@ _SLOTS: tuple[tuple[str, SmartPartKind, frozenset[str]], ...] = (
     ("smile", SmartPartKind.FACE, frozenset(("smile", "笑顔", "笑い"))),
     ("blink", SmartPartKind.EYES, frozenset(("blink", "まばたき"))),
 )
+
+# v0.9.5.12 optional private-only English exact capability.
+_ANGRY_SLOT: tuple[str, SmartPartKind, frozenset[str]] = (
+    "angry", SmartPartKind.FACE, frozenset(("angry",))
+)
+# Private-only detector alias-index builder; released matcher remains unchanged.
+_ANGRY_ALIAS_INDEX = _build_normalized_alias_index(
+    ((SmartPartKind.FACE, ("angry",)),)
+)
+
 
 
 def _collect_morph_catalog(document: object) -> tuple[PmxStructuralAuthoringMorphCatalogEntry, ...]:
@@ -91,6 +105,7 @@ def _resolve_slot(
     all_traces: tuple[object, ...],
     morphs: tuple[SmartMorphIdentity, ...],
     source_mismatch: bool,
+    active_slots: tuple[tuple[str, SmartPartKind, frozenset[str]], ...],
 ) -> SmartMorphCapability:
     # Full pre-filter traces retain conflicting recognized local/universal names.
     direct_traces = tuple(
@@ -109,7 +124,15 @@ def _resolve_slot(
         )
     conflicting = tuple(
         idx for idx in indices
-        if len({trace.kind for trace in source_groups[idx]}) > 1  # type: ignore[attr-defined]
+        if (
+            len({trace.kind for trace in source_groups[idx]}) > 1  # type: ignore[attr-defined]
+            or len({
+                slot_name
+                for trace in source_groups[idx]
+                for slot_name, slot_part, slot_aliases in active_slots
+                if trace.kind is slot_part and trace.matched_alias in slot_aliases  # type: ignore[attr-defined]
+            }) > 1
+        )
     )
     if conflicting:
         # Include all recognized counterpart traces on conflicted indices.
@@ -157,12 +180,14 @@ def _resolve_slot(
     )
 
 
-def inspect_smart_morphs(source_bytes: bytes) -> SmartMorphInspection:
+def inspect_smart_morphs(source_bytes: bytes, *, include_angry: bool = False) -> SmartMorphInspection:
     """Describe only model-local morph inventory and exact smile/blink evidence.
 
     ``source_bytes`` is an exact binary PMX. Private source identities and model
     names are returned in-memory but NEVER printed, written or logged here.
     """
+    if type(include_angry) is not bool:
+        raise TypeError("include_angry must be bool.")
     if type(source_bytes) is not bytes:
         raise TypeError("source_bytes must be bytes, not a path or file handle.")
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -185,15 +210,31 @@ def inspect_smart_morphs(source_bytes: bytes) -> SmartMorphInspection:
     # If a tampered/malformed catalog contains foreign DTO types, fail closed
     # via the source-mismatch status rather than calling detector on bad entries.
     detector_entries = tuple(e for e in entries if isinstance(e, PmxStructuralAuthoringMorphCatalogEntry))
-    traces = _canonical_candidate_traces(
+    # The released detector remains byte-identical. Use its exact trace
+    # implementation for Angry only inside this private inspector opt-in.
+    detector_traces = _match_smart_part_candidate_traces(detector_entries)
+    angry_traces = (
         tuple(
-            t for t in _match_smart_part_candidate_traces(detector_entries)
-            if t.evidence.source_kind is SmartPartEvidenceKind.MORPH
+            trace
+            for entry in detector_entries
+            for trace in _trace_named_entry_candidates(
+                source_kind=SmartPartEvidenceKind.MORPH,
+                source_index=entry.source_index,
+                local_name=entry.local_name,
+                universal_name=entry.universal_name,
+                alias_index=_ANGRY_ALIAS_INDEX,
+            )
         )
+        if include_angry else ()
     )
+    traces = _canonical_candidate_traces(tuple(
+        t for t in detector_traces + angry_traces
+        if t.evidence.source_kind is SmartPartEvidenceKind.MORPH
+    ))
+    active_slots = _SLOTS + (_ANGRY_SLOT,) if include_angry else _SLOTS
     capabilities = tuple(
-        _resolve_slot(slot, kind, aliases, traces, morphs, mismatch)
-        for slot, kind, aliases in _SLOTS
+        _resolve_slot(slot, kind, aliases, traces, morphs, mismatch, active_slots)
+        for slot, kind, aliases in active_slots
     )
     return SmartMorphInspection(
         source_sha256=source_sha256,

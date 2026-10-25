@@ -168,7 +168,7 @@ class V09510PerformanceHardeningTests(unittest.TestCase):
         import mmd_registry
         from mmd_registry.pmx import serialize_pmx
         from tests.test_v09510_preview_apply_parity_hardening import _source, _build
-        self.assertEqual(mmd_registry.__version__, '0.9.5.11')
+        self.assertEqual(mmd_registry.__version__, '0.9.5.12')
         self.assertEqual(mmd_registry.__all__, ('__version__',))
         for mode in ('single', 'multi'):
             source = _source(mode)

@@ -139,9 +139,9 @@ class SmartMorphCapability:
     evidence: tuple[SmartMorphCandidateEvidence, ...]
 
     def __post_init__(self) -> None:
-        required_kind = {"smile": SmartPartKind.FACE, "blink": SmartPartKind.EYES}
+        required_kind = {"smile": SmartPartKind.FACE, "blink": SmartPartKind.EYES, "angry": SmartPartKind.FACE}
         if self.capability_kind not in required_kind:
-            raise ValueError("only frozen smile and blink slots are supported.")
+            raise ValueError("only smile, blink and opt-in angry slots are supported.")
         if self.part_kind is not required_kind[self.capability_kind]:
             raise ValueError("slot and SmartPartKind do not match.")
         if not isinstance(self.status, SmartMorphCapabilityStatus):
@@ -188,7 +188,7 @@ class SmartMorphInspection:
             raise TypeError("morphs must be immutable morph identities.")
         if tuple(m.source_index for m in self.morphs) != tuple(range(len(self.morphs))):
             raise ValueError("morph inventory must have consecutive ascending source indices.")
-        if type(self.capabilities) is not tuple or len(self.capabilities) != 2:
-            raise ValueError("capabilities must contain exactly two slots.")
-        if tuple(c.capability_kind for c in self.capabilities) != ("smile", "blink"):
-            raise ValueError("capability slot order must be smile, blink.")
+        if type(self.capabilities) is not tuple:
+            raise TypeError("capabilities must be an immutable tuple.")
+        if tuple(c.capability_kind for c in self.capabilities) not in (("smile", "blink"), ("smile", "blink", "angry")):
+            raise ValueError("capability order must be smile, blink, optionally angry.")

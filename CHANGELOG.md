@@ -2,6 +2,38 @@
 
 All notable changes to MMD Asset & License Registry are documented here.
 
+## 0.9.5.12 - Unreleased (merged to main 2026-10-25)
+
+### Added
+
+- Added the opt-in, private, read-only Angry morph inspection capability in
+  CP11, complementing the frozen `smile` and `blink` Smart Morph inspection.
+  Existing source-bound, ambiguity-safe and fail-closed boundaries remain.
+
+### Changed
+
+- Updated the candidate package/runtime version to `0.9.5.12` and aligned
+  tightly scoped version assertions plus legacy provenance acceptance in CP15.
+- Merged CP11 and CP15 as PR #33 into `main` (merge commit
+  `43deb359201a003261374cb3f8c6000d3f3d22d2`, 26 approved paths).
+
+### Verified
+
+- Local Python 3.12 canonical unittest: 3,400 tests, 0 failures,
+  0 errors and 2 optional skips; CP16_14 targeted Git-clean test passed.
+- Pull-request and post-merge GitHub Actions completed successfully on
+  Ubuntu and Windows Python 3.12, including their packaging and clean-install
+  workflow steps. No wheel/sdist upload was retained for independent download
+  and SHA validation.
+
+### Safety and compatibility
+
+- No new public Smart API/CLI, PMX writer, morph-weight setter, automatic
+  preview/apply authority, source overwrite or registry schema change.
+- The source is merged but version `v0.9.5.12` has not been tagged or released;
+  `v0.9.5.11` remains the latest release label. Any GitHub Release, artifact
+  publication or PyPI upload requires a separate owner authorization.
+
 ## 0.9.5.11 - 2026-10-22
 
 ### Added

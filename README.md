@@ -31,6 +31,25 @@ release label `v0.9.5.11` maps to the PEP 440 Python package version
 read-only Smart Morph inspection slice; it does not add morph mutation,
 preview/apply permission or new public package-root exports.
 
+## Version 0.9.5.12 — Merged candidate (not yet tagged or released)
+
+The v0.9.5.12 candidate source was merged into `main` through PR #33 on
+2026-10-25 (merge commit `43deb359201a003261374cb3f8c6000d3f3d22d2`).
+The current *tool version* is `0.9.5.12`, but the most recently published
+*release label* remains `v0.9.5.11` until an explicitly authorized tag and
+GitHub Release are completed. "Local candidate" above refers to the
+**unreleased distribution status**, not an unmerged source branch.
+
+This change adds an opt-in, private, read-only Angry morph inspection slice,
+alongside version and legacy compatibility alignment. There is no new public
+package-root API, Smart mutation CLI, PMX morph writer, morph weight setter,
+automatic apply, or new registry schema. Local Python 3.12 canonical unittest
+completed 3,400 tests (0 failures, 0 errors, 2 optional skips); PR #33 and
+post-merge GitHub Actions succeeded on Ubuntu and Windows. The GitHub CI
+pipeline built and inspected distribution artifacts, but CP21/CP22 recorded
+no downloadable persisted wheel/sdist for independent SHA certification.
+No `v0.9.5.12` tag, GitHub Release, or PyPI publication is claimed here.
+
 ## Version 0.9.5.11 Smart Morph Read-Only First Slice
 
 The `inspect_smart_morphs(source_bytes: bytes)` private entry point

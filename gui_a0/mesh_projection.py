@@ -47,17 +47,48 @@ def validate_source(path: Path) -> Path:
     return path
 
 
+# Core is frozen to v0.9.5.12; Studio additions may reside in the same
+# committed Git worktree. Never treat a new HEAD alone as a Core change.
+STUDIO_LANE_PREFIXES = ('gui_a0/', 'creator_p0/', 'mc_a0/')
+
+
+def _git_checked(repo: Path, *args: str) -> bytes:
+    """Bounded local Git reads only, with no network or repository mutations."""
+    run = subprocess.run(
+        ['git', '-C', str(repo), *args], capture_output=True,
+        timeout=15, check=False,
+    )
+    if run.returncode:
+        raise PreviewGateError('Local Core identity check failed: ' + args[0])
+    return run.stdout
+
+
 def verify_core(repo: Path) -> None:
+    """Accept pinned Core or a clean descendant adding only Studio lane files.
+
+    A post-merge Studio worktree no longer has HEAD==PIN. The complete diff
+    from PIN to HEAD must still be limited to Studio-owned directories,
+    protecting all original Registry Core files. Uncommitted edits are denied.
+    """
+    repo = Path(repo).resolve(strict=True)
     if not (repo / 'check_assets.py').is_file():
         raise PreviewGateError('Verified Core entrypoint is missing.')
-    head = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True,
-                          text=True, encoding='utf-8', timeout=15, check=False)
-    if head.returncode != 0 or head.stdout.strip() != PIN:
-        raise PreviewGateError('Core commit is not the approved v0.9.5.12 pin.')
-    clean = subprocess.run(['git', '-C', str(repo), 'status', '--porcelain'], capture_output=True,
-                           text=True, encoding='utf-8', timeout=15, check=False)
-    if clean.returncode or clean.stdout.strip():
+    top = Path(_git_checked(repo, 'rev-parse', '--show-toplevel').decode('utf-8').strip()).resolve(strict=True)
+    if top != repo:
+        raise PreviewGateError('Core path must be the Git worktree root.')
+    head = _git_checked(repo, 'rev-parse', 'HEAD').decode('ascii').strip()
+    if _git_checked(repo, 'status', '--porcelain=v1', '--untracked-files=all'):
         raise PreviewGateError('Core worktree must be clean for viewport generation.')
+    if head == PIN:
+        return
+    _git_checked(repo, 'merge-base', '--is-ancestor', PIN, head)
+    modified = _git_checked(repo, 'diff', '--name-only', '-z', '--no-renames', PIN, head, '--')
+    try:
+        changed = [item.decode('utf-8') for item in modified.split(b'\x00') if item]
+    except UnicodeDecodeError as exc:
+        raise PreviewGateError('Non-UTF-8 Git path in Core verification.') from exc
+    if not changed or any(not path.startswith(STUDIO_LANE_PREFIXES) for path in changed):
+        raise PreviewGateError('Committed changes outside Studio lanes; Core pin not certified.')
 
 
 def _f(value: Any) -> float:

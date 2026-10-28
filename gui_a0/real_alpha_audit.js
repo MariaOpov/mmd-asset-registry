@@ -7,6 +7,19 @@
  const status=document.getElementById('viewportStatus'),stats=document.getElementById('viewportStats');
  if(!btn||!save||!out||!canvas||!toggle||!status||!stats)return;
  let latest=null;
+ save.title='Run CP16 Real PMX Alpha A/B first, then save its result.';
+ function notify(message){
+   // Keep the result in the visible toolbar, not only below the large canvas.
+   status.textContent=message;
+   const banner=document.getElementById('globalStatus');
+   if(banner)banner.textContent=message;
+ }
+ function invalidate(){
+   latest=null;save.disabled=true;
+   save.title='Run CP16 Real PMX Alpha A/B first, then save its result.';
+   const link=document.getElementById('realAlphaDownloadLink');
+   if(link)link.hidden=true;
+ }
  const pixelBound=6000000;
  function capture(gl,on){
    toggle.checked=on;
@@ -29,11 +42,13 @@
    return {changed_pixels:different,max_difference:max,mean_changed_delta:different?Number((sum/different).toFixed(2)):0};
  }
  function run(){
-   latest=null;save.disabled=true;
+   invalidate();
    const state=window.StudioViewport?.cameraState?.();
    if(!state||!state.ready)throw Error('HOLD_LOAD_REAL_PMX_FIRST');
    if(!window.StudioAlphaPolicy?.classify)throw Error('HOLD_ALPHA_POLICY_SCRIPT_NOT_LOADED');
-   if(!status.textContent.includes('TEXTURED MESH READY'))throw Error('HOLD_WAIT_UNTIL_TEXTURES_COMPLETE');
+   // Use the renderer's actual texture lifecycle, NEVER text shown in the UI.
+   // QA PNG save, R13 toggle and other controls all legitimately overwrite that text.
+   if(state.textureLoadComplete!==true)throw Error('HOLD_WAIT_UNTIL_TEXTURES_COMPLETE: '+String(state.textureLoadFinished)+'/'+String(state.textureLoadExpected));
    const gl=canvas.getContext('webgl2');if(!gl)throw Error('HOLD_WEBGL2_UNAVAILABLE');
    const initial=toggle.checked;
    let off,on;
@@ -43,7 +58,7 @@
    // A/B has finished with the same loaded model; keep a ready sentinel for repeated audits.
    status.textContent='TEXTURED MESH READY — CP16 A/B captured';
    const label=delta.changed_pixels>0?'GPU_ALPHA_EFFECT_OBSERVED':'NO_RENDER_DIFFERENCE_FOR_THIS_MODEL';
-   latest={checkpoint:'CP16',result:'PASS_REAL_PMX_GPU_AB_CAPTURED',alpha_effect:label,
+   latest={checkpoint:'CP16',result:'PASS_REAL_PMX_GPU_AB_CAPTURED',mesh_revision:state.meshRevision,alpha_effect:label,
      observed_pixel_difference:delta,framebuffer:{width:off.w,height:off.h},
      texture_classifier:{script_loaded:true,alpha_bearing:state.sampledAlphaTextures,significant_blend:state.significantBlendTextures},
      model_summary:(stats.textContent||'').slice(0,200),
@@ -54,10 +69,19 @@
    const display={...latest,pixels:'Retained only in browser memory for optional QA PNG export'};
    out.textContent=JSON.stringify(display,null,2);
    save.disabled=false;
+   save.title='Save the captured OFF/ON comparison to local Evidence.';
  }
  btn.addEventListener('click',()=>{
-   out.textContent='CP16 RUNNING';save.disabled=true;
-   try{run();}catch(e){out.textContent='HOLD_CP16_REAL_PMX_GPU_AUDIT: '+String(e.message||e)+'\nNo transparency parity claim.';}
+   out.textContent='CP16 RUNNING';invalidate();
+   notify('CP16 A/B RUNNING — capturing actual GPU pixels...');
+   try{
+     run();
+     notify('CP16 A/B PASS — '+latest.observed_pixel_difference.changed_pixels.toLocaleString()+' changed pixels; Save Alpha A/B is now enabled.');
+   }catch(e){
+     const error='HOLD_CP16_REAL_PMX_GPU_AUDIT: '+String(e.message||e);
+     out.textContent=error+'\nNo transparency parity claim.';
+     notify(error);
+   }
  });
  function drawSnapshot(ctx,snap,x,y,w,h){
    const tmp=document.createElement('canvas');tmp.width=snap.w;tmp.height=snap.h;
@@ -67,7 +91,14 @@
    t.putImageData(im,0,0);ctx.drawImage(tmp,x,y,w,h);
  }
  save.addEventListener('click',()=>{
-   if(!latest)return;
+   const state=window.StudioViewport?.cameraState?.();
+   if(!latest||!state?.ready||!state.textureLoadComplete||state.meshRevision!==latest.mesh_revision){
+     invalidate();
+     notify('HOLD_CP16_ALPHA_AB_NO_CURRENT_CAPTURE — run CP16 Real PMX Alpha A/B first.');
+     return;
+   }
+   save.disabled=true;
+   notify('CP16 Alpha A/B PNG — saving to local Evidence...');
    try{
      const img=document.createElement('canvas');img.width=1040;img.height=510;
      const c=img.getContext('2d');if(!c)throw Error('QA_2D_CONTEXT_UNAVAILABLE');
@@ -85,8 +116,19 @@
      out.textContent+='\nQA_AB_PNG_SAVING_TO_EVIDENCE';
      window.StudioQaExport.save(img,'ALPHA_AB').then(result=>{
        window.StudioQaExport.showLink('realAlphaDownloadLink',result);
-       out.textContent+='\nPNG_SAVED_TO_EVIDENCE='+result.evidence_png+'\nSHA256='+result.sha256;
-     }).catch(error=>{out.textContent+='\nHOLD_CP16_PNG_SAVE: '+String(error.message||error);});
-   }catch(e){out.textContent+='\nHOLD_CP16_PNG: '+String(e.message||e);}
+       const message='PNG_SAVED_TO_EVIDENCE='+result.evidence_png+' | SHA256='+result.sha256;
+       out.textContent+='\n'+message;
+       notify(message);
+     }).catch(error=>{
+       const message='HOLD_CP16_PNG_SAVE: '+String(error.message||error);
+       out.textContent+='\n'+message;
+       notify(message);
+     }).finally(()=>{save.disabled=false;});
+   }catch(e){
+     save.disabled=false;
+     const message='HOLD_CP16_PNG: '+String(e.message||e);
+     out.textContent+='\n'+message;
+     notify(message);
+   }
  });
 })();

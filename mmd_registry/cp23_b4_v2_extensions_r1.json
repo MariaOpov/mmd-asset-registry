@@ -1,0 +1,85 @@
+{
+  "schema": "CP23_B4_V2_EXPLICIT_EXTENSIONS_R1",
+  "contract_revision": "CP23_B4_V2_CONTRACT_R1",
+  "canonical_root": "D:\\MMD\\mmd-asset-registry",
+  "baseline_approval": "APPROVE_B4_V2_CANONICAL_BASELINE_AND_NEW_SOURCE_FILES_ONLY",
+  "historical_core": {
+    "count": 119,
+    "source": "mesh_projection_v2.py::verify_core._contract.core_pins",
+    "canonical_override": [
+      {
+        "relative_path": "mmd_registry/__init__.py",
+        "historical_normalized_sha256": "91015f768b78bdb15a55da2df70ed8d5960e71c848a6dc8c005011c2b024d5c1",
+        "canonical_normalized_sha256": "cae48625419b5fe5baecdd670651bbf9bf205f24a7fc89def84f0609e2d57fee",
+        "canonical_raw_sha256": "5e73f4f4e117fd56b1a06e3f0c429ed8ac3a7bbd729c838f326b2c6da93adf32"
+      }
+    ]
+  },
+  "extensions": [
+    {
+      "module": "mmd_registry.mesh_projection_v2",
+      "relative_path": "mmd_registry/mesh_projection_v2.py",
+      "sha256": "24eaaedeb6af5e1577849990d24514f484a5f298ccd29fc8d46c045860b37233",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\mesh_projection_v2.py",
+      "source_identity": "sha256:24eaaedeb6af5e1577849990d24514f484a5f298ccd29fc8d46c045860b37233",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_n23_owner_v2",
+      "relative_path": "mmd_registry/cp23_n23_owner_v2.py",
+      "sha256": "360dac5aaf5cf8312e0cb1f51f84653e1e825c5fc505806c764212b43f004559",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_n23_owner_v2.py",
+      "source_identity": "sha256:360dac5aaf5cf8312e0cb1f51f84653e1e825c5fc505806c764212b43f004559",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_n23_policy_v2",
+      "relative_path": "mmd_registry/cp23_n23_policy_v2.py",
+      "sha256": "7acf87e81caa97d70b195cade5e005b8cfb3553e6193aba6368263660e438e74",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_n23_policy_v2.py",
+      "source_identity": "sha256:7acf87e81caa97d70b195cade5e005b8cfb3553e6193aba6368263660e438e74",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_winjob_v2",
+      "relative_path": "mmd_registry/cp23_winjob_v2.py",
+      "sha256": "1c1598936637e55eaee4341379520d996e82e634d0eb6fc43df94ab5ef5ce922",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_winjob_v2.py",
+      "source_identity": "sha256:1c1598936637e55eaee4341379520d996e82e634d0eb6fc43df94ab5ef5ce922",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_n23_owner_int",
+      "relative_path": "mmd_registry/cp23_n23_owner_int.py",
+      "sha256": "f5f3cb9717c7f1c876f96145ba9791ea8e15fd69a71f318cd52df1483ca345fb",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_n23_owner_int.py",
+      "source_identity": "sha256:f5f3cb9717c7f1c876f96145ba9791ea8e15fd69a71f318cd52df1483ca345fb",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_n23_policy_int",
+      "relative_path": "mmd_registry/cp23_n23_policy_int.py",
+      "sha256": "df393c432cbf19226fd2d0c3ed961f5b3189e6c2be8f0cadd48bcc611008d083",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_n23_policy_int.py",
+      "source_identity": "sha256:df393c432cbf19226fd2d0c3ed961f5b3189e6c2be8f0cadd48bcc611008d083",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_winjob_int",
+      "relative_path": "mmd_registry/cp23_winjob_int.py",
+      "sha256": "f5cb3837223894028d63506eef6a69fe33b43444c4aecc36978778f4548031f0",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_winjob_int.py",
+      "source_identity": "sha256:f5cb3837223894028d63506eef6a69fe33b43444c4aecc36978778f4548031f0",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    },
+    {
+      "module": "mmd_registry.cp23_b4_v2_contract_r1",
+      "relative_path": "mmd_registry/cp23_b4_v2_contract_r1.py",
+      "sha256": "82a656a18f4b2ff1d6f15872ea85e6679e8cabe2eabf00add3a537b4c5ae7c57",
+      "canonical_origin": "D:\\MMD\\mmd-asset-registry\\mmd_registry\\cp23_b4_v2_contract_r1.py",
+      "source_identity": "sha256:82a656a18f4b2ff1d6f15872ea85e6679e8cabe2eabf00add3a537b4c5ae7c57",
+      "contract_revision": "CP23_B4_V2_CONTRACT_R1"
+    }
+  ],
+  "original_verify_core_status": "UNMODIFIED_UNPINNED_EXTENSION_CLOSURE_HOLD"
+}
